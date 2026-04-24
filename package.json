@@ -3,8 +3,6 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "dev": "echo 'Run: cd server && npm run dev' and 'cd client && npm run dev' in separate terminals",
-    "build": "cd client && npm install && npm run build && cd ../server && npm install && npm run build",
-    "start": "cd server && node dist/index.js"
+    "dev": "echo 'Run: cd server && npm run dev' and 'cd client && npm run dev' in separate terminals"
   }
 }
