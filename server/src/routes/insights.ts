@@ -1,0 +1,103 @@
+import { Router } from 'express';
+import { db } from '../db/index.js';
+import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+
+const router = Router();
+
+// GET /api/insights/daily - Get daily insights for the user
+router.get('/daily', authMiddleware, (req: AuthRequest, res) => {
+  const userId = req.user!.id;
+  const dateParam = req.query.date as string;
+  const targetDate = dateParam || new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  console.log(`[Insights] Fetching daily insights for user ${userId}, date: ${targetDate}`);
+
+  // Get today's transactions
+  const transactions = db.prepare(`
+    SELECT * FROM transactions
+    WHERE user_id = ? AND DATE(created_at) = ?
+    ORDER BY created_at DESC
+  `).all(userId, targetDate) as any[];
+
+  // Get today's orders
+  const orders = db.prepare(`
+    SELECT * FROM orders
+    WHERE user_id = ? AND DATE(created_at) = ?
+    ORDER BY created_at DESC
+  `).all(userId, targetDate) as any[];
+
+  // Calculate daily P&L from realized transactions (sells)
+  let realizedPnl = 0;
+  let buyVolume = 0;
+  let sellVolume = 0;
+  let buyCount = 0;
+  let sellCount = 0;
+
+  for (const txn of transactions) {
+    if (txn.type === 'BUY') {
+      buyVolume += txn.total_amount;
+      buyCount++;
+    } else if (txn.type === 'SELL') {
+      sellVolume += txn.total_amount;
+      sellCount++;
+      // Approximate realized P&L (sell - avg buy)
+      const holding = db.prepare('SELECT avg_buy_price FROM holdings WHERE user_id = ? AND symbol = ?')
+        .get(userId, txn.symbol) as any;
+      if (holding) {
+        const costBasis = holding.avg_buy_price * txn.quantity;
+        realizedPnl += txn.total_amount - costBasis;
+      }
+    }
+  }
+
+  // Get current portfolio value
+  const user = db.prepare('SELECT balance FROM users WHERE id = ?').get(userId) as any;
+  const holdings = db.prepare('SELECT * FROM holdings WHERE user_id = ?').all(userId) as any[];
+  let portfolioValue = user.balance;
+  for (const h of holdings) {
+    portfolioValue += h.quantity * h.avg_buy_price;
+  }
+
+  // Get yesterday's portfolio value for comparison
+  const yesterday = new Date(targetDate);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().split('T')[0];
+  const yesterdayHistory = db.prepare(`
+    SELECT total_value FROM portfolio_history
+    WHERE user_id = ? AND DATE(recorded_at) = ?
+    ORDER BY recorded_at DESC LIMIT 1
+  `).get(userId, yesterdayStr) as any;
+  const yesterdayValue = yesterdayHistory?.total_value || portfolioValue;
+  const dailyChange = portfolioValue - yesterdayValue;
+  const dailyChangePercent = yesterdayValue > 0 ? (dailyChange / yesterdayValue) * 100 : 0;
+
+  // Get active positions count
+  const activePositions = holdings.length;
+
+  // Get pending orders count
+  const pendingOrders = orders.filter(o => o.status === 'PENDING').length;
+
+  res.json({
+    date: targetDate,
+    portfolio: {
+      currentValue: portfolioValue,
+      dailyChange,
+      dailyChangePercent,
+      activePositions,
+    },
+    activity: {
+      buyCount,
+      sellCount,
+      buyVolume,
+      sellVolume,
+      totalTransactions: transactions.length,
+      pendingOrders,
+    },
+    pnl: {
+      realized: realizedPnl,
+    },
+    recentTransactions: transactions.slice(0, 5),
+    recentOrders: orders.slice(0, 5),
+  });
+});
+
+export default router;

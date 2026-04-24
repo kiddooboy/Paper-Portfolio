@@ -1,0 +1,8 @@
+{
+  "name": "paper-trading-app",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "echo 'Run: cd server && npm run dev' and 'cd client && npm run dev' in separate terminals"
+  }
+}
