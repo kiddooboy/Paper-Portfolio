@@ -31,6 +31,8 @@ export const useAuthStore = create<AuthState>()(
       login: (token, user) => {
         set({ token, user, isAuthenticated: true });
         axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        // Remember the device has a registered user, even after logout
+        try { localStorage.setItem('last_email', user.email); } catch {}
       },
       logout: () => {
         set({ token: null, user: null, isAuthenticated: false });
@@ -46,6 +48,7 @@ export const useAuthStore = create<AuthState>()(
           const { token, user } = res.data;
           set({ token, user, isAuthenticated: true });
           localStorage.setItem('token', token);
+          try { localStorage.setItem('last_email', user.email); } catch {}
         } catch (err: any) {
           throw new Error(err?.response?.data?.error || 'MPIN login failed');
         }

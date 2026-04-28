@@ -12,6 +12,9 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const login = useAuthStore((s) => s.login);
+  // Only show MPIN login if this device has previously logged in (i.e., a registered user is known)
+  const hasRegisteredOnDevice =
+    typeof window !== 'undefined' && !!localStorage.getItem('last_email');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,10 +89,14 @@ export default function Login() {
             <Link to="/otp-login" className="text-groww-primary font-medium hover:underline">
               Login with OTP
             </Link>
-            <span className="text-gray-300 dark:text-gray-700">·</span>
-            <Link to="/mpin-login" className="text-groww-primary font-medium hover:underline">
-              Login with MPIN
-            </Link>
+            {hasRegisteredOnDevice && (
+              <>
+                <span className="text-gray-300 dark:text-gray-700">·</span>
+                <Link to="/mpin-login" className="text-groww-primary font-medium hover:underline">
+                  Login with MPIN
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </div>
