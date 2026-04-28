@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
-import { getQuote, getQuotes, getHistory, searchSymbols, NIFTY50, isMarketOpen, getMarketStatus } from '../services/marketData.js';
+import { getQuote, getQuotes, getHistory, searchSymbols, getIndices, NIFTY50, isMarketOpen, getMarketStatus } from '../services/marketData.js';
 
 const router = Router();
 
@@ -13,6 +13,16 @@ function parseExchange(v: any): Exchange {
 // GET /api/stocks/market-status — market open/closed status + recommended poll interval
 router.get('/market-status', (_req, res) => {
   res.json(getMarketStatus());
+});
+
+// GET /api/stocks/indices — live NIFTY 50 / SENSEX / BANK NIFTY (public, no auth)
+router.get('/indices', async (_req, res) => {
+  try {
+    const indices = await getIndices();
+    res.json({ indices, isOpen: isMarketOpen() });
+  } catch {
+    res.json({ indices: [], isOpen: isMarketOpen() });
+  }
 });
 
 // GET /api/stocks/live — Bulk live quotes for all user-relevant symbols

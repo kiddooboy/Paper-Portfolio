@@ -236,6 +236,61 @@ export async function searchSymbols(query: string, limit = 15) {
   }
 }
 
+// ── Indian market indices (public, no auth required) ──
+export const INDICES = [
+  { symbol: '^NSEI', name: 'NIFTY 50' },
+  { symbol: '^BSESN', name: 'SENSEX' },
+  { symbol: '^NSEBANK', name: 'BANK NIFTY' },
+];
+
+export interface IndexQuote {
+  symbol: string;
+  name: string;
+  price: number;
+  change: number;
+  change_percent: number;
+  previous_close: number;
+}
+
+const indexCache = new Map<string, { at: number; data: IndexQuote }>();
+
+export async function getIndices(): Promise<IndexQuote[]> {
+  const ttl = getTTL();
+  const fresh: IndexQuote[] = [];
+  const missing: typeof INDICES = [];
+
+  for (const idx of INDICES) {
+    const hit = indexCache.get(idx.symbol);
+    if (hit && Date.now() - hit.at < ttl) fresh.push(hit.data);
+    else missing.push(idx);
+  }
+
+  if (missing.length) {
+    try {
+      const results = (await yahooFinance.quote(missing.map((i) => i.symbol))) as any;
+      const arr = Array.isArray(results) ? results : [results];
+      for (const q of arr) {
+        if (!q || typeof q.regularMarketPrice !== 'number') continue;
+        const meta = missing.find((m) => m.symbol === q.symbol);
+        if (!meta) continue;
+        const data: IndexQuote = {
+          symbol: meta.symbol,
+          name: meta.name,
+          price: q.regularMarketPrice,
+          change: q.regularMarketChange ?? 0,
+          change_percent: q.regularMarketChangePercent ?? 0,
+          previous_close: q.regularMarketPreviousClose ?? q.regularMarketPrice,
+        };
+        indexCache.set(meta.symbol, { at: Date.now(), data });
+        fresh.push(data);
+      }
+    } catch {
+      // swallow; return whatever we have
+    }
+  }
+  return fresh;
+}
+
 // Popular Nifty50 + Sensex30 basket for gainers/losers widgets.
 export const NIFTY50 = [
   'RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'ICICIBANK', 'HINDUNILVR', 'SBIN', 'BHARTIARTL',

@@ -12,7 +12,7 @@ import { fileURLToPath } from 'url';
 import { initSchema, db } from './db/index.js';
 import cron from 'node-cron';
 import { fillOrder } from './routes/orders.js';
-import { getQuote, getQuotes, isMarketOpen, NIFTY50 } from './services/marketData.js';
+import { getQuote, getQuotes, getIndices, isMarketOpen, NIFTY50 } from './services/marketData.js';
 import { ingestSymbols } from './services/symbolIngest.js';
 import { startOrderExecutionScheduler } from './services/orderExecution.js';
 
@@ -192,6 +192,8 @@ async function main() {
         const quotes = await getQuotes(slice);
         total += quotes.length;
       }
+      // Also keep indices (NIFTY/SENSEX/BANKNIFTY) cache fresh
+      await getIndices();
       const stamp = new Date().toISOString();
       console.log(`[market] poll ok @ ${stamp} — refreshed ${total}/${items.length} symbols (open=${isMarketOpen()})`);
     } catch (err: any) {
