@@ -6,16 +6,19 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 
+# Copy client files and build
+COPY client/package*.json ./client/
+COPY client/ ./client/
+WORKDIR /app/client
+RUN npm install
+RUN npm run build
+
 # Copy server files and build
+WORKDIR /app
+COPY server/package*.json ./server/
 COPY server/ ./server/
 WORKDIR /app/server
-RUN npm install && npm run build
-
-# Copy client files and build
-WORKDIR /app/client
-COPY client/package*.json ./
 RUN npm install
-COPY client/ ./
 RUN npm run build
 
 # Production stage
