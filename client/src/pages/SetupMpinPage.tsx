@@ -1,56 +1,27 @@
 import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Lock, Eye, EyeOff } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export default function SetupMpinPage() {
-  const [step, setStep] = useState<'enter' | 'confirm'>('enter');
   const [mpin, setMpin] = useState('');
-  const [confirmMpin, setConfirmMpin] = useState('');
   const [showMpin, setShowMpin] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  searchParams.get('email') || '';
-
-  const currentValue = step === 'enter' ? mpin : confirmMpin;
-  const setCurrentValue = step === 'enter' ? setMpin : setConfirmMpin;
 
   const handleDigitClick = (digit: string) => {
-    if (currentValue.length < 4) {
-      setCurrentValue(prev => prev + digit);
-    }
+    if (mpin.length < 4) setMpin(prev => prev + digit);
   };
 
-  const handleDelete = () => {
-    setCurrentValue(prev => prev.slice(0, -1));
-  };
-
-  const handleNext = () => {
-    if (mpin.length !== 4) {
-      toast.error('Please enter a 4-digit MPIN');
-      return;
-    }
-    setStep('confirm');
-  };
-
-  const handleBack = () => {
-    setConfirmMpin('');
-    setStep('enter');
-  };
+  const handleDelete = () => setMpin(prev => prev.slice(0, -1));
 
   const handleSubmit = async () => {
     if (mpin.length !== 4) {
       toast.error('Please enter a 4-digit MPIN');
       return;
     }
-    if (confirmMpin !== mpin) {
-      toast.error('MPINs do not match');
-      return;
-    }
-
     setLoading(true);
     try {
       await axios.post('/api/auth/set-mpin', { mpin });
@@ -63,9 +34,7 @@ export default function SetupMpinPage() {
     }
   };
 
-  const skipSetup = () => {
-    navigate('/');
-  };
+  const skipSetup = () => navigate('/');
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-groww-dark flex flex-col">
@@ -82,13 +51,9 @@ export default function SetupMpinPage() {
             <div className="mx-auto w-16 h-16 bg-groww-primary/10 rounded-full flex items-center justify-center mb-4">
               <Lock className="w-8 h-8 text-groww-primary" />
             </div>
-            <h2 className="text-2xl font-bold mb-2">
-              {step === 'enter' ? 'Create your MPIN' : 'Confirm your MPIN'}
-            </h2>
+            <h2 className="text-2xl font-bold mb-2">Create your MPIN</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              {step === 'enter'
-                ? 'Set a 4-digit MPIN for quick login. You can also skip this and set it later.'
-                : 'Re-enter the same 4-digit MPIN to confirm.'}
+              Set a 4-digit MPIN for quick login on this device.
             </p>
           </div>
 
@@ -99,21 +64,15 @@ export default function SetupMpinPage() {
                 key={i}
                 className={cn(
                   'w-14 h-14 rounded-lg border-2 flex items-center justify-center text-2xl font-bold transition-all',
-                  currentValue[i]
-                    ? step === 'confirm'
-                      ? 'border-green-500 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400'
-                      : 'border-groww-primary bg-groww-primary/10 text-groww-primary'
+                  mpin[i]
+                    ? 'border-groww-primary bg-groww-primary/10 text-groww-primary'
                     : 'border-gray-300 dark:border-gray-700'
                 )}
               >
-                {showMpin ? currentValue[i] : currentValue[i] ? '●' : ''}
+                {showMpin ? mpin[i] : mpin[i] ? '●' : ''}
               </div>
             ))}
           </div>
-
-          {step === 'confirm' && confirmMpin.length === 4 && confirmMpin !== mpin && (
-            <p className="text-sm text-red-600 text-center">MPINs do not match</p>
-          )}
 
           {/* Show/Hide Toggle */}
           <button
@@ -148,7 +107,7 @@ export default function SetupMpinPage() {
               0
             </button>
             <button
-              onClick={() => setCurrentValue('')}
+              onClick={() => setMpin('')}
               className="py-4 rounded-xl bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 font-semibold hover:bg-gray-100 dark:hover:bg-gray-600 transition"
             >
               CLR
@@ -157,39 +116,19 @@ export default function SetupMpinPage() {
 
           {/* Action Buttons */}
           <div className="space-y-3">
-            {step === 'enter' ? (
-              <>
-                <button
-                  onClick={handleNext}
-                  disabled={mpin.length !== 4}
-                  className="w-full py-3 rounded-xl bg-groww-primary text-white font-semibold hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed transition"
-                >
-                  Next
-                </button>
-                <button
-                  onClick={skipSetup}
-                  className="w-full py-3 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition"
-                >
-                  Skip for Now
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={handleSubmit}
-                  disabled={loading || confirmMpin.length !== 4 || confirmMpin !== mpin}
-                  className="w-full py-3 rounded-xl bg-groww-primary text-white font-semibold hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed transition"
-                >
-                  {loading ? 'Setting MPIN...' : 'Set MPIN'}
-                </button>
-                <button
-                  onClick={handleBack}
-                  className="w-full py-3 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition"
-                >
-                  Back
-                </button>
-              </>
-            )}
+            <button
+              onClick={handleSubmit}
+              disabled={loading || mpin.length !== 4}
+              className="w-full py-3 rounded-xl bg-groww-primary text-white font-semibold hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed transition"
+            >
+              {loading ? 'Setting MPIN...' : 'Set MPIN'}
+            </button>
+            <button
+              onClick={skipSetup}
+              className="w-full py-3 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+            >
+              Skip for Now
+            </button>
           </div>
         </div>
       </div>
