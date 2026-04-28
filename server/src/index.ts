@@ -48,19 +48,7 @@ async function main() {
   app.use(cors());
   app.use(express.json());
 
-  // Serve static files from client build in production
-  if (process.env.NODE_ENV === 'production') {
-    const clientDistPath = path.join(process.cwd(), 'client', 'dist');
-    app.use(express.static(clientDistPath));
-
-    // Handle client-side routing
-    app.get('*', (req, res) => {
-      if (!req.path.startsWith('/api')) {
-        res.sendFile(path.join(clientDistPath, 'index.html'));
-      }
-    });
-  }
-
+  // API routes MUST be registered before static/SPA catch-all
   app.use('/api/auth', authRoutes);
   app.use('/api/stocks', stockRoutes);
   app.use('/api/orders', orderRoutes);
@@ -72,6 +60,18 @@ async function main() {
   app.use('/api/insights', insightsRoutes);
   app.use('/api/ai', aiRoutes);
   app.use('/api/wallet', walletRoutes);
+
+  // Serve static files from client build in production
+  if (process.env.NODE_ENV === 'production') {
+    const clientDistPath = path.join(process.cwd(), 'client', 'dist');
+    app.use(express.static(clientDistPath));
+
+    // SPA fallback: send index.html for any non-API route
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api')) return next();
+      res.sendFile(path.join(clientDistPath, 'index.html'));
+    });
+  }
 
   async function checkLimitOrders() {
     const pending = db
