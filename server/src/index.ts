@@ -48,6 +48,19 @@ async function main() {
   app.use(cors());
   app.use(express.json());
 
+  // Serve static files from client build in production
+  if (process.env.NODE_ENV === 'production') {
+    const clientDistPath = path.join(__dirname, '../../client/dist');
+    app.use(express.static(clientDistPath));
+    
+    // Handle client-side routing
+    app.get('*', (req, res) => {
+      if (!req.path.startsWith('/api')) {
+        res.sendFile(path.join(clientDistPath, 'index.html'));
+      }
+    });
+  }
+
   app.use('/api/auth', authRoutes);
   app.use('/api/stocks', stockRoutes);
   app.use('/api/orders', orderRoutes);
