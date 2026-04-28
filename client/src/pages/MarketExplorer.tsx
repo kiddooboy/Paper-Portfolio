@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
-import { Search, Filter, TrendingUp } from 'lucide-react';
+import { Search, Filter } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 import StockLogo from '../components/StockLogo';
 
@@ -51,10 +51,6 @@ export default function MarketExplorer() {
     ],
     []
   );
-
-  const topGainer = useMemo(() => {
-    return stocks.filter(s => s.change_percent > 0).sort((a, b) => b.change_percent - a.change_percent)[0];
-  }, [stocks]);
 
   return (
     <div className="space-y-4">
@@ -106,31 +102,6 @@ export default function MarketExplorer() {
               {t.label}
             </button>
           ))}
-        </div>
-      )}
-
-      {!query && !loading && topGainer && (
-        <div className="grid grid-cols-1 gap-3">
-          <Link
-            to={`/terminal/${topGainer.symbol}?exchange=${topGainer.exchange || 'NSE'}`}
-            className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/10 dark:to-emerald-900/10 rounded-xl p-4 border border-green-100 dark:border-green-900/20 hover:shadow-md transition"
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
-              <span className="text-xs font-medium text-gray-500 uppercase">Top Gainer</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <StockLogo symbol={topGainer.symbol} size={40} />
-              <div className="flex-1">
-                <p className="font-semibold text-sm">{topGainer.name}</p>
-                <p className="text-xs text-gray-500">{topGainer.symbol}</p>
-              </div>
-              <div className="text-right">
-                <p className="font-bold text-green-600 dark:text-green-400">+{topGainer.change_percent?.toFixed(2)}%</p>
-                <p className="text-sm font-medium">{formatCurrency(topGainer.price)}</p>
-              </div>
-            </div>
-          </Link>
         </div>
       )}
 

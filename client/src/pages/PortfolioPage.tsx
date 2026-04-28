@@ -289,7 +289,7 @@ export default function PortfolioPage() {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={pnlWaterfall} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-                    <XAxis type="number" tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} />
+                    <XAxis type="number" tickFormatter={(v) => `₹${Math.round(v / 1000)}K`} />
                     <YAxis type="category" dataKey="name" width={70} tick={{ fontSize: 11 }} />
                     <Tooltip formatter={(v: any) => formatCurrency(v)} />
                     <Bar dataKey="pnl" radius={[0, 4, 4, 0]}>
@@ -316,7 +316,7 @@ export default function PortfolioPage() {
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
                     <XAxis dataKey="recorded_at" tickFormatter={(v) => new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} tick={{ fontSize: 10 }} />
-                    <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 10 }} />
+                    <YAxis tickFormatter={(v) => `₹${Math.round(v / 1000)}K`} tick={{ fontSize: 10 }} />
                     <Tooltip formatter={(v: any) => formatCurrency(v)} labelFormatter={(v) => new Date(v).toLocaleDateString('en-IN')} />
                     <Area type="monotone" dataKey="total_value" stroke="#00B386" fill="url(#areaGrad)" strokeWidth={2} />
                   </AreaChart>
