@@ -23,7 +23,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     const upperSymbol = symbol.toUpperCase();
 
     // Guard: only allow trading NIFTY 500 constituents (present in our master)
-    const known = db
+    const known = await db
       .prepare(`SELECT 1 FROM stocks WHERE symbol = ? AND exchange = 'NSE' LIMIT 1`)
       .get(upperSymbol);
     if (!known) {
@@ -38,20 +38,20 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     const totalAmount = orderPrice * quantity;
 
     if (transactionType === 'BUY') {
-      const user = db.prepare('SELECT balance FROM users WHERE id = ?').get(userId) as any;
+      const user = (await db.prepare('SELECT balance FROM users WHERE id = ?').get(userId)) as any;
       if (user.balance < totalAmount) {
         return res.status(400).json({ error: 'Insufficient balance' });
       }
     }
 
     if (transactionType === 'SELL') {
-      const holding = db.prepare('SELECT quantity FROM holdings WHERE user_id = ? AND symbol = ?').get(userId, upperSymbol) as any;
+      const holding = (await db.prepare('SELECT quantity FROM holdings WHERE user_id = ? AND symbol = ?').get(userId, upperSymbol)) as any;
       if (!holding || holding.quantity < quantity) {
         return res.status(400).json({ error: `You don't own enough shares of ${upperSymbol} to sell. Buy first or check your holdings.` });
       }
     }
 
-    const result = db.prepare(`
+    const result = await db.prepare(`
       INSERT INTO orders (user_id, symbol, type, transaction_type, quantity, price, limit_price, status)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(userId, upperSymbol, type, transactionType, quantity, orderPrice, limitPrice || null, 'PENDING');
@@ -59,7 +59,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     const orderId = result.lastInsertRowid as number;
 
     if (type === 'MARKET') {
-      fillOrder(orderId, userId, upperSymbol, transactionType, quantity, currentPrice);
+      await fillOrder(orderId, userId, upperSymbol, transactionType, quantity, currentPrice);
     }
 
     res.json({ success: true, orderId });
@@ -68,49 +68,49 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
   }
 });
 
-export function fillOrder(orderId: number, userId: number, symbolRaw: string, transactionType: string, quantity: number, price: number) {
+export async function fillOrder(orderId: number, userId: number, symbolRaw: string, transactionType: string, quantity: number, price: number) {
   const symbol = symbolRaw.toUpperCase();
   const totalAmount = price * quantity;
 
-  db.transaction(() => {
+  await db.transaction(async () => {
     if (transactionType === 'BUY') {
-      db.prepare('UPDATE users SET balance = balance - ? WHERE id = ?').run(totalAmount, userId);
+      await db.prepare('UPDATE users SET balance = balance - ? WHERE id = ?').run(totalAmount, userId);
 
-      const holding = db.prepare('SELECT * FROM holdings WHERE user_id = ? AND symbol = ?').get(userId, symbol) as any;
+      const holding = (await db.prepare('SELECT * FROM holdings WHERE user_id = ? AND symbol = ?').get(userId, symbol)) as any;
       if (holding) {
         const newQty = holding.quantity + quantity;
         const newAvg = ((holding.avg_buy_price * holding.quantity) + totalAmount) / newQty;
-        db.prepare('UPDATE holdings SET quantity = ?, avg_buy_price = ? WHERE id = ?').run(newQty, newAvg, holding.id);
+        await db.prepare('UPDATE holdings SET quantity = ?, avg_buy_price = ? WHERE id = ?').run(newQty, newAvg, holding.id);
       } else {
-        db.prepare('INSERT INTO holdings (user_id, symbol, quantity, avg_buy_price) VALUES (?, ?, ?, ?)')
+        await db.prepare('INSERT INTO holdings (user_id, symbol, quantity, avg_buy_price) VALUES (?, ?, ?, ?)')
           .run(userId, symbol, quantity, price);
       }
     } else {
-      db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?').run(totalAmount, userId);
+      await db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?').run(totalAmount, userId);
 
-      const holding = db.prepare('SELECT * FROM holdings WHERE user_id = ? AND symbol = ?').get(userId, symbol) as any;
+      const holding = (await db.prepare('SELECT * FROM holdings WHERE user_id = ? AND symbol = ?').get(userId, symbol)) as any;
       if (holding) {
         const newQty = holding.quantity - quantity;
         if (newQty <= 0) {
-          db.prepare('DELETE FROM holdings WHERE id = ?').run(holding.id);
+          await db.prepare('DELETE FROM holdings WHERE id = ?').run(holding.id);
         } else {
-          db.prepare('UPDATE holdings SET quantity = ? WHERE id = ?').run(newQty, holding.id);
+          await db.prepare('UPDATE holdings SET quantity = ? WHERE id = ?').run(newQty, holding.id);
         }
       }
     }
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO transactions (user_id, order_id, symbol, type, quantity, price, total_amount)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(userId, orderId, symbol, transactionType, quantity, price, totalAmount);
 
-    db.prepare(`
-      UPDATE orders SET status = 'FILLED', filled_at = datetime('now') WHERE id = ?
+    await db.prepare(`
+      UPDATE orders SET status = 'FILLED', filled_at = CURRENT_TIMESTAMP WHERE id = ?
     `).run(orderId);
 
     // Create notification for the user
     try {
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO notifications (user_id, title, message, type)
         VALUES (?, ?, ?, 'order')
       `).run(
@@ -122,25 +122,25 @@ export function fillOrder(orderId: number, userId: number, symbolRaw: string, tr
     } catch (err) {
       console.error('[Notification] Failed to create notification:', err);
     }
-  })();
+  });
 }
 
-router.get('/', authMiddleware, (req: AuthRequest, res) => {
-  const orders = db.prepare(`
+router.get('/', authMiddleware, async (req: AuthRequest, res) => {
+  const orders = await db.prepare(`
     SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC
   `).all(req.user!.id);
   res.json(orders);
 });
 
-router.post('/:id/cancel', authMiddleware, (req: AuthRequest, res) => {
+router.post('/:id/cancel', authMiddleware, async (req: AuthRequest, res) => {
   const orderId = parseInt(req.params.id);
   const userId = req.user!.id;
 
-  const order = db.prepare('SELECT * FROM orders WHERE id = ? AND user_id = ?').get(orderId, userId) as any;
+  const order = (await db.prepare('SELECT * FROM orders WHERE id = ? AND user_id = ?').get(orderId, userId)) as any;
   if (!order) return res.status(404).json({ error: 'Order not found' });
   if (order.status !== 'PENDING') return res.status(400).json({ error: 'Order already processed' });
 
-  db.prepare("UPDATE orders SET status = 'CANCELLED' WHERE id = ?").run(orderId);
+  await db.prepare("UPDATE orders SET status = 'CANCELLED' WHERE id = ?").run(orderId);
   res.json({ success: true });
 });
 

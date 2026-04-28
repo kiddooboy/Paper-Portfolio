@@ -81,7 +81,10 @@ export const useAuthStore = create<AuthState>()(
 );
 
 // Initialize axios headers if token exists
-const storedToken = JSON.parse(localStorage.getItem('auth-storage') || '{}')?.state?.token;
+let storedToken;
+try {
+  storedToken = JSON.parse(localStorage.getItem('auth-storage') || '{}')?.state?.token;
+} catch {}
 if (storedToken) {
   axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
 }

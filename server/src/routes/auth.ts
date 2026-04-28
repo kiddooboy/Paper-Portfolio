@@ -34,12 +34,12 @@ router.post('/register', async (req, res) => {
     const name = parsed.name;
     const email = parsed.email.toLowerCase().trim();
     const password = parsed.password;
-    const existing = db.prepare('SELECT id FROM users WHERE LOWER(email) = ?').get(email);
+    const existing = await db.prepare('SELECT id FROM users WHERE LOWER(email) = ?').get(email);
     if (existing) return res.status(400).json({ error: 'Email already registered' });
 
     const role = email === ADMIN_EMAIL ? 'admin' : 'user';
     const hashedPw = await bcrypt.hash(password, 10);
-    const result = db.prepare('INSERT INTO users (name, email, password, role, balance) VALUES (?, ?, ?, ?, ?)').run(name, email, hashedPw, role, 100000);
+    const result = await db.prepare('INSERT INTO users (name, email, password, role, balance) VALUES (?, ?, ?, ?, ?)').run(name, email, hashedPw, role, 100000);
     const userId = result.lastInsertRowid as number;
     const token = generateToken(userId, email, role);
     res.json({ token, user: { id: userId, name, email, role, balance: 100000 } });
@@ -52,7 +52,7 @@ router.post('/login', async (req, res) => {
   try {
     const parsed = loginSchema.parse(req.body);
     const email = parsed.email.toLowerCase().trim();
-    const user = db.prepare('SELECT * FROM users WHERE LOWER(email) = ?').get(email) as any;
+    const user = (await db.prepare('SELECT * FROM users WHERE LOWER(email) = ?').get(email)) as any;
     if (!user) return res.status(400).json({ error: 'Invalid credentials' });
 
     const valid = await bcrypt.compare(parsed.password, user.password);
@@ -72,7 +72,7 @@ router.post('/set-mpin', authMiddleware, async (req: AuthRequest, res) => {
     const { mpin } = setMpinSchema.parse(req.body);
     const userId = req.user!.id;
     const hashedMpin = await bcrypt.hash(mpin, 10);
-    db.prepare('UPDATE users SET mpin_hash = ? WHERE id = ?').run(hashedMpin, userId);
+    await db.prepare('UPDATE users SET mpin_hash = ? WHERE id = ?').run(hashedMpin, userId);
     res.json({ success: true });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Invalid data' });
@@ -85,7 +85,7 @@ router.post('/login-mpin', async (req, res) => {
     const parsed = loginMpinSchema.parse(req.body);
     const email = parsed.email.toLowerCase().trim();
     const mpin = parsed.mpin;
-    const user = db.prepare('SELECT id, name, email, role, balance, mpin_hash FROM users WHERE LOWER(email) = ?').get(email) as any;
+    const user = (await db.prepare('SELECT id, name, email, role, balance, mpin_hash FROM users WHERE LOWER(email) = ?').get(email)) as any;
     if (!user || !user.mpin_hash) return res.status(400).json({ error: 'Invalid credentials or MPIN not set' });
 
     const valid = await bcrypt.compare(mpin, user.mpin_hash);
@@ -99,8 +99,8 @@ router.post('/login-mpin', async (req, res) => {
   }
 });
 
-router.get('/me', authMiddleware, (req: AuthRequest, res) => {
-  const user = db.prepare('SELECT id, name, email, role, balance, created_at FROM users WHERE id = ?').get(req.user!.id) as any;
+router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
+  const user = (await db.prepare('SELECT id, name, email, role, balance, created_at FROM users WHERE id = ?').get(req.user!.id)) as any;
   if (!user) return res.status(401).json({ error: 'User not found' });
   res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role || 'user', balance: user.balance, created_at: user.created_at } });
 });

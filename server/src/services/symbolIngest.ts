@@ -72,14 +72,14 @@ async function fetchNifty500Symbols(): Promise<StockRow[]> {
 
 /**
  * Ingests NIFTY 500 constituents into the stocks table.
- * Idempotent via INSERT OR IGNORE on the (symbol, exchange) unique constraint.
+ * Idempotent via ON CONFLICT DO NOTHING on the (symbol, exchange) unique constraint.
  * Also prunes any non-NIFTY-500 stocks that may exist from older deploys.
  */
 export async function ingestSymbols() {
   // Wipe any non-NSE rows from older versions
-  db.prepare(`DELETE FROM stocks WHERE exchange != 'NSE'`).run();
+  await db.prepare(`DELETE FROM stocks WHERE exchange != 'NSE'`).run();
 
-  const existing = (db.prepare('SELECT COUNT(*) as c FROM stocks WHERE exchange = ?').get('NSE') as any)?.c ?? 0;
+  const existing = ((await db.prepare('SELECT COUNT(*) as c FROM stocks WHERE exchange = ?').get('NSE')) as any)?.c ?? 0;
   if (existing >= 450) {
     console.log(`[symbols] already have ${existing} NIFTY 500 stocks, skipping ingest`);
     return existing;
@@ -101,24 +101,24 @@ export async function ingestSymbols() {
 
   // Prune any stocks that are no longer in NIFTY 500
   const validSymbols = new Set(rows.map((r) => r.symbol.toUpperCase()));
-  const allCurrent = db.prepare(`SELECT symbol FROM stocks WHERE exchange = 'NSE'`).all() as any[];
+  const allCurrent = (await db.prepare(`SELECT symbol FROM stocks WHERE exchange = 'NSE'`).all()) as any[];
   let pruned = 0;
   const pruneStmt = db.prepare(`DELETE FROM stocks WHERE symbol = ? AND exchange = 'NSE'`);
   for (const row of allCurrent) {
     if (!validSymbols.has(row.symbol.toUpperCase())) {
-      pruneStmt.run(row.symbol);
+      await pruneStmt.run(row.symbol);
       pruned++;
     }
   }
   if (pruned) console.log(`[symbols] pruned ${pruned} non-NIFTY-500 stocks`);
 
   const insert = db.prepare(
-    `INSERT OR IGNORE INTO stocks (symbol, name, exchange, sector, isin, category) VALUES (?, ?, ?, ?, ?, 'stock')`
+    `INSERT INTO stocks (symbol, name, exchange, sector, isin, category) VALUES (?, ?, ?, ?, ?, 'stock') ON CONFLICT (symbol, exchange) DO NOTHING`
   );
   let inserted = 0;
   for (const r of rows) {
     try {
-      const res = insert.run(r.symbol.toUpperCase(), r.name, r.exchange, r.sector, r.isin);
+      const res = await insert.run(r.symbol.toUpperCase(), r.name, r.exchange, r.sector, r.isin);
       if (res.changes) inserted++;
     } catch {
       // ignore individual row errors

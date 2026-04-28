@@ -11,10 +11,10 @@ const router = Router();
 router.get('/', authMiddleware, async (req: AuthRequest, res) => {
   const userId = req.user!.id;
 
-  const user = db.prepare('SELECT balance FROM users WHERE id = ?').get(userId) as any;
+  const user = (await db.prepare('SELECT balance FROM users WHERE id = ?').get(userId)) as any;
   if (!user) return res.status(401).json({ error: 'User not found' });
 
-  const holdings = db.prepare('SELECT * FROM holdings WHERE user_id = ?').all(userId) as any[];
+  const holdings = (await db.prepare('SELECT * FROM holdings WHERE user_id = ?').all(userId)) as any[];
 
   // Fetch full quotes for every holding
   const quoteMap = new Map<string, Quote>();
@@ -73,8 +73,8 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
   // ── Sector allocation ──
   // Look up sectors from DB
   const sectorRows = holdings.length
-    ? (db.prepare(`SELECT symbol, sector FROM stocks WHERE symbol IN (${holdings.map(() => '?').join(',')})`)
-        .all(...holdings.map((h: any) => h.symbol)) as any[])
+    ? ((await db.prepare(`SELECT symbol, sector FROM stocks WHERE symbol IN (${holdings.map(() => '?').join(',')})`)
+        .all(...holdings.map((h: any) => h.symbol))) as any[])
     : [];
   const sectorLookup = new Map(sectorRows.map((r: any) => [r.symbol, r.sector || 'Other']));
 
@@ -120,10 +120,10 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
   const biggestHolding = holdings[0] || null; // already sorted by value desc
 
   // ── Realized P&L (from SELL transactions) ──
-  const sellTxns = db.prepare(`
+  const sellTxns = (await db.prepare(`
     SELECT symbol, quantity, price, total_amount FROM transactions
     WHERE user_id = ? AND type = 'SELL'
-  `).all(userId) as any[];
+  `).all(userId)) as any[];
 
   let realizedPnl = 0;
   for (const tx of sellTxns) {
@@ -136,15 +136,15 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
   const unrealizedPnl = totalPnl;
 
   // ── Transactions ──
-  const transactions = db.prepare(`
+  const transactions = await db.prepare(`
     SELECT * FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 50
   `).all(userId);
 
   // ── Transaction stats ──
-  const allTxns = db.prepare(`
+  const allTxns = (await db.prepare(`
     SELECT type, COUNT(*) as count, SUM(total_amount) as total FROM transactions
     WHERE user_id = ? GROUP BY type
-  `).all(userId) as any[];
+  `).all(userId)) as any[];
   const buyStats = allTxns.find((t: any) => t.type === 'BUY') || { count: 0, total: 0 };
   const sellStats = allTxns.find((t: any) => t.type === 'SELL') || { count: 0, total: 0 };
 
@@ -190,8 +190,8 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
 // ---------------------------------------------------------------------------
 // GET /api/portfolio/history — value snapshots
 // ---------------------------------------------------------------------------
-router.get('/history', authMiddleware, (req: AuthRequest, res) => {
-  const history = db.prepare(`
+router.get('/history', authMiddleware, async (req: AuthRequest, res) => {
+  const history = await db.prepare(`
     SELECT * FROM portfolio_history WHERE user_id = ? ORDER BY recorded_at DESC LIMIT 60
   `).all(req.user!.id);
   res.json(history);

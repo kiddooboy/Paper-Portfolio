@@ -32,17 +32,17 @@ router.get('/live', authMiddleware, async (req: AuthRequest, res) => {
   const userId = req.user!.id;
 
   // Collect all symbols this user cares about
-  const holdingSymbols = (db.prepare('SELECT DISTINCT symbol FROM holdings WHERE user_id = ? AND quantity > 0').all(userId) as any[]).map(r => r.symbol);
-  const watchlistSymbols = (db.prepare(`
+  const holdingSymbols = ((await db.prepare('SELECT DISTINCT symbol FROM holdings WHERE user_id = ? AND quantity > 0').all(userId)) as any[]).map(r => r.symbol);
+  const watchlistSymbols = ((await db.prepare(`
     SELECT DISTINCT wi.symbol FROM watchlist_items wi
     JOIN watchlists w ON w.id = wi.watchlist_id
     WHERE w.user_id = ?
-  `).all(userId) as any[]).map(r => r.symbol);
+  `).all(userId)) as any[]).map(r => r.symbol);
 
   // Also include extra symbols from query (e.g. terminal page viewing)
   const extra = String(req.query.symbols || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
 
-  const nifty500 = (db.prepare(`SELECT symbol FROM stocks WHERE exchange = 'NSE'`).all() as any[]).map(r => r.symbol);
+  const nifty500 = ((await db.prepare(`SELECT symbol FROM stocks WHERE exchange = 'NSE'`).all()) as any[]).map(r => r.symbol);
   const allSymbols = Array.from(new Set([...holdingSymbols, ...watchlistSymbols, ...extra, ...nifty500]));
 
   const quotes = await getQuotes(allSymbols.map(s => ({ symbol: s, exchange: 'NSE' as const })));
@@ -80,9 +80,9 @@ router.get('/', async (req, res) => {
     params.push(String(category));
   }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-  const rows = db
+  const rows = (await db
     .prepare(`SELECT * FROM stocks ${whereSql} ORDER BY symbol LIMIT ? OFFSET ?`)
-    .all(...params, limit, offset) as any[];
+    .all(...params, limit, offset)) as any[];
 
   if (!live || !rows.length) return res.json(rows);
 
@@ -116,7 +116,7 @@ router.get('/search', async (req, res) => {
   const limit = Math.min(parseInt(String(req.query.limit || '20')) || 20, 50);
   if (!q) return res.json([]);
 
-  const local = db
+  const local = (await db
     .prepare(
       `SELECT symbol, name, exchange FROM stocks WHERE symbol LIKE ? OR name LIKE ? ORDER BY
          CASE WHEN symbol = ? THEN 0
@@ -125,7 +125,7 @@ router.get('/search', async (req, res) => {
          symbol
          LIMIT ?`
     )
-    .all(`%${q}%`, `%${q}%`, q, `${q}%`, limit) as any[];
+    .all(`%${q}%`, `%${q}%`, q, `${q}%`, limit)) as any[];
 
   res.json(local);
 });
@@ -142,14 +142,14 @@ router.get('/quote', async (req, res) => {
   res.json(quotes);
 });
 
-function nifty500Items() {
-  const rows = db.prepare(`SELECT symbol FROM stocks WHERE exchange = 'NSE'`).all() as any[];
+async function nifty500Items() {
+  const rows = (await db.prepare(`SELECT symbol FROM stocks WHERE exchange = 'NSE'`).all()) as any[];
   return rows.map((r) => ({ symbol: r.symbol, exchange: 'NSE' as const }));
 }
 
 // GET /api/stocks/gainers — live from NIFTY 500 universe
 router.get('/gainers', async (_req, res) => {
-  const quotes = await getQuotes(nifty500Items());
+  const quotes = await getQuotes(await nifty500Items());
   const gainers = quotes
     .filter((q) => q.change_percent > 0)
     .sort((a, b) => b.change_percent - a.change_percent)
@@ -159,7 +159,7 @@ router.get('/gainers', async (_req, res) => {
 
 // GET /api/stocks/losers — live from NIFTY 500 universe
 router.get('/losers', async (_req, res) => {
-  const quotes = await getQuotes(nifty500Items());
+  const quotes = await getQuotes(await nifty500Items());
   const losers = quotes
     .filter((q) => q.change_percent < 0)
     .sort((a, b) => a.change_percent - b.change_percent)
@@ -169,7 +169,7 @@ router.get('/losers', async (_req, res) => {
 
 // GET /api/stocks/trending — largest absolute move in NIFTY 500
 router.get('/trending', async (_req, res) => {
-  const quotes = await getQuotes(nifty500Items());
+  const quotes = await getQuotes(await nifty500Items());
   const trending = quotes
     .slice()
     .sort((a, b) => Math.abs(b.change_percent) - Math.abs(a.change_percent))
@@ -182,7 +182,7 @@ router.get('/:symbol', async (req, res) => {
   const symbol = req.params.symbol.toUpperCase();
   const exchange = parseExchange(req.query.exchange);
 
-  const meta = db.prepare('SELECT * FROM stocks WHERE symbol = ? AND exchange = ?').get(symbol, exchange) as any;
+  const meta = (await db.prepare('SELECT * FROM stocks WHERE symbol = ? AND exchange = ?').get(symbol, exchange)) as any;
   const quote = await getQuote(symbol, exchange);
 
   if (!quote && !meta) return res.status(404).json({ error: 'Stock not found' });
@@ -234,12 +234,12 @@ router.get('/:symbol/history', async (req, res) => {
 });
 
 // POST /api/stocks/:symbol/alert — (unchanged)
-router.post('/:symbol/alert', authMiddleware, (req: AuthRequest, res) => {
+router.post('/:symbol/alert', authMiddleware, async (req: AuthRequest, res) => {
   const { targetPrice, condition } = req.body;
   const symbol = req.params.symbol.toUpperCase();
   const userId = req.user!.id;
 
-  db.prepare(
+  await db.prepare(
     `INSERT INTO price_alerts (user_id, symbol, target_price, condition) VALUES (?, ?, ?, ?)`
   ).run(userId, symbol, targetPrice, condition);
 

@@ -5,11 +5,11 @@ import { getQuotes } from '../services/marketData.js';
 const router = Router();
 
 router.get('/', async (req, res) => {
-  const users = db.prepare('SELECT id, name, balance FROM users').all() as any[];
-  const holdings = db.prepare(`
+  const users = (await db.prepare('SELECT id, name, balance FROM users').all()) as any[];
+  const holdings = (await db.prepare(`
     SELECT h.user_id, h.symbol, h.quantity, h.avg_buy_price
     FROM holdings h
-  `).all() as any[];
+  `).all()) as any[];
 
   const uniqueSymbols = Array.from(new Set(holdings.map((h) => h.symbol)));
   const quotes = uniqueSymbols.length

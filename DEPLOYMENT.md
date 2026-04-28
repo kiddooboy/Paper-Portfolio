@@ -37,6 +37,10 @@ npm run build
 PORT=5000
 NODE_ENV=production
 JWT_SECRET=your_secure_random_string_here
+DATABASE_URL=postgresql://user:password@host:port/database_name
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=secure_admin_password
+ADMIN_NAME=Admin
 ```
 
 **Client (.env):**
@@ -115,23 +119,31 @@ sudo certbot --nginx -d paperportfolio.in -d www.paperportfolio.in
 4. Add environment variables in Railway dashboard
 5. Configure custom domain in Railway settings
 
-### Option 3: Render
+### Option 3: Render (Recommended for PostgreSQL)
 
-1. Create two services on Render:
-   - **Web Service** for the backend (Node.js)
-   - **Static Site** for the frontend (React build)
+1. **Create PostgreSQL Database**:
+   - Go to Render dashboard → New → PostgreSQL
+   - Create a new PostgreSQL instance
+   - Copy the internal DATABASE_URL from the database dashboard
 
-2. Backend Service:
+2. **Create Web Service** for the backend:
    - Build Command: `cd server && npm install && npm run build`
    - Start Command: `node dist/index.js`
-   - Add environment variables
+   - Add environment variables:
+     - `DATABASE_URL` (from PostgreSQL database)
+     - `JWT_SECRET` (generate with: `openssl rand -base64 32`)
+     - `ADMIN_EMAIL` (admin email)
+     - `ADMIN_PASSWORD` (admin password)
+     - `ADMIN_NAME` (admin display name)
 
-3. Frontend Service:
+3. **Static Site** for the frontend (React build):
    - Build Command: `cd client && npm install && npm run build`
    - Publish Directory: `client/dist`
-   - Add environment variables
+   - Add environment variables as needed
 
 4. Configure custom domain in Render dashboard
+
+**Note**: Using Render PostgreSQL provides persistent storage that survives redeploys, unlike the free tier ephemeral storage.
 
 ## Domain Configuration
 
@@ -200,7 +212,10 @@ kill -9 <PID>
 ```
 
 ### Database Issues
-The SQLite database will be created automatically. Ensure the server has write permissions.
+- PostgreSQL connection string must be set in DATABASE_URL environment variable
+- Ensure PostgreSQL database is accessible from your deployment environment
+- For Render, use the internal DATABASE_URL from your PostgreSQL database dashboard
+- Schema is created automatically on first run
 
 ### Build Errors
 - Clear node_modules and reinstall: `rm -rf node_modules && npm install`

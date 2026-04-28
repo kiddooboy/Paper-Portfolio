@@ -4,11 +4,25 @@ if (process.env.NODE_ENV !== 'production') {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 }
 
-import express from 'express';
-import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
+
+// Load .env from server directory (go up one level from src/)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const envPath = path.join(__dirname, '..', '.env');
+
+if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+  console.log('[config] Loaded .env from:', envPath);
+} else {
+  console.warn('[config] .env file not found at:', envPath);
+}
+
+import express from 'express';
+import cors from 'cors';
 import { initSchema, db } from './db/index.js';
 import cron from 'node-cron';
 import { fillOrder } from './routes/orders.js';
@@ -28,10 +42,7 @@ import insightsRoutes from './routes/insights.js';
 import aiRoutes from './routes/ai.js';
 import walletRoutes from './routes/wallet.js';
 
-dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const PORT = process.env.PORT || 5000;
 
 async function main() {
   await initSchema();
@@ -43,7 +54,6 @@ async function main() {
   startOrderExecutionScheduler();
 
   const app = express();
-  const PORT = process.env.PORT || 5000;
 
   app.use(cors());
   app.use(express.json());
@@ -74,9 +84,9 @@ async function main() {
   }
 
   async function checkLimitOrders() {
-    const pending = db
+    const pending = (await db
       .prepare(`SELECT * FROM orders WHERE status = 'PENDING' AND type = 'LIMIT'`)
-      .all() as any[];
+      .all()) as any[];
     if (!pending.length) return;
 
     const uniqueSymbols = Array.from(new Set(pending.map((o) => o.symbol)));
@@ -105,9 +115,9 @@ async function main() {
   }
 
   async function checkPriceAlerts() {
-    const alerts = db
+    const alerts = (await db
       .prepare('SELECT * FROM price_alerts WHERE triggered = 0')
-      .all() as any[];
+      .all()) as any[];
     if (!alerts.length) return;
 
     const uniqueSymbols = Array.from(new Set(alerts.map((a) => a.symbol)));
@@ -123,8 +133,8 @@ async function main() {
         (alert.condition === 'above' && price >= alert.target_price) ||
         (alert.condition === 'below' && price <= alert.target_price);
       if (triggered) {
-        db.prepare('UPDATE price_alerts SET triggered = 1 WHERE id = ?').run(alert.id);
-        db.prepare(
+        await db.prepare('UPDATE price_alerts SET triggered = 1 WHERE id = ?').run(alert.id);
+        await db.prepare(
           `INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, 'price_alert')`
         ).run(
           alert.user_id,
@@ -136,10 +146,10 @@ async function main() {
   }
 
   async function recordPortfolioHistory() {
-    const users = db.prepare('SELECT id, balance FROM users').all() as any[];
+    const users = (await db.prepare('SELECT id, balance FROM users').all()) as any[];
     if (!users.length) return;
 
-    const allHoldings = db.prepare('SELECT * FROM holdings').all() as any[];
+    const allHoldings = (await db.prepare('SELECT * FROM holdings').all()) as any[];
     const uniqueSymbols = Array.from(new Set(allHoldings.map((h) => h.symbol)));
     const quotes = uniqueSymbols.length
       ? await getQuotes(uniqueSymbols.map((s) => ({ symbol: s, exchange: 'NSE' as const })))
@@ -153,7 +163,7 @@ async function main() {
         const price = priceMap.get(h.symbol) ?? h.avg_buy_price;
         totalValue += price * h.quantity;
       }
-      db.prepare(
+      await db.prepare(
         `INSERT INTO portfolio_history (user_id, total_value, cash_balance) VALUES (?, ?, ?)`
       ).run(user.id, totalValue, user.balance);
     }
@@ -162,13 +172,13 @@ async function main() {
   // Every minute during market hours: check pending limit orders and price alerts.
   cron.schedule('*/60 * * * * *', () => {
     if (!isMarketOpen()) return;
-    checkLimitOrders().catch(() => {});
-    checkPriceAlerts().catch(() => {});
+    checkLimitOrders().catch(err => console.error('[cron] checkLimitOrders error:', err));
+    checkPriceAlerts().catch(err => console.error('[cron] checkPriceAlerts error:', err));
   });
 
   // Hourly portfolio snapshot.
   cron.schedule('0 * * * *', () => {
-    recordPortfolioHistory().catch(() => {});
+    recordPortfolioHistory().catch(err => console.error('[cron] recordPortfolioHistory error:', err));
   });
 
   // ── Continuous market data poller ──
@@ -177,11 +187,11 @@ async function main() {
   // Cache is warmed in background so client requests are always fast.
   async function pollMarketData() {
     try {
-      const heldSymbols = (db.prepare(
+      const heldSymbols = ((await db.prepare(
         `SELECT DISTINCT symbol FROM holdings UNION SELECT DISTINCT symbol FROM watchlist_items`
-      ).all() as any[]).map((r) => r.symbol).filter(Boolean);
+      ).all()) as any[]).map((r) => r.symbol).filter(Boolean);
 
-      const nifty500 = (db.prepare(`SELECT symbol FROM stocks WHERE exchange = 'NSE'`).all() as any[]).map((r) => r.symbol);
+      const nifty500 = ((await db.prepare(`SELECT symbol FROM stocks WHERE exchange = 'NSE'`).all()) as any[]).map((r) => r.symbol);
       const symbols = Array.from(new Set([...nifty500, ...heldSymbols]));
       const items = symbols.map((s) => ({ symbol: s, exchange: 'NSE' as const }));
 

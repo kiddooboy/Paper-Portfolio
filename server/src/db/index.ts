@@ -1,117 +1,77 @@
-import initSqlJs from 'sql.js';
+import pg from 'pg';
 import bcrypt from 'bcryptjs';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const { Pool } = pg;
 
-const dbPath = process.env.DATABASE_URL || path.join(__dirname, '..', '..', 'data', 'papertrading.db');
+let pool: pg.Pool | null = null;
 
-let SQL: any;
-let innerDb: any;
-let saveScheduled = false;
-let lastInsertId = 0;
-let lastChanges = 0;
-
-function saveDb() {
-  if (!innerDb || saveScheduled) return;
-  saveScheduled = true;
-  setImmediate(() => {
-    try {
-      const data = innerDb.export();
-      fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-      fs.writeFileSync(dbPath, Buffer.from(data));
-    } finally {
-      saveScheduled = false;
-    }
-  });
-}
-
-function loadDb() {
-  if (fs.existsSync(dbPath)) {
-    const filebuffer = fs.readFileSync(dbPath);
-    return new SQL.Database(filebuffer);
+export function getPool(): pg.Pool {
+  if (!pool) {
+    const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/papertrading';
+    pool = new Pool({
+      connectionString: DATABASE_URL,
+      ssl: DATABASE_URL.includes('render.com') ? { rejectUnauthorized: false } : false,
+    });
   }
-  return new SQL.Database();
+  return pool;
 }
 
 class Statement {
   private sql: string;
-  constructor(sql: string) {
+  private params: any[];
+  constructor(sql: string, params: any[] = []) {
     this.sql = sql;
+    this.params = params;
   }
 
-  run(...params: any[]) {
-    const stmt = innerDb.prepare(this.sql);
-    try {
-      if (params.length) stmt.bind(params);
-      stmt.step();
-    } finally {
-      stmt.free();
-    }
-    const idRes = innerDb.exec('SELECT last_insert_rowid()');
-    const chRes = innerDb.exec('SELECT changes()');
-    lastInsertId = idRes[0]?.values?.[0]?.[0] ?? 0;
-    lastChanges = chRes[0]?.values?.[0]?.[0] ?? 0;
-    saveDb();
-    return { lastInsertRowid: lastInsertId, changes: lastChanges };
+  async run(...params: any[]) {
+    const mergedParams = [...this.params, ...params];
+    const result = await getPool().query(this.sql, mergedParams);
+    return {
+      lastInsertRowid: result.rows[0]?.id || 0,
+      changes: result.rowCount || 0,
+    };
   }
 
-  get(...params: any[]) {
-    const stmt = innerDb.prepare(this.sql);
-    try {
-      if (params.length) stmt.bind(params);
-      if (!stmt.step()) return undefined;
-      return stmt.getAsObject();
-    } finally {
-      stmt.free();
-    }
+  async get(...params: any[]) {
+    const mergedParams = [...this.params, ...params];
+    const result = await getPool().query(this.sql, mergedParams);
+    return result.rows[0];
   }
 
-  all(...params: any[]) {
-    const stmt = innerDb.prepare(this.sql);
-    const results: any[] = [];
-    try {
-      if (params.length) stmt.bind(params);
-      while (stmt.step()) results.push(stmt.getAsObject());
-    } finally {
-      stmt.free();
-    }
-    return results;
+  async all(...params: any[]) {
+    const mergedParams = [...this.params, ...params];
+    const result = await getPool().query(this.sql, mergedParams);
+    return result.rows;
   }
-
-  pluck() { return this; }
 }
 
 class WrappedDatabase {
-  prepare(sql: string) {
-    return new Statement(sql);
+  prepare(sql: string, params: any[] = []) {
+    return new Statement(sql, params);
   }
 
-  exec(sql: string) {
-    innerDb.exec(sql);
-    saveDb();
+  async exec(sql: string) {
+    await getPool().query(sql);
   }
 
   pragma(_sql: string) {
     return [];
   }
 
-  // better-sqlite3 compatibility shim. Returns a callable that executes `fn`
-  // within BEGIN/COMMIT. sql.js is synchronous so this is sufficient.
   transaction<T extends (...args: any[]) => any>(fn: T): T {
-    return ((...args: any[]) => {
-      innerDb.run('BEGIN');
+    return (async (...args: any[]) => {
+      const client = await getPool().connect();
       try {
-        const result = fn(...args);
-        innerDb.run('COMMIT');
-        saveDb();
+        await client.query('BEGIN');
+        const result = await fn(...args);
+        await client.query('COMMIT');
         return result;
       } catch (err) {
-        try { innerDb.run('ROLLBACK'); } catch {}
+        await client.query('ROLLBACK');
         throw err;
+      } finally {
+        client.release();
       }
     }) as T;
   }
@@ -120,182 +80,223 @@ class WrappedDatabase {
 export const db = new WrappedDatabase();
 
 export async function initSchema() {
-  SQL = await initSqlJs();
-  innerDb = loadDb();
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      password TEXT NOT NULL,
-      role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user','admin')),
-      balance REAL NOT NULL DEFAULT 100000,
-      mpin_hash TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS stocks (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      symbol TEXT NOT NULL,
-      name TEXT NOT NULL,
-      exchange TEXT NOT NULL,
-      sector TEXT,
-      isin TEXT,
-      market_cap REAL,
-      pe_ratio REAL,
-      high_52w REAL,
-      low_52w REAL,
-      eps REAL,
-      volume REAL,
-      about TEXT,
-      category TEXT DEFAULT 'stock',
-      UNIQUE(symbol, exchange)
-    );
-    CREATE INDEX IF NOT EXISTS idx_stocks_symbol ON stocks(symbol);
-    CREATE INDEX IF NOT EXISTS idx_stocks_name ON stocks(name);
-
-    CREATE TABLE IF NOT EXISTS stock_prices (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      symbol TEXT NOT NULL,
-      price REAL NOT NULL,
-      change REAL NOT NULL DEFAULT 0,
-      change_percent REAL NOT NULL DEFAULT 0,
-      timestamp TEXT DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS holdings (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      symbol TEXT NOT NULL,
-      quantity INTEGER NOT NULL DEFAULT 0,
-      avg_buy_price REAL NOT NULL DEFAULT 0,
-      UNIQUE(user_id, symbol)
-    );
-
-    CREATE TABLE IF NOT EXISTS orders (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      symbol TEXT NOT NULL,
-      type TEXT NOT NULL CHECK(type IN ('MARKET','LIMIT')),
-      transaction_type TEXT NOT NULL CHECK(transaction_type IN ('BUY','SELL')),
-      quantity INTEGER NOT NULL,
-      price REAL NOT NULL,
-      limit_price REAL,
-      status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','FILLED','CANCELLED')),
-      created_at TEXT DEFAULT (datetime('now')),
-      filled_at TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS transactions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      order_id INTEGER,
-      symbol TEXT NOT NULL,
-      type TEXT NOT NULL CHECK(type IN ('BUY','SELL')),
-      quantity INTEGER NOT NULL,
-      price REAL NOT NULL,
-      total_amount REAL NOT NULL,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS watchlists (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      name TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS watchlist_items (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      watchlist_id INTEGER NOT NULL,
-      symbol TEXT NOT NULL,
-      added_at TEXT DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS notifications (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      title TEXT NOT NULL,
-      message TEXT NOT NULL,
-      type TEXT NOT NULL DEFAULT 'system' CHECK(type IN ('order','price_alert','system')),
-      read INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS price_alerts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      symbol TEXT NOT NULL,
-      target_price REAL NOT NULL,
-      condition TEXT NOT NULL CHECK(condition IN ('above','below')),
-      triggered INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS portfolio_history (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      total_value REAL NOT NULL,
-      cash_balance REAL NOT NULL,
-      recorded_at TEXT DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS wallet_transactions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      type TEXT NOT NULL CHECK(type IN ('DEPOSIT','WITHDRAW')),
-      amount REAL NOT NULL,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-
-  `);
-
-  // ── Migrations (idempotent) ──
-  // Add role column to users table if missing (existing DBs)
+  const client = await getPool().connect();
   try {
-    innerDb.exec(`ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user','admin'))`);
-    saveDb();
-  } catch {
-    // Column already exists — ignore
-  }
+    await client.query('BEGIN');
 
-  // Add mpin_hash column to users table if missing (existing DBs)
-  try {
-    innerDb.exec(`ALTER TABLE users ADD COLUMN mpin_hash TEXT`);
-    saveDb();
-  } catch {
-    // Column already exists — ignore
-  }
+    // Users table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user','admin')),
+        balance NUMERIC NOT NULL DEFAULT 100000,
+        mpin_hash TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
-  // ── Admin bootstrap ──
-  // Render free tier wipes SQLite on each redeploy. To make admin login
-  // reliable, recreate/upgrade the admin user from environment variables on
-  // every startup (idempotent).
-  const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'yogesh.nithyanandam@gmail.com').toLowerCase().trim();
-  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD; // optional: only sets/resets if provided
-  const ADMIN_NAME = process.env.ADMIN_NAME || 'Admin';
-  try {
-    const existing = db.prepare('SELECT id FROM users WHERE LOWER(email) = ?').get(ADMIN_EMAIL) as any;
-    if (existing) {
-      // Always promote to admin
-      db.prepare(`UPDATE users SET role = 'admin' WHERE id = ?`).run(existing.id);
-      // Reset password if ADMIN_PASSWORD is provided
-      if (ADMIN_PASSWORD) {
-        const hashed = await bcrypt.hash(ADMIN_PASSWORD, 10);
-        db.prepare(`UPDATE users SET password = ? WHERE id = ?`).run(hashed, existing.id);
-        console.log(`[admin] reset password for ${ADMIN_EMAIL}`);
-      }
-      console.log(`[admin] ensured role for ${ADMIN_EMAIL}`);
-    } else if (ADMIN_PASSWORD) {
-      // Create admin from scratch (only if password env var is set)
-      const hashed = await bcrypt.hash(ADMIN_PASSWORD, 10);
-      db.prepare(
-        'INSERT INTO users (name, email, password, role, balance) VALUES (?, ?, ?, ?, ?)'
-      ).run(ADMIN_NAME, ADMIN_EMAIL, hashed, 'admin', 100000);
-      console.log(`[admin] bootstrapped admin user ${ADMIN_EMAIL}`);
-    } else {
-      console.log(`[admin] ${ADMIN_EMAIL} not yet registered; set ADMIN_PASSWORD env var to auto-create`);
+    // Stocks table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS stocks (
+        id SERIAL PRIMARY KEY,
+        symbol TEXT NOT NULL,
+        name TEXT NOT NULL,
+        exchange TEXT NOT NULL,
+        sector TEXT,
+        isin TEXT,
+        market_cap NUMERIC,
+        pe_ratio NUMERIC,
+        high_52w NUMERIC,
+        low_52w NUMERIC,
+        eps NUMERIC,
+        volume NUMERIC,
+        about TEXT,
+        category TEXT DEFAULT 'stock',
+        UNIQUE(symbol, exchange)
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_stocks_symbol ON stocks(symbol)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_stocks_name ON stocks(name)`);
+
+    // Stock prices table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS stock_prices (
+        id SERIAL PRIMARY KEY,
+        symbol TEXT NOT NULL,
+        price NUMERIC NOT NULL,
+        change NUMERIC NOT NULL DEFAULT 0,
+        change_percent NUMERIC NOT NULL DEFAULT 0,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Holdings table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS holdings (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        symbol TEXT NOT NULL,
+        quantity INTEGER NOT NULL DEFAULT 0,
+        avg_buy_price NUMERIC NOT NULL DEFAULT 0,
+        UNIQUE(user_id, symbol)
+      )
+    `);
+
+    // Orders table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS orders (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        symbol TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('MARKET','LIMIT')),
+        transaction_type TEXT NOT NULL CHECK(transaction_type IN ('BUY','SELL')),
+        quantity INTEGER NOT NULL,
+        price NUMERIC NOT NULL,
+        limit_price NUMERIC,
+        status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','FILLED','CANCELLED')),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        filled_at TIMESTAMP
+      )
+    `);
+
+    // Transactions table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS transactions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        order_id INTEGER,
+        symbol TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('BUY','SELL')),
+        quantity INTEGER NOT NULL,
+        price NUMERIC NOT NULL,
+        total_amount NUMERIC NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Watchlists table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS watchlists (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        name TEXT NOT NULL
+      )
+    `);
+
+    // Watchlist items table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS watchlist_items (
+        id SERIAL PRIMARY KEY,
+        watchlist_id INTEGER NOT NULL,
+        symbol TEXT NOT NULL,
+        added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Notifications table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'system' CHECK(type IN ('order','price_alert','system')),
+        read BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Price alerts table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS price_alerts (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        symbol TEXT NOT NULL,
+        target_price NUMERIC NOT NULL,
+        condition TEXT NOT NULL CHECK(condition IN ('above','below')),
+        triggered BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Portfolio history table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS portfolio_history (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        total_value NUMERIC NOT NULL,
+        cash_balance NUMERIC NOT NULL,
+        recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Wallet transactions table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS wallet_transactions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('DEPOSIT','WITHDRAW')),
+        amount NUMERIC NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // ── Migrations (idempotent) ──
+    // Add role column to users table if missing (existing DBs)
+    try {
+      await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user','admin'))`);
+    } catch {
+      // Column already exists — ignore
     }
-  } catch (err: any) {
-    console.warn('[admin] bootstrap failed:', err?.message || err);
+
+    // Add mpin_hash column to users table if missing (existing DBs)
+    try {
+      await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS mpin_hash TEXT`);
+    } catch {
+      // Column already exists — ignore
+    }
+
+    await client.query('COMMIT');
+
+    // ── Admin bootstrap ──
+    // To make admin login reliable, recreate/upgrade the admin user from environment variables on
+    // every startup (idempotent).
+    const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'yogesh.nithyanandam@gmail.com').toLowerCase().trim();
+    const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD; // optional: only sets/resets if provided
+    const ADMIN_NAME = process.env.ADMIN_NAME || 'Admin';
+    try {
+      const existing = await getPool().query('SELECT id FROM users WHERE LOWER(email) = $1', [ADMIN_EMAIL]);
+      if (existing.rows.length > 0) {
+        // Always promote to admin
+        await getPool().query(`UPDATE users SET role = 'admin' WHERE id = $1`, [existing.rows[0].id]);
+        // Reset password if ADMIN_PASSWORD is provided
+        if (ADMIN_PASSWORD) {
+          const hashed = await bcrypt.hash(ADMIN_PASSWORD, 10);
+          await getPool().query(`UPDATE users SET password = $1 WHERE id = $2`, [hashed, existing.rows[0].id]);
+          console.log(`[admin] reset password for ${ADMIN_EMAIL}`);
+        }
+        console.log(`[admin] ensured role for ${ADMIN_EMAIL}`);
+      } else if (ADMIN_PASSWORD) {
+        // Create admin from scratch (only if password env var is set)
+        const hashed = await bcrypt.hash(ADMIN_PASSWORD, 10);
+        await getPool().query(
+          'INSERT INTO users (name, email, password, role, balance) VALUES ($1, $2, $3, $4, $5)',
+          [ADMIN_NAME, ADMIN_EMAIL, hashed, 'admin', 100000]
+        );
+        console.log(`[admin] bootstrapped admin user ${ADMIN_EMAIL}`);
+      } else {
+        console.log(`[admin] ${ADMIN_EMAIL} not yet registered; set ADMIN_PASSWORD env var to auto-create`);
+      }
+    } catch (err: any) {
+      console.warn('[admin] bootstrap failed:', err?.message || err);
+    }
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
   }
 }

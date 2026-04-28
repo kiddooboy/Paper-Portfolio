@@ -5,25 +5,25 @@ import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 const router = Router();
 
 // GET /api/insights/daily - Get daily insights for the user
-router.get('/daily', authMiddleware, (req: AuthRequest, res) => {
+router.get('/daily', authMiddleware, async (req: AuthRequest, res) => {
   const userId = req.user!.id;
   const dateParam = req.query.date as string;
   const targetDate = dateParam || new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   console.log(`[Insights] Fetching daily insights for user ${userId}, date: ${targetDate}`);
 
   // Get today's transactions
-  const transactions = db.prepare(`
+  const transactions = (await db.prepare(`
     SELECT * FROM transactions
     WHERE user_id = ? AND DATE(created_at) = ?
     ORDER BY created_at DESC
-  `).all(userId, targetDate) as any[];
+  `).all(userId, targetDate)) as any[];
 
   // Get today's orders
-  const orders = db.prepare(`
+  const orders = (await db.prepare(`
     SELECT * FROM orders
     WHERE user_id = ? AND DATE(created_at) = ?
     ORDER BY created_at DESC
-  `).all(userId, targetDate) as any[];
+  `).all(userId, targetDate)) as any[];
 
   // Calculate daily P&L from realized transactions (sells)
   let realizedPnl = 0;
@@ -40,8 +40,8 @@ router.get('/daily', authMiddleware, (req: AuthRequest, res) => {
       sellVolume += txn.total_amount;
       sellCount++;
       // Approximate realized P&L (sell - avg buy)
-      const holding = db.prepare('SELECT avg_buy_price FROM holdings WHERE user_id = ? AND symbol = ?')
-        .get(userId, txn.symbol) as any;
+      const holding = (await db.prepare('SELECT avg_buy_price FROM holdings WHERE user_id = ? AND symbol = ?')
+        .get(userId, txn.symbol)) as any;
       if (holding) {
         const costBasis = holding.avg_buy_price * txn.quantity;
         realizedPnl += txn.total_amount - costBasis;
@@ -50,8 +50,8 @@ router.get('/daily', authMiddleware, (req: AuthRequest, res) => {
   }
 
   // Get current portfolio value
-  const user = db.prepare('SELECT balance FROM users WHERE id = ?').get(userId) as any;
-  const holdings = db.prepare('SELECT * FROM holdings WHERE user_id = ?').all(userId) as any[];
+  const user = (await db.prepare('SELECT balance FROM users WHERE id = ?').get(userId)) as any;
+  const holdings = (await db.prepare('SELECT * FROM holdings WHERE user_id = ?').all(userId)) as any[];
   let portfolioValue = user.balance;
   for (const h of holdings) {
     portfolioValue += h.quantity * h.avg_buy_price;
@@ -61,11 +61,11 @@ router.get('/daily', authMiddleware, (req: AuthRequest, res) => {
   const yesterday = new Date(targetDate);
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = yesterday.toISOString().split('T')[0];
-  const yesterdayHistory = db.prepare(`
+  const yesterdayHistory = (await db.prepare(`
     SELECT total_value FROM portfolio_history
     WHERE user_id = ? AND DATE(recorded_at) = ?
     ORDER BY recorded_at DESC LIMIT 1
-  `).get(userId, yesterdayStr) as any;
+  `).get(userId, yesterdayStr)) as any;
   const yesterdayValue = yesterdayHistory?.total_value || portfolioValue;
   const dailyChange = portfolioValue - yesterdayValue;
   const dailyChangePercent = yesterdayValue > 0 ? (dailyChange / yesterdayValue) * 100 : 0;

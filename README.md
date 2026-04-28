@@ -52,7 +52,7 @@ A modern paper trading platform with real-time market data, MPIN authentication,
 ### Backend
 - **Node.js** with TypeScript
 - **Express** for REST API
-- **SQLite** for database with sql.js
+- **PostgreSQL** for persistent database storage
 - **JWT** for authentication
 - **bcrypt** for password hashing
 - **Yahoo Finance API** for market data
@@ -89,6 +89,9 @@ A modern paper trading platform with real-time market data, MPIN authentication,
    cd server
    cp .env.example .env
    # Edit .env with your configuration
+   # Required: DATABASE_URL (PostgreSQL connection string)
+   # Required: JWT_SECRET (for authentication)
+   # Required: ADMIN_EMAIL and ADMIN_PASSWORD (for admin bootstrap)
 
    # Client environment (optional)
    cd ../client
@@ -96,8 +99,9 @@ A modern paper trading platform with real-time market data, MPIN authentication,
    ```
 
 4. **Database Setup**
-   - SQLite database is created automatically on first run
-   - No external database required
+   - PostgreSQL database required (provide connection string via DATABASE_URL)
+   - Schema is created automatically on first run
+   - For local development, you can use a local PostgreSQL instance or a cloud service like Render PostgreSQL, Supabase, or Neon
 
 ### Running the Application
 

@@ -18,15 +18,15 @@ async function seed() {
   await initSchema();
   console.log('Seeding database...');
 
-  db.prepare('DELETE FROM users').run();
+  await db.prepare('DELETE FROM users').run();
 
   // Stocks are ingested live from NSE + BSE masters on server startup.
   // We still upsert a small curated set so the app has data before ingestion completes.
-  const insertStock = db.prepare(`INSERT OR IGNORE INTO stocks (symbol, name, exchange, sector, market_cap, pe_ratio, high_52w, low_52w, eps, volume, about, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-  for (const s of stocks) insertStock.run(s.symbol, s.name, s.exchange, s.sector, s.marketCap, s.peRatio, s.high52w, s.low52w, s.eps, s.volume, s.about, s.category);
+  const insertStock = db.prepare(`INSERT INTO stocks (symbol, name, exchange, sector, market_cap, pe_ratio, high_52w, low_52w, eps, volume, about, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (symbol, exchange) DO NOTHING`);
+  for (const s of stocks) await insertStock.run(s.symbol, s.name, s.exchange, s.sector, s.marketCap, s.peRatio, s.high52w, s.low52w, s.eps, s.volume, s.about, s.category);
 
   const hashedPw = await bcrypt.hash('password123', 10);
-  db.prepare('INSERT INTO users (name, email, password, balance) VALUES (?, ?, ?, ?)').run('Demo User', 'demo@papertrade.in', hashedPw, 100000);
+  await db.prepare('INSERT INTO users (name, email, password, balance) VALUES (?, ?, ?, ?)').run('Demo User', 'demo@papertrade.in', hashedPw, 100000);
 
   console.log('Seed complete!');
 }

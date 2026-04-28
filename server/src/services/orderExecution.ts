@@ -10,9 +10,9 @@ export async function executePendingOrdersAtClose() {
   console.log('[OrderExecution] Starting end-of-day order execution...');
 
   // Get all pending orders
-  const pendingOrders = db.prepare(`
+  const pendingOrders = (await db.prepare(`
     SELECT * FROM orders WHERE status = 'PENDING'
-  `).all() as any[];
+  `).all()) as any[];
 
   if (pendingOrders.length === 0) {
     console.log('[OrderExecution] No pending orders to execute');
@@ -32,7 +32,7 @@ export async function executePendingOrdersAtClose() {
         console.error(`[OrderExecution] Failed to get quote for ${order.symbol}`);
         failed++;
         // Mark as failed
-        db.prepare("UPDATE orders SET status = 'FAILED' WHERE id = ?").run(order.id);
+        await db.prepare("UPDATE orders SET status = 'FAILED' WHERE id = ?").run(order.id);
         continue;
       }
 
@@ -47,18 +47,18 @@ export async function executePendingOrdersAtClose() {
         if (!shouldExecute) {
           console.log(`[OrderExecution] LIMIT order ${order.id} not executed - price not favorable`);
           // Keep as pending for next day or cancel
-          db.prepare("UPDATE orders SET status = 'EXPIRED' WHERE id = ?").run(order.id);
+          await db.prepare("UPDATE orders SET status = 'EXPIRED' WHERE id = ?").run(order.id);
           continue;
         }
       }
 
       // Execute the order
-      fillOrder(order.id, order.user_id, order.symbol, order.transaction_type, order.quantity, currentPrice);
+      await fillOrder(order.id, order.user_id, order.symbol, order.transaction_type, order.quantity, currentPrice);
       executed++;
       console.log(`[OrderExecution] Executed order ${order.id}: ${order.transaction_type} ${order.quantity} ${order.symbol} @ ${currentPrice}`);
 
       // Create notification for the user
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO notifications (user_id, title, message, type)
         VALUES (?, ?, ?, 'order')
       `).run(
@@ -69,7 +69,7 @@ export async function executePendingOrdersAtClose() {
     } catch (error) {
       console.error(`[OrderExecution] Failed to execute order ${order.id}:`, error);
       failed++;
-      db.prepare("UPDATE orders SET status = 'FAILED' WHERE id = ?").run(order.id);
+      await db.prepare("UPDATE orders SET status = 'FAILED' WHERE id = ?").run(order.id);
     }
   }
 

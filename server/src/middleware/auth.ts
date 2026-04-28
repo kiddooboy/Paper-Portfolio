@@ -18,7 +18,7 @@ export function verifyToken(token: string) {
   return jwt.verify(token, JWT_SECRET) as { id: number; email: string; role: string };
 }
 
-export function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
+export async function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -27,7 +27,7 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
   try {
     const decoded = verifyToken(token);
     // Guard against stale tokens whose user no longer exists (e.g. DB reset).
-    const user = db.prepare('SELECT id, role FROM users WHERE id = ?').get(decoded.id) as any;
+    const user = (await db.prepare('SELECT id, role FROM users WHERE id = ?').get(decoded.id)) as any;
     if (!user) return res.status(401).json({ error: 'Session expired, please log in again' });
     req.user = { id: decoded.id, email: decoded.email, role: user.role || 'user' };
     next();
