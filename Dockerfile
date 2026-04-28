@@ -23,13 +23,13 @@ RUN npm run build
 # Move to production directory
 WORKDIR /app
 
-# Copy server build and node_modules
-COPY server/dist ./dist
-COPY server/node_modules ./node_modules
-COPY server/package*.json ./
+# Copy server build and node_modules (built files are in the image, not build context)
+RUN cp -r server/dist ./dist && \
+    cp -r server/node_modules ./node_modules && \
+    cp server/package*.json ./
 
 # Copy client build
-COPY client/dist ./client/dist
+RUN cp -r client/dist ./client/dist
 
 # Set environment variables
 ENV NODE_ENV=production
