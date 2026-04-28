@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { db } from '../db/index.js';
 import { generateToken, authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { z } from 'zod';
+import { sendOtpEmail, isEmailConfigured } from '../services/email.js';
 
 const router = Router();
 
@@ -92,6 +93,108 @@ router.post('/login-mpin', async (req, res) => {
     const role = user.role || 'user';
     const token = generateToken(user.id, user.email, role);
     res.json({ token, user: { id: user.id, name: user.name, email: user.email, role, balance: user.balance } });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Invalid data' });
+  }
+});
+
+// ── OTP Login (registered users only) ──
+const requestOtpSchema = z.object({ email: z.string().email() });
+const verifyOtpSchema = z.object({
+  email: z.string().email(),
+  code: z.string().length(6).regex(/^\d+$/),
+});
+
+const OTP_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
+const OTP_RESEND_COOLDOWN_MS = 60 * 1000; // 1 minute between requests
+const OTP_MAX_ATTEMPTS = 5;
+
+// POST /auth/request-otp — generate and email an OTP to a registered user
+router.post('/request-otp', async (req, res) => {
+  try {
+    const email = requestOtpSchema.parse(req.body).email.toLowerCase().trim();
+
+    const user = db.prepare('SELECT id FROM users WHERE LOWER(email) = ?').get(email) as any;
+    if (!user) {
+      // Don't reveal whether email exists; still return generic message
+      return res.status(404).json({ error: 'No account found with this email. Please register first.' });
+    }
+
+    // Rate limit: refuse if a recent (non-consumed, non-expired) OTP was just issued
+    const recent = db.prepare(
+      `SELECT created_at FROM otp_codes WHERE email = ? AND consumed = 0 AND expires_at > ? ORDER BY id DESC LIMIT 1`
+    ).get(email, Date.now()) as any;
+    if (recent && recent.created_at) {
+      const createdMs = new Date(recent.created_at + 'Z').getTime();
+      if (!isNaN(createdMs) && Date.now() - createdMs < OTP_RESEND_COOLDOWN_MS) {
+        return res.status(429).json({ error: 'Please wait a minute before requesting another code.' });
+      }
+    }
+
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const codeHash = await bcrypt.hash(code, 10);
+    const expiresAt = Date.now() + OTP_EXPIRY_MS;
+
+    // Invalidate older codes for this email
+    db.prepare('UPDATE otp_codes SET consumed = 1 WHERE email = ? AND consumed = 0').run(email);
+    db.prepare(
+      'INSERT INTO otp_codes (email, code_hash, expires_at) VALUES (?, ?, ?)'
+    ).run(email, codeHash, expiresAt);
+
+    const sent = await sendOtpEmail(email, code);
+    if (!sent) {
+      return res.status(500).json({ error: 'Failed to send OTP. Please try again later.' });
+    }
+
+    res.json({
+      success: true,
+      message: 'OTP sent to your email',
+      // expose dev-mode flag so client can show a hint when SMTP isn't configured
+      dev: !isEmailConfigured(),
+    });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Invalid data' });
+  }
+});
+
+// POST /auth/login-otp — verify OTP and issue JWT
+router.post('/login-otp', async (req, res) => {
+  try {
+    const parsed = verifyOtpSchema.parse(req.body);
+    const email = parsed.email.toLowerCase().trim();
+    const code = parsed.code;
+
+    const user = db.prepare('SELECT * FROM users WHERE LOWER(email) = ?').get(email) as any;
+    if (!user) return res.status(400).json({ error: 'Invalid credentials' });
+
+    const otp = db.prepare(
+      `SELECT * FROM otp_codes WHERE email = ? AND consumed = 0 ORDER BY id DESC LIMIT 1`
+    ).get(email) as any;
+    if (!otp) return res.status(400).json({ error: 'No active OTP. Please request a new one.' });
+    if (otp.expires_at < Date.now()) {
+      db.prepare('UPDATE otp_codes SET consumed = 1 WHERE id = ?').run(otp.id);
+      return res.status(400).json({ error: 'OTP expired. Please request a new one.' });
+    }
+    if (otp.attempts >= OTP_MAX_ATTEMPTS) {
+      db.prepare('UPDATE otp_codes SET consumed = 1 WHERE id = ?').run(otp.id);
+      return res.status(400).json({ error: 'Too many failed attempts. Please request a new code.' });
+    }
+
+    const valid = await bcrypt.compare(code, otp.code_hash);
+    if (!valid) {
+      db.prepare('UPDATE otp_codes SET attempts = attempts + 1 WHERE id = ?').run(otp.id);
+      return res.status(400).json({ error: 'Invalid OTP' });
+    }
+
+    // Consume OTP
+    db.prepare('UPDATE otp_codes SET consumed = 1 WHERE id = ?').run(otp.id);
+
+    const role = user.role || 'user';
+    const token = generateToken(user.id, user.email, role);
+    res.json({
+      token,
+      user: { id: user.id, name: user.name, email: user.email, role, balance: user.balance },
+    });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Invalid data' });
   }

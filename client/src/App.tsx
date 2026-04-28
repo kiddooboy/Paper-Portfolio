@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import SetupMpinPage from './pages/SetupMpinPage';
 import MpinLoginPage from './pages/MpinLoginPage';
+import OtpLoginPage from './pages/OtpLoginPage';
 import MarketExplorer from './pages/MarketExplorer';
 import StockDetail from './pages/StockDetail';
 import TerminalPage from './pages/TerminalPage';
@@ -39,6 +40,7 @@ function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/mpin-login" element={<MpinLoginPage />} />
+      <Route path="/otp-login" element={<OtpLoginPage />} />
       <Route path="/setup-mpin" element={<SetupMpinPage />} />
       <Route element={<Layout />}>
         <Route path="/" element={<Dashboard />} />

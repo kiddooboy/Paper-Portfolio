@@ -78,15 +78,19 @@ export default function Login() {
           </button>
         </form>
 
-        <div className="flex flex-col sm:flex-row gap-3 text-center sm:text-left">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+        <div className="space-y-2 text-center text-sm">
+          <p className="text-gray-500 dark:text-gray-400">
             Don't have an account? <Link to="/register" className="text-groww-primary font-medium">Register</Link>
           </p>
-          <p className="text-sm">
+          <div className="flex justify-center gap-3 pt-1">
+            <Link to="/otp-login" className="text-groww-primary font-medium hover:underline">
+              Login with OTP
+            </Link>
+            <span className="text-gray-300 dark:text-gray-700">·</span>
             <Link to="/mpin-login" className="text-groww-primary font-medium hover:underline">
               Login with MPIN
             </Link>
-          </p>
+          </div>
         </div>
       </div>
     </div>
