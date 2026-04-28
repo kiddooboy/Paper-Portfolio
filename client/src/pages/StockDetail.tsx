@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -6,6 +6,7 @@ import { TrendingUp, TrendingDown } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
 import { useAuthStore } from '../store/authStore';
 import StockLogo from '../components/StockLogo';
+import TradingViewWidget from '../components/TradingViewWidget';
 
 export default function StockDetail() {
   const { symbol } = useParams<{ symbol: string }>();
@@ -26,11 +27,6 @@ export default function StockDetail() {
     }, 15000);
     return () => clearInterval(interval);
   }, [symbol]);
-
-  const history = useMemo(() => {
-    if (!stock?.history) return [];
-    return stock.history.map((h: any) => ({ price: h.price, time: h.timestamp })).reverse();
-  }, [stock]);
 
   const handleOrder = async () => {
     try {
@@ -87,24 +83,13 @@ export default function StockDetail() {
         </div>
       </div>
 
-      <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-4">
-        <h3 className="font-semibold mb-3">Price History</h3>
-        <div className="h-64 flex items-end gap-1">
-          {history.slice(-30).map((h: any, i: number) => {
-            const min = Math.min(...history.slice(-30).map((x: any) => x.price));
-            const max = Math.max(...history.slice(-30).map((x: any) => x.price));
-            const pct = max === min ? 50 : ((h.price - min) / (max - min)) * 100;
-            return (
-              <div key={i} className="flex-1 flex flex-col items-center gap-1 group">
-                <div
-                  className={cn('w-full rounded-t-sm transition-all', i === history.slice(-30).length - 1 ? 'bg-groww-primary' : 'bg-gray-300 dark:bg-gray-700 group-hover:bg-gray-400 dark:group-hover:bg-gray-600')}
-                  style={{ height: `${Math.max(4, pct)}%` }}
-                />
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      {symbol && (
+        <TradingViewWidget
+          symbol={symbol.toUpperCase()}
+          exchange={(stock?.exchange === 'BSE' ? 'BSE' : 'NSE')}
+          height={500}
+        />
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
         <div className="bg-white dark:bg-groww-card rounded-lg p-3 border border-gray-100 dark:border-gray-800">
