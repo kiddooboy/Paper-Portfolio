@@ -11,7 +11,7 @@ COPY client/package*.json ./client/
 COPY client/ ./client/
 WORKDIR /app/client
 RUN npm install
-RUN npm run build
+RUN npm run build || (echo "Client build failed, checking dist directory..." && ls -la && exit 1)
 
 # Copy server files and build
 WORKDIR /app
@@ -33,6 +33,9 @@ COPY --from=builder /app/server/node_modules ./node_modules
 
 # Copy client build
 COPY --from=builder /app/client/dist ./client/dist
+
+# Verify client build exists
+RUN ls -la ./client/dist || (echo "ERROR: client/dist directory not found!" && exit 1)
 
 # Set environment variables
 ENV NODE_ENV=production
