@@ -83,8 +83,10 @@ router.post('/set-mpin', authMiddleware, async (req: AuthRequest, res) => {
 // POST /auth/login-mpin — login with email + 4-digit MPIN
 router.post('/login-mpin', async (req, res) => {
   try {
-    const { email, mpin } = loginMpinSchema.parse(req.body);
-    const user = db.prepare('SELECT id, name, email, role, balance, mpin_hash FROM users WHERE email = ?').get(email) as any;
+    const parsed = loginMpinSchema.parse(req.body);
+    const email = parsed.email.toLowerCase().trim();
+    const mpin = parsed.mpin;
+    const user = db.prepare('SELECT id, name, email, role, balance, mpin_hash FROM users WHERE LOWER(email) = ?').get(email) as any;
     if (!user || !user.mpin_hash) return res.status(400).json({ error: 'Invalid credentials or MPIN not set' });
 
     const valid = await bcrypt.compare(mpin, user.mpin_hash);

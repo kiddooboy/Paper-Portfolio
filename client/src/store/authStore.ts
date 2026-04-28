@@ -63,7 +63,19 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
-      partialize: (state) => ({ token: state.token, user: state.user }),
+      partialize: (state) => ({
+        token: state.token,
+        user: state.user,
+        isAuthenticated: state.isAuthenticated,
+      }),
+      // On page load, restore axios header from the rehydrated token
+      onRehydrateStorage: () => (state) => {
+        if (state?.token) {
+          axios.defaults.headers.common['Authorization'] = `Bearer ${state.token}`;
+          // Make sure auth flag matches token presence
+          if (!state.isAuthenticated && state.user) state.isAuthenticated = true;
+        }
+      },
     }
   )
 );
