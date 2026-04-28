@@ -59,10 +59,13 @@ router.get('/live', authMiddleware, async (req: AuthRequest, res) => {
 // Returns paginated list of known stocks (from ingested master).
 // When `live=1` (default), enriches each row with the current Yahoo Finance quote.
 router.get('/', async (req, res) => {
-  const { q, exchange, category } = req.query;
-  const live = String(req.query.live ?? '1') !== '0';
-  const limit = Math.min(parseInt(String(req.query.limit || '30')) || 30, 100);
-  const offset = parseInt(String(req.query.offset || '0')) || 0;
+  const page = Math.max(parseInt(String(req.query.page || '1')) || 1, 1);
+  const limit = Math.min(parseInt(String(req.query.limit || '20')) || 20, 100);
+  const offset = (page - 1) * limit;
+  const q = String(req.query.q || '').trim();
+  const exchange = req.query.exchange as Exchange;
+  const category = req.query.category as string;
+  const live = req.query.live === '1' || req.query.live === 'true';
 
   const where: string[] = [];
   const params: any[] = [];
@@ -80,11 +83,23 @@ router.get('/', async (req, res) => {
     params.push(String(category));
   }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  
+  // Get total count for pagination
+  const countResult = (await db.prepare(`SELECT COUNT(*) as total FROM stocks ${whereSql}`).get(...params)) as any;
+  const total = countResult?.total || 0;
+  
   const rows = (await db
     .prepare(`SELECT * FROM stocks ${whereSql} ORDER BY symbol LIMIT ? OFFSET ?`)
     .all(...params, limit, offset)) as any[];
 
-  if (!live || !rows.length) return res.json(rows);
+  if (!live || !rows.length) {
+    return res.json({ 
+      stocks: rows,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit)
+    });
+  }
 
   const quotes = await getQuotes(
     rows.map((r) => ({ symbol: r.symbol, exchange: r.exchange as Exchange }))
@@ -106,7 +121,12 @@ router.get('/', async (req, res) => {
       low_52w: q?.low_52w ?? r.low_52w,
     };
   });
-  res.json(enriched);
+  res.json({ 
+    stocks: enriched,
+    total,
+    page,
+    totalPages: Math.ceil(total / limit)
+  });
 });
 
 // GET /api/stocks/search?q=&limit=  (lightweight autocomplete, symbol+name only)

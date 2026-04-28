@@ -14,14 +14,14 @@ router.get('/daily', authMiddleware, async (req: AuthRequest, res) => {
   // Get today's transactions
   const transactions = (await db.prepare(`
     SELECT * FROM transactions
-    WHERE user_id = ? AND DATE(created_at) = ?
+    WHERE user_id = ? AND created_at::date = ?
     ORDER BY created_at DESC
   `).all(userId, targetDate)) as any[];
 
   // Get today's orders
   const orders = (await db.prepare(`
     SELECT * FROM orders
-    WHERE user_id = ? AND DATE(created_at) = ?
+    WHERE user_id = ? AND created_at::date = ?
     ORDER BY created_at DESC
   `).all(userId, targetDate)) as any[];
 
@@ -62,11 +62,10 @@ router.get('/daily', authMiddleware, async (req: AuthRequest, res) => {
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = yesterday.toISOString().split('T')[0];
   const yesterdayHistory = (await db.prepare(`
-    SELECT total_value FROM portfolio_history
-    WHERE user_id = ? AND DATE(recorded_at) = ?
-    ORDER BY recorded_at DESC LIMIT 1
-  `).get(userId, yesterdayStr)) as any;
-  const yesterdayValue = yesterdayHistory?.total_value || portfolioValue;
+    SELECT * FROM portfolio_history
+    WHERE user_id = ? AND recorded_at::date = ?
+  `).all(userId, yesterdayStr)) as any[];
+  const yesterdayValue = yesterdayHistory?.[0]?.total_value || portfolioValue;
   const dailyChange = portfolioValue - yesterdayValue;
   const dailyChangePercent = yesterdayValue > 0 ? (dailyChange / yesterdayValue) * 100 : 0;
 

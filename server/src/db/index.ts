@@ -24,9 +24,17 @@ class Statement {
     this.params = params;
   }
 
+  // Convert SQLite-style ? placeholders to PostgreSQL-style $1, $2, etc.
+  private convertPlaceholders(sql: string, params: any[]): [string, any[]] {
+    let paramIndex = 1;
+    const convertedSql = sql.replace(/\?/g, () => `$${paramIndex++}`);
+    return [convertedSql, params];
+  }
+
   async run(...params: any[]) {
     const mergedParams = [...this.params, ...params];
-    const result = await getPool().query(this.sql, mergedParams);
+    const [sql, convertedParams] = this.convertPlaceholders(this.sql, mergedParams);
+    const result = await getPool().query(sql, convertedParams);
     return {
       lastInsertRowid: result.rows[0]?.id || 0,
       changes: result.rowCount || 0,
@@ -35,13 +43,15 @@ class Statement {
 
   async get(...params: any[]) {
     const mergedParams = [...this.params, ...params];
-    const result = await getPool().query(this.sql, mergedParams);
+    const [sql, convertedParams] = this.convertPlaceholders(this.sql, mergedParams);
+    const result = await getPool().query(sql, convertedParams);
     return result.rows[0];
   }
 
   async all(...params: any[]) {
     const mergedParams = [...this.params, ...params];
-    const result = await getPool().query(this.sql, mergedParams);
+    const [sql, convertedParams] = this.convertPlaceholders(this.sql, mergedParams);
+    const result = await getPool().query(sql, convertedParams);
     return result.rows;
   }
 }
