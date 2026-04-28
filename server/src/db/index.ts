@@ -1,4 +1,5 @@
 import initSqlJs from 'sql.js';
+import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -264,9 +265,36 @@ export async function initSchema() {
     // Column already exists — ignore
   }
 
-  // Ensure admin role for the designated admin email
-  const ADMIN_EMAIL = 'yogesh.nithyanandam@gmail.com';
+  // ── Admin bootstrap ──
+  // Render free tier wipes SQLite on each redeploy. To make admin login
+  // reliable, recreate/upgrade the admin user from environment variables on
+  // every startup (idempotent).
+  const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'yogesh.nithyanandam@gmail.com').toLowerCase().trim();
+  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD; // optional: only sets/resets if provided
+  const ADMIN_NAME = process.env.ADMIN_NAME || 'Admin';
   try {
-    db.prepare(`UPDATE users SET role = 'admin' WHERE email = ?`).run(ADMIN_EMAIL);
-  } catch {}
+    const existing = db.prepare('SELECT id FROM users WHERE LOWER(email) = ?').get(ADMIN_EMAIL) as any;
+    if (existing) {
+      // Always promote to admin
+      db.prepare(`UPDATE users SET role = 'admin' WHERE id = ?`).run(existing.id);
+      // Reset password if ADMIN_PASSWORD is provided
+      if (ADMIN_PASSWORD) {
+        const hashed = await bcrypt.hash(ADMIN_PASSWORD, 10);
+        db.prepare(`UPDATE users SET password = ? WHERE id = ?`).run(hashed, existing.id);
+        console.log(`[admin] reset password for ${ADMIN_EMAIL}`);
+      }
+      console.log(`[admin] ensured role for ${ADMIN_EMAIL}`);
+    } else if (ADMIN_PASSWORD) {
+      // Create admin from scratch (only if password env var is set)
+      const hashed = await bcrypt.hash(ADMIN_PASSWORD, 10);
+      db.prepare(
+        'INSERT INTO users (name, email, password, role, balance) VALUES (?, ?, ?, ?, ?)'
+      ).run(ADMIN_NAME, ADMIN_EMAIL, hashed, 'admin', 100000);
+      console.log(`[admin] bootstrapped admin user ${ADMIN_EMAIL}`);
+    } else {
+      console.log(`[admin] ${ADMIN_EMAIL} not yet registered; set ADMIN_PASSWORD env var to auto-create`);
+    }
+  } catch (err: any) {
+    console.warn('[admin] bootstrap failed:', err?.message || err);
+  }
 }

@@ -30,11 +30,14 @@ const loginMpinSchema = z.object({
 
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password } = registerSchema.parse(req.body);
-    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    const parsed = registerSchema.parse(req.body);
+    const name = parsed.name;
+    const email = parsed.email.toLowerCase().trim();
+    const password = parsed.password;
+    const existing = db.prepare('SELECT id FROM users WHERE LOWER(email) = ?').get(email);
     if (existing) return res.status(400).json({ error: 'Email already registered' });
 
-    const role = email.toLowerCase() === ADMIN_EMAIL ? 'admin' : 'user';
+    const role = email === ADMIN_EMAIL ? 'admin' : 'user';
     const hashedPw = await bcrypt.hash(password, 10);
     const result = db.prepare('INSERT INTO users (name, email, password, role, balance) VALUES (?, ?, ?, ?, ?)').run(name, email, hashedPw, role, 100000);
     const userId = result.lastInsertRowid as number;
@@ -47,11 +50,12 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = loginSchema.parse(req.body);
-    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as any;
+    const parsed = loginSchema.parse(req.body);
+    const email = parsed.email.toLowerCase().trim();
+    const user = db.prepare('SELECT * FROM users WHERE LOWER(email) = ?').get(email) as any;
     if (!user) return res.status(400).json({ error: 'Invalid credentials' });
 
-    const valid = await bcrypt.compare(password, user.password);
+    const valid = await bcrypt.compare(parsed.password, user.password);
     if (!valid) return res.status(400).json({ error: 'Invalid credentials' });
 
     const role = user.role || 'user';
