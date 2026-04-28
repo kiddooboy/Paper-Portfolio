@@ -61,59 +61,44 @@ export default function Dashboard() {
   }, [portfolio, allQuotes]);
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
+    let cancelled = false;
+    const fetchPortfolio = async () => {
       try {
-        const [pRes, niftyRes, sensexRes, vixRes] = await Promise.all([
-          axios.get('/api/portfolio'),
-          axios.get('/api/stocks/^NSEI?exchange=NSE'),
-          axios.get('/api/stocks/^BSESN?exchange=BSE'),
-          axios.get('/api/stocks/^INDIAVIX?exchange=NSE')
-        ]);
+        const pRes = await axios.get('/api/portfolio');
+        if (cancelled) return;
         setPortfolio(pRes.data);
         if (pRes.data.balance !== undefined) updateBalance(pRes.data.balance);
-        
-        // Create a map of index data with enriched structure
-        const indexMap: Record<string, any> = {};
-        
-        // Process Nifty 50
-        if (niftyRes.data) {
-          indexMap['^NSEI'] = {
-            symbol: '^NSEI',
-            name: 'Nifty 50',
-            exchange: 'NSE',
-            price: niftyRes.data.price || 23950.25,
-            change_percent: niftyRes.data.change_percent || -1.25
-          };
-        }
-        
-        // Process Sensex
-        if (sensexRes.data) {
-          indexMap['^BSESN'] = {
-            symbol: '^BSESN',
-            name: 'Sensex',
-            exchange: 'BSE',
-            price: sensexRes.data.price || 78512.40,
-            change_percent: sensexRes.data.change_percent || -1.18
-          };
-        }
-        
-        // Process India VIX
-        if (vixRes.data) {
-          indexMap['^INDIAVIX'] = {
-            symbol: '^INDIAVIX',
-            name: 'India VIX',
-            exchange: 'NSE',
-            price: vixRes.data.price || 19.45,
-            change_percent: vixRes.data.change_percent || 4.12
-          };
-        }
-        
-        setIndexData(indexMap);
       } catch {}
       setLoading(false);
     };
-    fetchData();
+    const fetchIndices = async () => {
+      try {
+        const res = await axios.get('/api/stocks/indices');
+        if (cancelled) return;
+        const map: Record<string, any> = {};
+        for (const idx of res.data?.indices || []) {
+          map[idx.symbol] = {
+            symbol: idx.symbol,
+            name: idx.name,
+            exchange: idx.symbol === '^BSESN' ? 'BSE' : 'NSE',
+            price: idx.price,
+            change_percent: idx.change_percent,
+          };
+        }
+        // Bank Nifty replaces India VIX (we removed VIX, indices endpoint returns BANKNIFTY instead)
+        if (map['^NSEBANK'] && !map['^INDIAVIX']) {
+          map['^INDIAVIX'] = map['^NSEBANK'];
+        }
+        setIndexData(map);
+      } catch {}
+    };
+    fetchPortfolio();
+    fetchIndices();
+    const id = setInterval(fetchIndices, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, [updateBalance]);
 
   if (loading) {

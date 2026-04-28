@@ -42,9 +42,12 @@ export default function Register() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1.5">Full Name</label>
+            <label htmlFor="reg-name" className="block text-sm font-medium mb-1.5">Full Name</label>
             <input
+              id="reg-name"
+              name="name"
               type="text"
+              autoComplete="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
@@ -53,9 +56,12 @@ export default function Register() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1.5">Email</label>
+            <label htmlFor="reg-email" className="block text-sm font-medium mb-1.5">Email</label>
             <input
+              id="reg-email"
+              name="email"
               type="email"
+              autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -64,10 +70,13 @@ export default function Register() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1.5">Password</label>
+            <label htmlFor="reg-password" className="block text-sm font-medium mb-1.5">Password</label>
             <div className="relative">
               <input
+                id="reg-password"
+                name="password"
                 type={showPw ? 'text' : 'password'}
+                autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required

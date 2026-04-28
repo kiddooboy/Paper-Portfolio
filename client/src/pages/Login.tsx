@@ -7,7 +7,8 @@ import toast from 'react-hot-toast';
 import AuthLayout from '../components/AuthLayout';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
+  const stored = typeof window !== 'undefined' ? localStorage.getItem('last_email') || '' : '';
+  const [email, setEmail] = useState(stored);
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -41,9 +42,12 @@ export default function Login() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1.5">Email</label>
+            <label htmlFor="login-email" className="block text-sm font-medium mb-1.5">Email</label>
             <input
+              id="login-email"
+              name="email"
               type="email"
+              autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -52,10 +56,13 @@ export default function Login() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1.5">Password</label>
+            <label htmlFor="login-password" className="block text-sm font-medium mb-1.5">Password</label>
             <div className="relative">
               <input
+                id="login-password"
+                name="password"
                 type={showPw ? 'text' : 'password'}
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required

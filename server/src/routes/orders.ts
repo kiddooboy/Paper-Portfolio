@@ -45,21 +45,21 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     }
 
     if (transactionType === 'SELL') {
-      const holding = db.prepare('SELECT quantity FROM holdings WHERE user_id = ? AND symbol = ?').get(userId, symbol) as any;
+      const holding = db.prepare('SELECT quantity FROM holdings WHERE user_id = ? AND symbol = ?').get(userId, upperSymbol) as any;
       if (!holding || holding.quantity < quantity) {
-        return res.status(400).json({ error: 'Insufficient holdings' });
+        return res.status(400).json({ error: `You don't own enough shares of ${upperSymbol} to sell. Buy first or check your holdings.` });
       }
     }
 
     const result = db.prepare(`
       INSERT INTO orders (user_id, symbol, type, transaction_type, quantity, price, limit_price, status)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(userId, symbol, type, transactionType, quantity, orderPrice, limitPrice || null, 'PENDING');
+    `).run(userId, upperSymbol, type, transactionType, quantity, orderPrice, limitPrice || null, 'PENDING');
 
     const orderId = result.lastInsertRowid as number;
 
     if (type === 'MARKET') {
-      fillOrder(orderId, userId, symbol, transactionType, quantity, currentPrice);
+      fillOrder(orderId, userId, upperSymbol, transactionType, quantity, currentPrice);
     }
 
     res.json({ success: true, orderId });
@@ -68,7 +68,8 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
   }
 });
 
-export function fillOrder(orderId: number, userId: number, symbol: string, transactionType: string, quantity: number, price: number) {
+export function fillOrder(orderId: number, userId: number, symbolRaw: string, transactionType: string, quantity: number, price: number) {
+  const symbol = symbolRaw.toUpperCase();
   const totalAmount = price * quantity;
 
   db.transaction(() => {
