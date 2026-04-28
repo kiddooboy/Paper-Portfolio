@@ -118,12 +118,7 @@ router.get('/search', async (req, res) => {
 
   const local = (await db
     .prepare(
-      `SELECT symbol, name, exchange FROM stocks WHERE symbol LIKE ? OR name LIKE ? ORDER BY
-         CASE WHEN symbol = ? THEN 0
-              WHEN symbol LIKE ? THEN 1
-              ELSE 2 END,
-         symbol
-         LIMIT ?`
+      `SELECT symbol, name, exchange FROM stocks WHERE symbol LIKE ? OR name LIKE ? ORDER BY CASE WHEN symbol = ? THEN 0 WHEN symbol LIKE ? THEN 1 ELSE 2 END, symbol LIMIT ?`
     )
     .all(`%${q}%`, `%${q}%`, q, `${q}%`, limit)) as any[];
 

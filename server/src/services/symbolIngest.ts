@@ -77,7 +77,7 @@ async function fetchNifty500Symbols(): Promise<StockRow[]> {
  */
 export async function ingestSymbols() {
   // Wipe any non-NSE rows from older versions
-  await db.prepare(`DELETE FROM stocks WHERE exchange != 'NSE'`).run();
+  await db.prepare(`DELETE FROM stocks WHERE exchange <> 'NSE'`).run();
 
   const existing = ((await db.prepare('SELECT COUNT(*) as c FROM stocks WHERE exchange = ?').get('NSE')) as any)?.c ?? 0;
   if (existing >= 450) {

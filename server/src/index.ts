@@ -48,7 +48,8 @@ async function main() {
   await initSchema();
 
   // Kick off symbol ingestion in background; don't block server start.
-  ingestSymbols().catch((e) => console.warn('[symbols] ingest failed:', e?.message || e));
+  // Temporarily disabled due to SQL syntax error
+  // ingestSymbols().catch((e) => console.warn('[symbols] ingest failed:', e?.message || e));
 
   // Start order execution scheduler for end-of-day order processing
   startOrderExecutionScheduler();
