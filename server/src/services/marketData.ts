@@ -148,9 +148,12 @@ export async function getQuotes(
     }
   }
 
-  if (tickers.length) {
+  // Yahoo limits how many tickers per call; chunk to avoid silent failures.
+  const CHUNK = 40;
+  for (let i = 0; i < tickers.length; i += CHUNK) {
+    const slice = tickers.slice(i, i + CHUNK);
     try {
-      const results = (await yahooFinance.quote(tickers)) as any[];
+      const results = (await yahooFinance.quote(slice)) as any[];
       const arr = Array.isArray(results) ? results : [results];
       for (const q of arr) {
         if (!q || typeof q.regularMarketPrice !== 'number') continue;
@@ -179,7 +182,7 @@ export async function getQuotes(
         out.push(data);
       }
     } catch {
-      // swallow batch errors
+      // continue to next chunk on failure
     }
   }
 
