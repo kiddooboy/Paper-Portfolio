@@ -20,8 +20,17 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     const { symbol, exchange, type, transactionType, quantity, limitPrice } = orderSchema.parse(req.body);
     const userId = req.user!.id;
     const ex = exchange ?? 'NSE';
+    const upperSymbol = symbol.toUpperCase();
 
-    const quote = await getQuote(symbol.toUpperCase(), ex);
+    // Guard: only allow trading NIFTY 500 constituents (present in our master)
+    const known = db
+      .prepare(`SELECT 1 FROM stocks WHERE symbol = ? AND exchange = 'NSE' LIMIT 1`)
+      .get(upperSymbol);
+    if (!known) {
+      return res.status(400).json({ error: 'Trading restricted to NIFTY 500 stocks only' });
+    }
+
+    const quote = await getQuote(upperSymbol, ex);
     if (!quote) return res.status(404).json({ error: 'Stock not found or market data unavailable' });
 
     const currentPrice = quote.price;

@@ -45,11 +45,15 @@ router.post('/', authMiddleware, (req: AuthRequest, res) => {
 router.post('/:id/items', authMiddleware, (req: AuthRequest, res) => {
   const watchlistId = parseInt(req.params.id);
   const { symbol } = req.body;
+  const upperSymbol = String(symbol || '').toUpperCase();
 
   const existing = db.prepare('SELECT id FROM watchlists WHERE id = ? AND user_id = ?').get(watchlistId, req.user!.id);
   if (!existing) return res.status(404).json({ error: 'Watchlist not found' });
 
-  db.prepare('INSERT INTO watchlist_items (watchlist_id, symbol) VALUES (?, ?)').run(watchlistId, symbol);
+  const known = db.prepare(`SELECT 1 FROM stocks WHERE symbol = ? AND exchange = 'NSE' LIMIT 1`).get(upperSymbol);
+  if (!known) return res.status(400).json({ error: 'Only NIFTY 500 stocks can be added to watchlist' });
+
+  db.prepare('INSERT INTO watchlist_items (watchlist_id, symbol) VALUES (?, ?)').run(watchlistId, upperSymbol);
   res.json({ success: true });
 });
 

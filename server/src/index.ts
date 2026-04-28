@@ -12,7 +12,7 @@ import { fileURLToPath } from 'url';
 import { initSchema, db } from './db/index.js';
 import cron from 'node-cron';
 import { fillOrder } from './routes/orders.js';
-import { getQuote, getQuotes, getIndices, isMarketOpen, NIFTY50 } from './services/marketData.js';
+import { getQuote, getQuotes, getIndices, isMarketOpen } from './services/marketData.js';
 import { ingestSymbols } from './services/symbolIngest.js';
 import { startOrderExecutionScheduler } from './services/orderExecution.js';
 
@@ -181,7 +181,8 @@ async function main() {
         `SELECT DISTINCT symbol FROM holdings UNION SELECT DISTINCT symbol FROM watchlist_items`
       ).all() as any[]).map((r) => r.symbol).filter(Boolean);
 
-      const symbols = Array.from(new Set([...NIFTY50, ...heldSymbols]));
+      const nifty500 = (db.prepare(`SELECT symbol FROM stocks WHERE exchange = 'NSE'`).all() as any[]).map((r) => r.symbol);
+      const symbols = Array.from(new Set([...nifty500, ...heldSymbols]));
       const items = symbols.map((s) => ({ symbol: s, exchange: 'NSE' as const }));
 
       // Yahoo allows large batches; chunk to avoid url-length issues.

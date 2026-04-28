@@ -2,9 +2,11 @@ import axios from 'axios';
 import { parse } from 'csv-parse/sync';
 import { db } from '../db/index.js';
 
-const NSE_CSV_URL = 'https://archives.nseindia.com/content/equities/EQUITY_L.csv';
-const BSE_JSON_URL =
-  'https://api.bseindia.com/BseIndiaAPI/api/ListOfScripData/w?Group=&Scripcode=&industry=&segment=Equity&status=Active';
+// NIFTY 500 constituents — official NSE list (auto-updated)
+const NIFTY500_URLS = [
+  'https://nsearchives.nseindia.com/content/indices/ind_nifty500list.csv',
+  'https://archives.nseindia.com/content/indices/ind_nifty500list.csv',
+];
 
 const HEADERS = {
   'User-Agent':
@@ -21,15 +23,14 @@ interface StockRow {
   isin: string | null;
 }
 
-async function fetchNseSymbols(): Promise<StockRow[]> {
-  // NSE blocks direct CSV fetches; prime a session by visiting the homepage
-  // and reusing the Set-Cookie header.
+async function fetchNifty500Symbols(): Promise<StockRow[]> {
   const session = axios.create({
     headers: { ...HEADERS, Referer: 'https://www.nseindia.com/' },
     timeout: 30000,
     maxRedirects: 5,
   });
 
+  // Prime a session cookie by hitting the NSE homepage (some CDNs require it)
   let cookie = '';
   try {
     const home = await session.get('https://www.nseindia.com/', {
@@ -38,16 +39,12 @@ async function fetchNseSymbols(): Promise<StockRow[]> {
     const setCookie = home.headers['set-cookie'];
     if (Array.isArray(setCookie)) cookie = setCookie.map((c) => c.split(';')[0]).join('; ');
   } catch {
-    // continue without cookie; may still work via archives subdomain
+    // continue without cookie
   }
 
-  const urls = [
-    NSE_CSV_URL,
-    'https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv',
-  ];
   let csv = '';
   let lastErr: any;
-  for (const url of urls) {
+  for (const url of NIFTY500_URLS) {
     try {
       const res = await session.get<string>(url, {
         responseType: 'text',
@@ -59,67 +56,61 @@ async function fetchNseSymbols(): Promise<StockRow[]> {
       lastErr = err;
     }
   }
-  if (!csv) throw lastErr ?? new Error('NSE CSV unavailable');
+  if (!csv) throw lastErr ?? new Error('NIFTY 500 CSV unavailable');
 
   const rows = parse(csv, { columns: true, skip_empty_lines: true, trim: true }) as any[];
   return rows
     .map((r) => ({
-      symbol: (r['SYMBOL'] || '').trim(),
-      name: (r['NAME OF COMPANY'] || '').trim(),
+      symbol: String(r['Symbol'] || r['SYMBOL'] || '').trim(),
+      name: String(r['Company Name'] || r['COMPANY NAME'] || '').trim(),
       exchange: 'NSE' as const,
-      sector: (r[' SERIES'] || r['SERIES'] || '').trim() || null,
-      isin: (r[' ISIN NUMBER'] || r['ISIN NUMBER'] || '').trim() || null,
-    }))
-    .filter((r) => r.symbol && r.name);
-}
-
-async function fetchBseSymbols(): Promise<StockRow[]> {
-  const { data } = await axios.get<any>(BSE_JSON_URL, {
-    headers: { ...HEADERS, Referer: 'https://www.bseindia.com/' },
-    timeout: 30000,
-  });
-  const list: any[] = Array.isArray(data) ? data : data?.Table || data?.Data || [];
-  return list
-    .map((r) => ({
-      symbol: (r.scrip_id || r.SCRIP_ID || r.Scrip_Id || '').toString().trim(),
-      name: (r.scrip_name || r.SCRIP_NAME || r.Scrip_Name || '').toString().trim(),
-      exchange: 'BSE' as const,
-      sector: (r.Industry || r.industry || '').toString().trim() || null,
-      isin: (r.ISIN_NUMBER || r.isin_number || r.ISIN || '').toString().trim() || null,
+      sector: String(r['Industry'] || r['INDUSTRY'] || '').trim() || null,
+      isin: String(r['ISIN Code'] || r['ISIN CODE'] || '').trim() || null,
     }))
     .filter((r) => r.symbol && r.name);
 }
 
 /**
- * Ingests all NSE + BSE equity symbols into the stocks table.
+ * Ingests NIFTY 500 constituents into the stocks table.
  * Idempotent via INSERT OR IGNORE on the (symbol, exchange) unique constraint.
- * Skips any exchange that already has rows so we can retry missing exchanges.
+ * Also prunes any non-NIFTY-500 stocks that may exist from older deploys.
  */
 export async function ingestSymbols() {
-  const nseCount = (db.prepare('SELECT COUNT(*) as c FROM stocks WHERE exchange = ?').get('NSE') as any)?.c ?? 0;
-  const bseCount = (db.prepare('SELECT COUNT(*) as c FROM stocks WHERE exchange = ?').get('BSE') as any)?.c ?? 0;
+  // Wipe any non-NSE rows from older versions
+  db.prepare(`DELETE FROM stocks WHERE exchange != 'NSE'`).run();
 
-  const needNse = nseCount < 500;
-  const needBse = bseCount < 2000;
-  if (!needNse && !needBse) {
-    console.log(`[symbols] already have NSE=${nseCount}, BSE=${bseCount}, skipping ingest`);
-    return nseCount + bseCount;
+  const existing = (db.prepare('SELECT COUNT(*) as c FROM stocks WHERE exchange = ?').get('NSE') as any)?.c ?? 0;
+  if (existing >= 450) {
+    console.log(`[symbols] already have ${existing} NIFTY 500 stocks, skipping ingest`);
+    return existing;
   }
 
-  console.log(`[symbols] ingesting missing listings (NSE needed=${needNse}, BSE needed=${needBse})...`);
-  const tasks: Promise<StockRow[]>[] = [];
-  tasks.push(needNse ? fetchNseSymbols() : Promise.resolve([]));
-  tasks.push(needBse ? fetchBseSymbols() : Promise.resolve([]));
-  const results = await Promise.allSettled(tasks);
+  console.log(`[symbols] fetching NIFTY 500 list (have=${existing})...`);
+  let rows: StockRow[] = [];
+  try {
+    rows = await fetchNifty500Symbols();
+  } catch (err: any) {
+    console.warn('[symbols] NIFTY 500 fetch failed:', err?.message || err);
+    return existing;
+  }
 
-  const nseRows = results[0].status === 'fulfilled' ? results[0].value : [];
-  const bseRows = results[1].status === 'fulfilled' ? results[1].value : [];
+  if (!rows.length) {
+    console.warn('[symbols] NIFTY 500 returned no rows');
+    return existing;
+  }
 
-  if (needNse && results[0].status === 'rejected') console.warn('[symbols] NSE fetch failed:', (results[0].reason as Error).message);
-  if (needBse && results[1].status === 'rejected') console.warn('[symbols] BSE fetch failed:', (results[1].reason as Error).message);
-
-  const rows = [...nseRows, ...bseRows];
-  console.log(`[symbols] fetched NSE=${nseRows.length}, BSE=${bseRows.length}`);
+  // Prune any stocks that are no longer in NIFTY 500
+  const validSymbols = new Set(rows.map((r) => r.symbol.toUpperCase()));
+  const allCurrent = db.prepare(`SELECT symbol FROM stocks WHERE exchange = 'NSE'`).all() as any[];
+  let pruned = 0;
+  const pruneStmt = db.prepare(`DELETE FROM stocks WHERE symbol = ? AND exchange = 'NSE'`);
+  for (const row of allCurrent) {
+    if (!validSymbols.has(row.symbol.toUpperCase())) {
+      pruneStmt.run(row.symbol);
+      pruned++;
+    }
+  }
+  if (pruned) console.log(`[symbols] pruned ${pruned} non-NIFTY-500 stocks`);
 
   const insert = db.prepare(
     `INSERT OR IGNORE INTO stocks (symbol, name, exchange, sector, isin, category) VALUES (?, ?, ?, ?, ?, 'stock')`
@@ -133,6 +124,6 @@ export async function ingestSymbols() {
       // ignore individual row errors
     }
   }
-  console.log(`[symbols] inserted ${inserted} new stocks`);
+  console.log(`[symbols] NIFTY 500 ingest complete: ${inserted} new, ${rows.length} total`);
   return inserted;
 }
