@@ -80,32 +80,26 @@ export default function Login() {
           </button>
         </form>
 
-        {/* Divider */}
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-200 dark:border-gray-700" />
-          </div>
-          <div className="relative flex justify-center text-xs">
-            <span className="bg-white dark:bg-groww-dark px-2 text-gray-500 dark:text-gray-400">or</span>
-          </div>
-        </div>
+        {hasRegisteredOnDevice && (
+          <>
+            {/* Divider */}
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-200 dark:border-gray-700" />
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="bg-white dark:bg-groww-dark px-2 text-gray-500 dark:text-gray-400">or</span>
+              </div>
+            </div>
 
-        <div className="flex flex-col gap-2">
-          <Link
-            to="/otp-login"
-            className="w-full py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 text-center font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition"
-          >
-            Login with OTP
-          </Link>
-          {hasRegisteredOnDevice && (
             <Link
               to="/mpin-login"
-              className="w-full py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 text-center font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+              className="block w-full py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 text-center font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition"
             >
               Login with MPIN
             </Link>
-          )}
-        </div>
+          </>
+        )}
 
         <p className="text-center text-sm text-gray-500 dark:text-gray-400">
           Don't have an account?{' '}

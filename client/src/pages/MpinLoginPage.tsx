@@ -131,13 +131,9 @@ export default function MpinLoginPage() {
           {loading ? 'Signing in...' : 'Sign in'}
         </button>
 
-        <div className="text-center text-sm space-x-3 text-gray-500 dark:text-gray-400">
+        <div className="text-center text-sm text-gray-500 dark:text-gray-400">
           <Link to="/login" className="text-groww-primary font-medium hover:underline">
-            Use password
-          </Link>
-          <span>·</span>
-          <Link to="/otp-login" className="text-groww-primary font-medium hover:underline">
-            Use OTP
+            Use password instead
           </Link>
         </div>
       </div>

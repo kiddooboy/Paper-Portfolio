@@ -10,7 +10,6 @@
     "seed": "tsx src/scripts/seed.ts"
   },
   "dependencies": {
-    "@types/nodemailer": "^8.0.0",
     "@types/pg": "^8.20.0",
     "axios": "^1.15.2",
     "bcryptjs": "^2.4.3",
@@ -20,7 +19,6 @@
     "express": "^4.18.3",
     "jsonwebtoken": "^9.0.2",
     "node-cron": "^3.0.3",
-    "nodemailer": "^8.0.7",
     "pg": "^8.20.0",
     "sql.js": "^1.14.1",
     "ws": "^8.16.0",
