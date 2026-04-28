@@ -5,16 +5,10 @@ services:
     dockerfilePath: ./Dockerfile
     plan: free
     healthCheckPath: /
-    disk:
-      name: paper-portfolio-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 5000
-      - key: DATABASE_URL
-        value: /var/data/papertrading.db
       - key: JWT_SECRET
         generateValue: true

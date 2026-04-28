@@ -31,13 +31,9 @@ RUN cp -r server/dist ./dist && \
 # Copy client build
 RUN cp -r client/dist ./client/dist
 
-# Create persistent data directory for SQLite
-RUN mkdir -p /var/data
-
 # Set environment variables
 ENV NODE_ENV=production
 ENV PORT=5000
-ENV DATABASE_URL=/var/data/papertrading.db
 
 # Expose port
 EXPOSE 5000
