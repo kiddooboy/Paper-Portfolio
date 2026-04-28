@@ -12,7 +12,7 @@ import { fileURLToPath } from 'url';
 import { initSchema, db } from './db/index.js';
 import cron from 'node-cron';
 import { fillOrder } from './routes/orders.js';
-import { getQuote, getQuotes, isMarketOpen } from './services/marketData.js';
+import { getQuote, getQuotes, isMarketOpen, NIFTY50 } from './services/marketData.js';
 import { ingestSymbols } from './services/symbolIngest.js';
 import { startOrderExecutionScheduler } from './services/orderExecution.js';
 
@@ -171,10 +171,49 @@ async function main() {
     recordPortfolioHistory().catch(() => {});
   });
 
-  // Dev sanity ping — log a sample live quote once on startup.
-  getQuote('RELIANCE', 'NSE').then((q) => {
-    if (q) console.log(`[market] live sample: RELIANCE.NS ₹${q.price} (${q.change_percent.toFixed(2)}%)`);
-    else console.warn('[market] live sample failed — check network');
+  // ── Continuous market data poller ──
+  // Keeps yfinance data flowing all the time by refreshing quotes for
+  // popular symbols (Nifty50) plus any symbols users actively hold or watch.
+  // Cache is warmed in background so client requests are always fast.
+  async function pollMarketData() {
+    try {
+      const heldSymbols = (db.prepare(
+        `SELECT DISTINCT symbol FROM holdings UNION SELECT DISTINCT symbol FROM watchlist_items`
+      ).all() as any[]).map((r) => r.symbol).filter(Boolean);
+
+      const symbols = Array.from(new Set([...NIFTY50, ...heldSymbols]));
+      const items = symbols.map((s) => ({ symbol: s, exchange: 'NSE' as const }));
+
+      // Yahoo allows large batches; chunk to avoid url-length issues.
+      const CHUNK = 40;
+      let total = 0;
+      for (let i = 0; i < items.length; i += CHUNK) {
+        const slice = items.slice(i, i + CHUNK);
+        const quotes = await getQuotes(slice);
+        total += quotes.length;
+      }
+      const stamp = new Date().toISOString();
+      console.log(`[market] poll ok @ ${stamp} — refreshed ${total}/${items.length} symbols (open=${isMarketOpen()})`);
+    } catch (err: any) {
+      console.warn('[market] poll error:', err?.message || err);
+    }
+  }
+
+  function schedulePoll() {
+    const delay = isMarketOpen() ? 15_000 : 120_000; // 15s live, 2min closed
+    setTimeout(async () => {
+      await pollMarketData();
+      schedulePoll();
+    }, delay);
+  }
+
+  // Run once immediately, then keep polling.
+  pollMarketData().then(() => {
+    getQuote('RELIANCE', 'NSE').then((q) => {
+      if (q) console.log(`[market] live sample: RELIANCE.NS ₹${q.price} (${q.change_percent.toFixed(2)}%)`);
+      else console.warn('[market] live sample failed — check network');
+    });
+    schedulePoll();
   });
 
   app.listen(PORT, () => {
