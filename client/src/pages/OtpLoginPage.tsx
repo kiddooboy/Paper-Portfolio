@@ -2,13 +2,15 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Mail, Shield } from 'lucide-react';
+import { Mail, Shield } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { cn } from '../lib/utils';
+import AuthLayout from '../components/AuthLayout';
 
 export default function OtpLoginPage() {
+  const stored = typeof window !== 'undefined' ? localStorage.getItem('last_email') || '' : '';
   const [step, setStep] = useState<'email' | 'otp'>('email');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(stored);
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [resendIn, setResendIn] = useState(0);
@@ -16,7 +18,6 @@ export default function OtpLoginPage() {
   const navigate = useNavigate();
   const login = useAuthStore((s) => s.login);
 
-  // Resend cooldown countdown
   useEffect(() => {
     if (resendIn <= 0) return;
     const id = setInterval(() => setResendIn((v) => Math.max(0, v - 1)), 1000);
@@ -66,16 +67,12 @@ export default function OtpLoginPage() {
     arr[i] = v || ' ';
     const joined = arr.join('').replace(/\s+$/, '');
     setCode(joined);
-    if (v && i < 5) {
-      const next = document.getElementById(`otp-${i + 1}`);
-      next?.focus();
-    }
+    if (v && i < 5) document.getElementById(`otp-${i + 1}`)?.focus();
   };
 
   const handleKeyDown = (i: number, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Backspace' && !code[i] && i > 0) {
-      const prev = document.getElementById(`otp-${i - 1}`);
-      prev?.focus();
+      document.getElementById(`otp-${i - 1}`)?.focus();
     }
   };
 
@@ -84,34 +81,23 @@ export default function OtpLoginPage() {
     if (pasted) {
       e.preventDefault();
       setCode(pasted);
-      const target = document.getElementById(`otp-${Math.min(pasted.length, 5)}`);
-      target?.focus();
+      document.getElementById(`otp-${Math.min(pasted.length, 5)}`)?.focus();
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-groww-dark px-4">
-      <div className="w-full max-w-sm space-y-6">
-        <button
-          onClick={() => (step === 'otp' ? setStep('email') : navigate('/login'))}
-          className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-groww-primary"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back
-        </button>
-
-        <div className="text-center space-y-2">
-          <div className="flex justify-center">
-            <div className="w-12 h-12 rounded-xl bg-groww-primary/10 flex items-center justify-center">
-              {step === 'email' ? (
-                <Mail className="w-7 h-7 text-groww-primary" />
-              ) : (
-                <Shield className="w-7 h-7 text-groww-primary" />
-              )}
-            </div>
+    <AuthLayout>
+      <div className="space-y-6">
+        <div className="space-y-1">
+          <div className="w-12 h-12 rounded-xl bg-groww-primary/10 flex items-center justify-center mb-3">
+            {step === 'email' ? (
+              <Mail className="w-6 h-6 text-groww-primary" />
+            ) : (
+              <Shield className="w-6 h-6 text-groww-primary" />
+            )}
           </div>
-          <h1 className="text-2xl font-bold">
-            {step === 'email' ? 'Login with OTP' : 'Enter verification code'}
+          <h1 className="text-3xl font-bold">
+            {step === 'email' ? 'Sign in with OTP' : 'Enter verification code'}
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">
             {step === 'email'
@@ -184,16 +170,24 @@ export default function OtpLoginPage() {
               disabled={loading || code.length !== 6}
               className="w-full py-2.5 rounded-lg bg-groww-primary text-white font-semibold hover:bg-green-600 transition disabled:opacity-50"
             >
-              {loading ? 'Verifying...' : 'Verify & Login'}
+              {loading ? 'Verifying...' : 'Verify & Sign in'}
             </button>
 
-            <button
-              onClick={requestOtp}
-              disabled={resendIn > 0 || loading}
-              className="w-full text-sm text-groww-primary disabled:text-gray-400 hover:underline"
-            >
-              {resendIn > 0 ? `Resend code in ${resendIn}s` : 'Resend code'}
-            </button>
+            <div className="flex items-center justify-between text-sm">
+              <button
+                onClick={() => setStep('email')}
+                className="text-gray-500 dark:text-gray-400 hover:text-groww-primary"
+              >
+                Change email
+              </button>
+              <button
+                onClick={requestOtp}
+                disabled={resendIn > 0 || loading}
+                className="text-groww-primary disabled:text-gray-400 hover:underline"
+              >
+                {resendIn > 0 ? `Resend in ${resendIn}s` : 'Resend code'}
+              </button>
+            </div>
           </div>
         )}
 
@@ -203,10 +197,10 @@ export default function OtpLoginPage() {
           </Link>
           <span>·</span>
           <Link to="/register" className="text-groww-primary font-medium hover:underline">
-            Register
+            Sign up
           </Link>
         </div>
       </div>
-    </div>
+    </AuthLayout>
   );
 }

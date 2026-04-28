@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
-import { TrendingUp, Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import toast from 'react-hot-toast';
+import AuthLayout from '../components/AuthLayout';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -12,7 +13,6 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const login = useAuthStore((s) => s.login);
-  // Only show MPIN login if this device has previously logged in (i.e., a registered user is known)
   const hasRegisteredOnDevice =
     typeof window !== 'undefined' && !!localStorage.getItem('last_email');
 
@@ -32,16 +32,11 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-groww-dark px-4">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="text-center space-y-2">
-          <div className="flex justify-center">
-            <div className="w-12 h-12 rounded-xl bg-groww-primary/10 flex items-center justify-center">
-              <TrendingUp className="w-7 h-7 text-groww-primary" />
-            </div>
-          </div>
-          <h1 className="text-2xl font-bold">Welcome back</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Login to your Paper Portfolio account</p>
+    <AuthLayout>
+      <div className="space-y-6">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold">Welcome back</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Sign in to your Paper Portfolio account</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -53,7 +48,7 @@ export default function Login() {
               onChange={(e) => setEmail(e.target.value)}
               required
               className="w-full px-3 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/50"
-              placeholder="Enter your email"
+              placeholder="you@example.com"
             />
           </div>
           <div>
@@ -67,7 +62,11 @@ export default function Login() {
                 className="w-full px-3 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/50 pr-10"
                 placeholder="Enter your password"
               />
-              <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+              <button
+                type="button"
+                onClick={() => setShowPw(!showPw)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
                 {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
@@ -77,29 +76,44 @@ export default function Login() {
             disabled={loading}
             className="w-full py-2.5 rounded-lg bg-groww-primary text-white font-semibold hover:bg-green-600 transition disabled:opacity-50"
           >
-            {loading ? 'Logging in...' : 'Login'}
+            {loading ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
 
-        <div className="space-y-2 text-center text-sm">
-          <p className="text-gray-500 dark:text-gray-400">
-            Don't have an account? <Link to="/register" className="text-groww-primary font-medium">Register</Link>
-          </p>
-          <div className="flex justify-center gap-3 pt-1">
-            <Link to="/otp-login" className="text-groww-primary font-medium hover:underline">
-              Login with OTP
-            </Link>
-            {hasRegisteredOnDevice && (
-              <>
-                <span className="text-gray-300 dark:text-gray-700">·</span>
-                <Link to="/mpin-login" className="text-groww-primary font-medium hover:underline">
-                  Login with MPIN
-                </Link>
-              </>
-            )}
+        {/* Divider */}
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-200 dark:border-gray-700" />
+          </div>
+          <div className="relative flex justify-center text-xs">
+            <span className="bg-white dark:bg-groww-dark px-2 text-gray-500 dark:text-gray-400">or</span>
           </div>
         </div>
+
+        <div className="flex flex-col gap-2">
+          <Link
+            to="/otp-login"
+            className="w-full py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 text-center font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+          >
+            Login with OTP
+          </Link>
+          {hasRegisteredOnDevice && (
+            <Link
+              to="/mpin-login"
+              className="w-full py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 text-center font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+            >
+              Login with MPIN
+            </Link>
+          )}
+        </div>
+
+        <p className="text-center text-sm text-gray-500 dark:text-gray-400">
+          Don't have an account?{' '}
+          <Link to="/register" className="text-groww-primary font-semibold hover:underline">
+            Sign up
+          </Link>
+        </p>
       </div>
-    </div>
+    </AuthLayout>
   );
 }
