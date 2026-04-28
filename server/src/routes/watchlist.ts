@@ -57,6 +57,64 @@ router.post('/:id/items', authMiddleware, (req: AuthRequest, res) => {
   res.json({ success: true });
 });
 
+// Helper: get or create the user's default watchlist
+function getOrCreateDefaultWatchlist(userId: number): number {
+  const existing = db
+    .prepare('SELECT id FROM watchlists WHERE user_id = ? ORDER BY id ASC LIMIT 1')
+    .get(userId) as any;
+  if (existing) return existing.id;
+  const result = db
+    .prepare('INSERT INTO watchlists (user_id, name) VALUES (?, ?)')
+    .run(userId, 'My Watchlist');
+  return result.lastInsertRowid as number;
+}
+
+// GET /api/watchlists/contains/:symbol — is this symbol in any of user's watchlists?
+router.get('/contains/:symbol', authMiddleware, (req: AuthRequest, res) => {
+  const symbol = req.params.symbol.toUpperCase();
+  const row = db
+    .prepare(
+      `SELECT 1 FROM watchlist_items wi
+       JOIN watchlists w ON w.id = wi.watchlist_id
+       WHERE w.user_id = ? AND wi.symbol = ? LIMIT 1`
+    )
+    .get(req.user!.id, symbol);
+  res.json({ inWatchlist: !!row });
+});
+
+// POST /api/watchlists/toggle — add or remove a symbol from default watchlist
+router.post('/toggle', authMiddleware, (req: AuthRequest, res) => {
+  const userId = req.user!.id;
+  const symbol = String(req.body?.symbol || '').toUpperCase();
+  if (!symbol) return res.status(400).json({ error: 'Symbol required' });
+
+  const known = db
+    .prepare(`SELECT 1 FROM stocks WHERE symbol = ? AND exchange = 'NSE' LIMIT 1`)
+    .get(symbol);
+  if (!known) return res.status(400).json({ error: 'Only NIFTY 500 stocks can be bookmarked' });
+
+  // Check if already in any of the user's watchlists
+  const existingItem = db
+    .prepare(
+      `SELECT wi.id, wi.watchlist_id FROM watchlist_items wi
+       JOIN watchlists w ON w.id = wi.watchlist_id
+       WHERE w.user_id = ? AND wi.symbol = ? LIMIT 1`
+    )
+    .get(userId, symbol) as any;
+
+  if (existingItem) {
+    db.prepare('DELETE FROM watchlist_items WHERE id = ?').run(existingItem.id);
+    return res.json({ inWatchlist: false, action: 'removed' });
+  }
+
+  const watchlistId = getOrCreateDefaultWatchlist(userId);
+  db.prepare('INSERT INTO watchlist_items (watchlist_id, symbol) VALUES (?, ?)').run(
+    watchlistId,
+    symbol
+  );
+  res.json({ inWatchlist: true, action: 'added', watchlistId });
+});
+
 router.delete('/:id/items/:symbol', authMiddleware, (req: AuthRequest, res) => {
   const watchlistId = parseInt(req.params.id);
   const symbol = req.params.symbol;

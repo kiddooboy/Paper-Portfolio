@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { ArrowLeft, TrendingUp, TrendingDown, Bell } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Bell, Bookmark, BookmarkCheck } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
 import { useAuthStore } from '../store/authStore';
 import { useMarketStore } from '../store/marketStore';
@@ -29,6 +29,41 @@ export default function TerminalPage() {
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertPrice, setAlertPrice] = useState('');
   const [alertCond, setAlertCond] = useState<'above' | 'below'>('above');
+
+  const [bookmarked, setBookmarked] = useState(false);
+  const [bookmarkBusy, setBookmarkBusy] = useState(false);
+
+  // Check current bookmark status when symbol changes
+  useEffect(() => {
+    if (!symbol) return;
+    let abort = false;
+    axios
+      .get(`/api/watchlists/contains/${encodeURIComponent(symbol.toUpperCase())}`)
+      .then((res) => {
+        if (!abort) setBookmarked(!!res.data?.inWatchlist);
+      })
+      .catch(() => {});
+    return () => {
+      abort = true;
+    };
+  }, [symbol]);
+
+  const toggleBookmark = async () => {
+    if (bookmarkBusy) return;
+    setBookmarkBusy(true);
+    try {
+      const res = await axios.post('/api/watchlists/toggle', {
+        symbol: symbol.toUpperCase(),
+      });
+      const inWatchlist = !!res.data?.inWatchlist;
+      setBookmarked(inWatchlist);
+      toast.success(inWatchlist ? 'Added to watchlist' : 'Removed from watchlist');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Failed to update watchlist');
+    } finally {
+      setBookmarkBusy(false);
+    }
+  };
 
   const user = useAuthStore((s) => s.user);
   const updateBalance = useAuthStore((s) => s.updateBalance);
@@ -190,6 +225,20 @@ export default function TerminalPage() {
               {(quote.change_percent ?? 0).toFixed(2)}%)
             </p>
           </div>
+          <button
+            onClick={toggleBookmark}
+            disabled={bookmarkBusy}
+            className={cn(
+              'p-2 rounded-lg border transition disabled:opacity-50',
+              bookmarked
+                ? 'border-groww-primary bg-groww-primary/10 text-groww-primary'
+                : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
+            )}
+            title={bookmarked ? 'Remove from watchlist' : 'Add to watchlist'}
+            aria-pressed={bookmarked}
+          >
+            {bookmarked ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
+          </button>
           <button
             onClick={() => setAlertOpen((v) => !v)}
             className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
