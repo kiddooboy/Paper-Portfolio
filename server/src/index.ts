@@ -196,8 +196,8 @@ async function main() {
       ).all()) as any[]).map((r) => r.symbol).filter(Boolean);
 
       const symbols = Array.from(new Set([...NIFTY50, ...heldOrWatched]));
-      const quotes = await getQuotes(symbols.map((s) => ({ symbol: s, exchange: 'NSE' as const })));
-      await getIndices();
+      const quotes = await getQuotes(symbols.map((s) => ({ symbol: s, exchange: 'NSE' as const })), true);
+      await getIndices(true);
       console.log(`[market] tier1 poll — ${quotes.length}/${symbols.length} symbols (open=${isMarketOpen()})`);
     } catch (err: any) {
       console.warn('[market] tier1 poll error:', err?.message ?? err);
@@ -208,7 +208,7 @@ async function main() {
     try {
       const nifty500 = ((await db.prepare(`SELECT symbol FROM stocks WHERE exchange = 'NSE'`).all()) as any[]).map((r) => r.symbol);
       if (!nifty500.length) return;
-      const quotes = await getQuotes(nifty500.map((s) => ({ symbol: s, exchange: 'NSE' as const })));
+      const quotes = await getQuotes(nifty500.map((s) => ({ symbol: s, exchange: 'NSE' as const })), true);
       console.log(`[market] tier2 sweep — ${quotes.length}/${nifty500.length} NIFTY500 cached`);
     } catch (err: any) {
       console.warn('[market] tier2 poll error:', err?.message ?? err);
@@ -233,7 +233,7 @@ async function main() {
 
   // Warm the cache immediately on startup, then start both schedulers.
   pollTier1().then(() => {
-    getQuote('RELIANCE', 'NSE').then((q) => {
+    getQuote('RELIANCE', 'NSE', true).then((q) => {
       if (q) console.log(`[market] live sample: RELIANCE.NS ₹${q.price} (${q.change_percent.toFixed(2)}%)`);
       else console.warn('[market] live sample failed — check network / Yahoo availability');
     });

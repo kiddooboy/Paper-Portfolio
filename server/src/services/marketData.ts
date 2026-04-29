@@ -125,13 +125,15 @@ function sleep(ms: number) {
   return new Promise<void>(resolve => setTimeout(resolve, ms));
 }
 
-export async function getQuote(symbol: string, exchange: 'NSE' | 'BSE' = 'NSE'): Promise<Quote | null> {
+export async function getQuote(symbol: string, exchange: 'NSE' | 'BSE' = 'NSE', forceRefresh = false): Promise<Quote | null> {
   const key = `${symbol}:${exchange}`;
   const hit = cache.get(key);
   const now = Date.now();
 
-  // Cache hit within TTL → return immediately
-  if (hit && now - hit.at < getTTL()) return hit.data;
+  // If not forcing a refresh, return any cached data within the stale grace period (1 hr).
+  // If forcing refresh (e.g., background poller), only return cache if it's within strict TTL.
+  if (!forceRefresh && hit && now - hit.at < STALE_GRACE_MS) return hit.data;
+  if (forceRefresh && hit && now - hit.at < getTTL()) return hit.data;
 
   try {
     const q = (await yahooFinance.quote(yahooTicker(symbol, exchange))) as any;
@@ -150,7 +152,8 @@ export async function getQuote(symbol: string, exchange: 'NSE' | 'BSE' = 'NSE'):
 }
 
 export async function getQuotes(
-  items: { symbol: string; exchange?: 'NSE' | 'BSE' }[]
+  items: { symbol: string; exchange?: 'NSE' | 'BSE' }[],
+  forceRefresh = false
 ): Promise<Quote[]> {
   const now = Date.now();
   const ttl = getTTL();
@@ -162,7 +165,10 @@ export async function getQuotes(
     const exchange = it.exchange ?? 'NSE';
     const key = `${it.symbol}:${exchange}`;
     const hit = cache.get(key);
-    if (hit && now - hit.at < ttl) {
+
+    const isFreshEnough = forceRefresh ? (hit && now - hit.at < ttl) : (hit && now - hit.at < STALE_GRACE_MS);
+
+    if (isFreshEnough && hit) {
       out.push(hit.data);
     } else {
       const t = yahooTicker(it.symbol, exchange);
@@ -276,7 +282,7 @@ export interface IndexQuote {
 
 const indexCache = new Map<string, { at: number; data: IndexQuote }>();
 
-export async function getIndices(): Promise<IndexQuote[]> {
+export async function getIndices(forceRefresh = false): Promise<IndexQuote[]> {
   const ttl = getTTL();
   const now = Date.now();
   const fresh: IndexQuote[] = [];
@@ -284,7 +290,9 @@ export async function getIndices(): Promise<IndexQuote[]> {
 
   for (const idx of INDICES) {
     const hit = indexCache.get(idx.symbol);
-    if (hit && now - hit.at < ttl) fresh.push(hit.data);
+    const isFreshEnough = forceRefresh ? (hit && now - hit.at < ttl) : (hit && now - hit.at < STALE_GRACE_MS);
+    
+    if (isFreshEnough && hit) fresh.push(hit.data);
     else missing.push(idx);
   }
 
