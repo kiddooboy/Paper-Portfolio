@@ -23,7 +23,7 @@ if (fs.existsSync(envPath)) {
 
 import express from 'express';
 import cors from 'cors';
-import { initSchema, db } from './db/index.js';
+import { initSchema, db, shutdownPool } from './db/index.js';
 import cron from 'node-cron';
 import { fillOrder } from './routes/orders.js';
 import { getQuote, getQuotes, getIndices, isMarketOpen } from './services/marketData.js';
@@ -116,7 +116,7 @@ async function main() {
 
   async function checkPriceAlerts() {
     const alerts = (await db
-      .prepare('SELECT * FROM price_alerts WHERE triggered = 0')
+      .prepare('SELECT * FROM price_alerts WHERE triggered = FALSE')
       .all()) as any[];
     if (!alerts.length) return;
 
@@ -133,7 +133,7 @@ async function main() {
         (alert.condition === 'above' && price >= alert.target_price) ||
         (alert.condition === 'below' && price <= alert.target_price);
       if (triggered) {
-        await db.prepare('UPDATE price_alerts SET triggered = 1 WHERE id = ?').run(alert.id);
+        await db.prepare('UPDATE price_alerts SET triggered = TRUE WHERE id = ?').run(alert.id);
         await db.prepare(
           `INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, 'price_alert')`
         ).run(
@@ -229,9 +229,19 @@ async function main() {
     schedulePoll();
   });
 
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
+
+  // ── Graceful shutdown ──
+  async function shutdown(signal: string) {
+    console.log(`\n[shutdown] ${signal} received — shutting down gracefully…`);
+    server.close(() => console.log('[shutdown] HTTP server closed'));
+    await shutdownPool();
+    process.exit(0);
+  }
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
 main();

@@ -12,12 +12,12 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
 });
 
 router.post('/:id/read', authMiddleware, async (req: AuthRequest, res) => {
-  await db.prepare('UPDATE notifications SET read = 1 WHERE id = ? AND user_id = ?').run(req.params.id, req.user!.id);
+  await db.prepare('UPDATE notifications SET read = TRUE WHERE id = ? AND user_id = ?').run(req.params.id, req.user!.id);
   res.json({ success: true });
 });
 
 router.get('/unread-count', authMiddleware, async (req: AuthRequest, res) => {
-  const row = (await db.prepare('SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND read = 0').get(req.user!.id)) as any;
+  const row = (await db.prepare('SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND read = FALSE').get(req.user!.id)) as any;
   res.json({ count: row.count });
 });
 

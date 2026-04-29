@@ -136,15 +136,7 @@ router.delete('/users/:id', async (req: AuthRequest, res) => {
   const user = (await db.prepare('SELECT id FROM users WHERE id = ?').get(userId)) as any;
   if (!user) return res.status(404).json({ error: 'User not found' });
 
-  // Clean up all user data
-  await db.prepare('DELETE FROM holdings WHERE user_id = ?').run(userId);
-  await db.prepare('DELETE FROM orders WHERE user_id = ?').run(userId);
-  await db.prepare('DELETE FROM transactions WHERE user_id = ?').run(userId);
-  await db.prepare('DELETE FROM watchlist_items WHERE watchlist_id IN (SELECT id FROM watchlists WHERE user_id = ?)').run(userId);
-  await db.prepare('DELETE FROM watchlists WHERE user_id = ?').run(userId);
-  await db.prepare('DELETE FROM notifications WHERE user_id = ?').run(userId);
-  await db.prepare('DELETE FROM price_alerts WHERE user_id = ?').run(userId);
-  await db.prepare('DELETE FROM portfolio_history WHERE user_id = ?').run(userId);
+  // FK ON DELETE CASCADE handles all child rows automatically
   await db.prepare('DELETE FROM users WHERE id = ?').run(userId);
 
   res.json({ success: true });

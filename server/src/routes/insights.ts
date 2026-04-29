@@ -14,14 +14,14 @@ router.get('/daily', authMiddleware, async (req: AuthRequest, res) => {
   // Get today's transactions
   const transactions = (await db.prepare(`
     SELECT * FROM transactions
-    WHERE user_id = ? AND created_at::date = ?
+    WHERE user_id = ? AND DATE(created_at AT TIME ZONE 'Asia/Kolkata') = ?
     ORDER BY created_at DESC
   `).all(userId, targetDate)) as any[];
 
   // Get today's orders
   const orders = (await db.prepare(`
     SELECT * FROM orders
-    WHERE user_id = ? AND created_at::date = ?
+    WHERE user_id = ? AND DATE(created_at AT TIME ZONE 'Asia/Kolkata') = ?
     ORDER BY created_at DESC
   `).all(userId, targetDate)) as any[];
 
@@ -34,17 +34,17 @@ router.get('/daily', authMiddleware, async (req: AuthRequest, res) => {
 
   for (const txn of transactions) {
     if (txn.type === 'BUY') {
-      buyVolume += txn.total_amount;
+      buyVolume += Number(txn.total_amount);
       buyCount++;
     } else if (txn.type === 'SELL') {
-      sellVolume += txn.total_amount;
+      sellVolume += Number(txn.total_amount);
       sellCount++;
       // Approximate realized P&L (sell - avg buy)
       const holding = (await db.prepare('SELECT avg_buy_price FROM holdings WHERE user_id = ? AND symbol = ?')
         .get(userId, txn.symbol)) as any;
       if (holding) {
-        const costBasis = holding.avg_buy_price * txn.quantity;
-        realizedPnl += txn.total_amount - costBasis;
+        const costBasis = Number(holding.avg_buy_price) * txn.quantity;
+        realizedPnl += Number(txn.total_amount) - costBasis;
       }
     }
   }
@@ -52,9 +52,9 @@ router.get('/daily', authMiddleware, async (req: AuthRequest, res) => {
   // Get current portfolio value
   const user = (await db.prepare('SELECT balance FROM users WHERE id = ?').get(userId)) as any;
   const holdings = (await db.prepare('SELECT * FROM holdings WHERE user_id = ?').all(userId)) as any[];
-  let portfolioValue = user.balance;
+  let portfolioValue = Number(user.balance);
   for (const h of holdings) {
-    portfolioValue += h.quantity * h.avg_buy_price;
+    portfolioValue += h.quantity * Number(h.avg_buy_price);
   }
 
   // Get yesterday's portfolio value for comparison
@@ -63,9 +63,12 @@ router.get('/daily', authMiddleware, async (req: AuthRequest, res) => {
   const yesterdayStr = yesterday.toISOString().split('T')[0];
   const yesterdayHistory = (await db.prepare(`
     SELECT * FROM portfolio_history
-    WHERE user_id = ? AND recorded_at::date = ?
+    WHERE user_id = ? AND DATE(recorded_at AT TIME ZONE 'Asia/Kolkata') = ?
+    ORDER BY recorded_at DESC LIMIT 1
   `).all(userId, yesterdayStr)) as any[];
-  const yesterdayValue = yesterdayHistory?.[0]?.total_value || portfolioValue;
+  const yesterdayValue = yesterdayHistory?.[0]?.total_value
+    ? Number(yesterdayHistory[0].total_value)
+    : portfolioValue;
   const dailyChange = portfolioValue - yesterdayValue;
   const dailyChangePercent = yesterdayValue > 0 ? (dailyChange / yesterdayValue) * 100 : 0;
 
