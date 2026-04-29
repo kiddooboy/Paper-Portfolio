@@ -63,7 +63,7 @@ export function getMarketStatus() {
     label,
     ist: ist.toISOString(),
     nextOpen: open ? null : getNextOpenIST(ist),
-    pollIntervalMs: open ? 10_000 : 300_000,
+    pollIntervalMs: open ? 10_000 : 300_000, // 10s live, 5min closed
   };
 }
 
@@ -79,7 +79,7 @@ function getNextOpenIST(ist: Date): string {
 }
 
 // ── Adaptive TTL ──
-const TTL_LIVE_MS   = 15_000;  // 15 seconds during market hours
+const TTL_LIVE_MS   = 5_000;   // 5 seconds — matches server poll interval
 const TTL_CLOSED_MS = 300_000; // 5 minutes outside market hours
 // Stale-while-revalidate: serve stale data up to this age before refusing
 const STALE_GRACE_MS = 3_600_000; // 1 hour — always serve *something*

@@ -77,6 +77,7 @@ export const useMarketStore = create<MarketState>((set, get) => ({
 }));
 
 // ── Adaptive polling manager ──
+// Polls /api/stocks/live every 10s during market hours, every 5min when closed.
 let pollTimer: ReturnType<typeof setTimeout> | null = null;
 let isPolling = false;
 
@@ -96,7 +97,8 @@ async function poll() {
   const store = useMarketStore.getState();
   await store.fetchLive();
 
-  // Adaptive interval: use server-recommended interval
-  const interval = store.status?.pollIntervalMs ?? 15_000;
+  // 10s during market hours, 5min when closed (use server status to detect)
+  const isOpen = store.status?.isOpen ?? true;
+  const interval = isOpen ? 10_000 : 300_000;
   pollTimer = setTimeout(poll, interval);
 }

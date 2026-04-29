@@ -182,12 +182,11 @@ async function main() {
   });
 
   // ── Two-tier market data poller ──
-  // Tier 1 (fast): Nifty50 + user-held + user-watched symbols every 20s during
+  // Tier 1 (fast): Nifty50 + user-held + user-watched symbols every 5s during
   //                market hours, every 2min when closed.
   // Tier 2 (slow): Full NIFTY 500 sweep every 5min during market hours,
   //                every 30min when closed.
   //
-  // Smaller, targeted fetches stay well under Yahoo rate limits.
   // Stale-while-revalidate in marketData.ts means old data is served when
   // Yahoo is temporarily unavailable — data never vanishes.
   async function pollTier1() {
@@ -217,7 +216,7 @@ async function main() {
   }
 
   function scheduleTier1() {
-    const delay = isMarketOpen() ? 20_000 : 120_000; // 20s live, 2min closed
+    const delay = isMarketOpen() ? 5_000 : 120_000; // 5s live, 2min closed
     setTimeout(async () => {
       await pollTier1();
       scheduleTier1();
