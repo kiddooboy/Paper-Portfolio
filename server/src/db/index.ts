@@ -138,22 +138,22 @@ class WrappedDatabase {
    * Execute `fn` inside a BEGIN / COMMIT block using a **single dedicated
    * client** that is shared with every db.prepare() call made inside `fn`
    * via AsyncLocalStorage.  If `fn` throws, the transaction is rolled back.
+   *
+   * Usage:  await db.transaction(async () => { ... });
    */
-  transaction<T extends (...args: any[]) => any>(fn: T): T {
-    return (async (...args: any[]) => {
-      const client = await getPool().connect();
-      try {
-        await client.query('BEGIN');
-        const result = await txClient.run(client, () => fn(...args));
-        await client.query('COMMIT');
-        return result;
-      } catch (err) {
-        await client.query('ROLLBACK');
-        throw err;
-      } finally {
-        client.release();
-      }
-    }) as T;
+  async transaction<R>(fn: () => Promise<R>): Promise<R> {
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+      const result = await txClient.run(client, fn);
+      await client.query('COMMIT');
+      return result;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 }
 

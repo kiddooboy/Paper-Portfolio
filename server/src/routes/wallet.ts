@@ -39,7 +39,7 @@ router.post('/deposit', authMiddleware, async (req: AuthRequest, res) => {
         INSERT INTO wallet_transactions (user_id, type, amount)
         VALUES (?, 'DEPOSIT', ?)
       `).run(userId, amount);
-    })();
+    });
     
     const user = (await db.prepare('SELECT balance FROM users WHERE id = ?').get(userId)) as any;
     res.json({ balance: Number(user.balance) });
@@ -70,7 +70,7 @@ router.post('/withdraw', authMiddleware, async (req: AuthRequest, res) => {
         INSERT INTO wallet_transactions (user_id, type, amount)
         VALUES (?, 'WITHDRAW', ?)
       `).run(userId, amount);
-    })();
+    });
     
     const updatedUser = (await db.prepare('SELECT balance FROM users WHERE id = ?').get(userId)) as any;
     res.json({ balance: Number(updatedUser.balance) });
