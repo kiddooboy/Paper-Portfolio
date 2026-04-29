@@ -37,29 +37,40 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     const orderPrice = type === 'MARKET' ? currentPrice : (limitPrice || currentPrice);
     const totalAmount = orderPrice * quantity;
 
-    if (transactionType === 'BUY') {
-      const user = (await db.prepare('SELECT balance FROM users WHERE id = ?').get(userId)) as any;
-      if (user.balance < totalAmount) {
-        return res.status(400).json({ error: 'Insufficient balance' });
-      }
-    }
+    // Validate + place + fill inside ONE transaction with row locks.
+    // This prevents a user from over-buying / over-selling when two
+    // requests (e.g. two browser tabs) hit the server concurrently.
+    let orderId = 0;
+    try {
+      await db.transaction(async () => {
+        if (transactionType === 'BUY') {
+          const user = (await db.prepare('SELECT balance FROM users WHERE id = ? FOR UPDATE').get(userId)) as any;
+          if (!user) throw new Error('User not found');
+          if (Number(user.balance) < totalAmount) {
+            throw new Error('Insufficient balance');
+          }
+        }
 
-    if (transactionType === 'SELL') {
-      const holding = (await db.prepare('SELECT quantity FROM holdings WHERE user_id = ? AND symbol = ?').get(userId, upperSymbol)) as any;
-      if (!holding || holding.quantity < quantity) {
-        return res.status(400).json({ error: `You don't own enough shares of ${upperSymbol} to sell. Buy first or check your holdings.` });
-      }
-    }
+        if (transactionType === 'SELL') {
+          const holding = (await db.prepare('SELECT quantity FROM holdings WHERE user_id = ? AND symbol = ? FOR UPDATE').get(userId, upperSymbol)) as any;
+          if (!holding || Number(holding.quantity) < quantity) {
+            throw new Error(`You don't own enough shares of ${upperSymbol} to sell. Buy first or check your holdings.`);
+          }
+        }
 
-    const result = await db.prepare(`
-      INSERT INTO orders (user_id, symbol, type, transaction_type, quantity, price, limit_price, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(userId, upperSymbol, type, transactionType, quantity, orderPrice, limitPrice || null, 'PENDING');
+        const result = await db.prepare(`
+          INSERT INTO orders (user_id, symbol, type, transaction_type, quantity, price, limit_price, status)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(userId, upperSymbol, type, transactionType, quantity, orderPrice, limitPrice || null, 'PENDING');
 
-    const orderId = result.lastInsertRowid as number;
+        orderId = result.lastInsertRowid as number;
 
-    if (type === 'MARKET') {
-      await fillOrder(orderId, userId, upperSymbol, transactionType, quantity, currentPrice);
+        if (type === 'MARKET') {
+          await fillOrder(orderId, userId, upperSymbol, transactionType, quantity, currentPrice);
+        }
+      });
+    } catch (e: any) {
+      return res.status(400).json({ error: e?.message || 'Order failed' });
     }
 
     res.json({ success: true, orderId });

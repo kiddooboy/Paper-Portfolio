@@ -125,6 +125,69 @@ function sleep(ms: number) {
   return new Promise<void>(resolve => setTimeout(resolve, ms));
 }
 
+/**
+ * Fallback: fetch latest price via Yahoo's chart endpoint.
+ * The chart endpoint does NOT require the auth crumb cookie, so it works
+ * even when /v7/quote returns 429 "Failed to get crumb" (common on shared
+ * cloud IPs). Slower than batched quote() but reliable.
+ */
+async function fetchQuoteViaChart(symbol: string, exchange: 'NSE' | 'BSE'): Promise<Quote | null> {
+  try {
+    const ticker = yahooTicker(symbol, exchange);
+    const res = (await yahooFinance.chart(ticker, {
+      period1: new Date(Date.now() - 7 * 24 * 3600 * 1000),
+      interval: '1d',
+    })) as any;
+    const meta = res?.meta;
+    if (!meta || typeof meta.regularMarketPrice !== 'number') return null;
+    const price: number = meta.regularMarketPrice;
+    const prevClose: number = meta.chartPreviousClose ?? meta.previousClose ?? price;
+    const change = price - prevClose;
+    const changePct = prevClose > 0 ? (change / prevClose) * 100 : 0;
+    return {
+      symbol,
+      exchange,
+      price,
+      change,
+      change_percent: changePct,
+      previous_close: prevClose,
+      day_high: meta.regularMarketDayHigh ?? price,
+      day_low: meta.regularMarketDayLow ?? price,
+      volume: meta.regularMarketVolume ?? 0,
+      currency: meta.currency ?? 'INR',
+      name: meta.longName || meta.shortName || meta.symbol,
+      exchange_long: meta.fullExchangeName,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Cache-only read. Does NOT call Yahoo — guarantees a user request never
+ * triggers an upstream fetch. Returns the last-known-good quote (any age),
+ * or a zero-priced dummy if we have nothing yet. The background poller is
+ * the sole source of truth for cache freshness.
+ */
+export function getCachedQuote(symbol: string, exchange: 'NSE' | 'BSE' = 'NSE'): Quote {
+  const hit = cache.get(`${symbol}:${exchange}`);
+  if (hit) return hit.data;
+  return { symbol, exchange, price: 0, change: 0, change_percent: 0, previous_close: 0, day_high: 0, day_low: 0, volume: 0, currency: 'INR' };
+}
+
+export function getCachedQuotes(items: { symbol: string; exchange?: 'NSE' | 'BSE' }[]): Quote[] {
+  return items.map((it) => getCachedQuote(it.symbol, it.exchange ?? 'NSE'));
+}
+
+export function getCachedIndices(): IndexQuote[] {
+  const out: IndexQuote[] = [];
+  for (const idx of INDICES) {
+    const hit = indexCache.get(idx.symbol);
+    if (hit) out.push(hit.data);
+  }
+  return out;
+}
+
 export async function getQuote(symbol: string, exchange: 'NSE' | 'BSE' = 'NSE', forceRefresh = false): Promise<Quote | null> {
   const key = `${symbol}:${exchange}`;
   const hit = cache.get(key);
@@ -144,6 +207,12 @@ export async function getQuote(symbol: string, exchange: 'NSE' | 'BSE' = 'NSE', 
     }
   } catch (err: any) {
     console.warn(`[market] getQuote(${symbol}) failed: ${err?.message ?? err}`);
+    // Crumb / 429 — try chart() endpoint (no crumb required)
+    const fallback = await fetchQuoteViaChart(symbol, exchange);
+    if (fallback) {
+      cache.set(key, { data: fallback, at: Date.now() });
+      return fallback;
+    }
   }
 
   // If we reach here, Yahoo didn't return data or threw an error
@@ -218,14 +287,42 @@ export async function getQuotes(
         }
       }
     } catch (err: any) {
-      console.warn(`[market] getQuotes chunk ${i}–${i+CHUNK} failed: ${err?.message ?? err}`);
-      // On failure: serve stale cache for symbols in this chunk rather than nothing
-      for (const ticker of slice) {
-        const src = missKey[ticker];
-        if (!src) continue;
-        const stale = cache.get(`${src.symbol}:${src.exchange}`);
-        if (stale && now - stale.at < STALE_GRACE_MS && !out.find(o => o.symbol === src.symbol)) {
-          out.push(stale.data);
+      const msg = String(err?.message ?? err);
+      console.warn(`[market] getQuotes chunk ${i}–${i+CHUNK} failed: ${msg}`);
+
+      // Crumb / rate-limit failures: fall back to chart() endpoint per symbol.
+      // chart() does NOT require the auth crumb cookie, so it works even when
+      // /v7/quote returns 429 from Yahoo. Slower (one HTTP per symbol) but
+      // populates the central cache so all users see live data.
+      const isCrumbErr = /crumb/i.test(msg) || /429/.test(msg) || /Too Many Requests/i.test(msg);
+      if (isCrumbErr) {
+        for (const ticker of slice) {
+          const src = missKey[ticker];
+          if (!src) continue;
+          const fallback = await fetchQuoteViaChart(src.symbol, src.exchange);
+          if (fallback) {
+            cache.set(`${src.symbol}:${src.exchange}`, { data: fallback, at: Date.now() });
+            if (!out.find(o => o.symbol === src.symbol && o.exchange === src.exchange)) {
+              out.push(fallback);
+            }
+          } else {
+            const stale = cache.get(`${src.symbol}:${src.exchange}`);
+            if (stale && now - stale.at < STALE_GRACE_MS && !out.find(o => o.symbol === src.symbol && o.exchange === src.exchange)) {
+              out.push(stale.data);
+            }
+          }
+          // small throttle so we don't slam chart() either
+          await sleep(120);
+        }
+      } else {
+        // On any other failure: serve stale cache for symbols in this chunk
+        for (const ticker of slice) {
+          const src = missKey[ticker];
+          if (!src) continue;
+          const stale = cache.get(`${src.symbol}:${src.exchange}`);
+          if (stale && now - stale.at < STALE_GRACE_MS && !out.find(o => o.symbol === src.symbol && o.exchange === src.exchange)) {
+            out.push(stale.data);
+          }
         }
       }
     }
@@ -335,11 +432,39 @@ export async function getIndices(forceRefresh = false): Promise<IndexQuote[]> {
         indexCache.set(meta.symbol, { at: now, data });
         fresh.push(data);
       }
-    } catch {
-      // Serve stale index data rather than nothing
+    } catch (err: any) {
+      const msg = String(err?.message ?? err);
+      console.warn(`[market] getIndices quote failed: ${msg}`);
+      // Crumb / 429 — fall back to chart() per index (no crumb required)
       for (const idx of missing) {
-        const stale = indexCache.get(idx.symbol);
-        if (stale) fresh.push(stale.data);
+        try {
+          const res = (await yahooFinance.chart(idx.symbol, {
+            period1: new Date(Date.now() - 7 * 24 * 3600 * 1000),
+            interval: '1d',
+          })) as any;
+          const meta = res?.meta;
+          if (!meta || typeof meta.regularMarketPrice !== 'number') {
+            const stale = indexCache.get(idx.symbol);
+            if (stale) fresh.push(stale.data);
+            continue;
+          }
+          const price: number = meta.regularMarketPrice;
+          const prevClose: number = meta.chartPreviousClose ?? meta.previousClose ?? price;
+          const data: IndexQuote = {
+            symbol: idx.symbol,
+            name: idx.name,
+            price,
+            change: price - prevClose,
+            change_percent: prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : 0,
+            previous_close: prevClose,
+          };
+          indexCache.set(idx.symbol, { at: Date.now(), data });
+          fresh.push(data);
+          await sleep(120);
+        } catch {
+          const stale = indexCache.get(idx.symbol);
+          if (stale) fresh.push(stale.data);
+        }
       }
     }
   }

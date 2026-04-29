@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
-import { getQuotes } from '../services/marketData.js';
+import { getCachedQuotes } from '../services/marketData.js';
 
 const router = Router();
 
@@ -13,7 +13,7 @@ router.get('/', async (req, res) => {
 
   const uniqueSymbols = Array.from(new Set(holdings.map((h) => h.symbol)));
   const quotes = uniqueSymbols.length
-    ? await getQuotes(uniqueSymbols.map((s) => ({ symbol: s, exchange: 'NSE' as const })))
+    ? getCachedQuotes(uniqueSymbols.map((s) => ({ symbol: s, exchange: 'NSE' as const })))
     : [];
   const priceMap = new Map(quotes.map((q) => [q.symbol, q.price]));
 

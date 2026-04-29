@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
-import { getQuotes } from '../services/marketData.js';
+import { getCachedQuotes } from '../services/marketData.js';
 
 const router = Router();
 
@@ -19,7 +19,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
   }
 
   if (allItems.length) {
-    const quotes = await getQuotes(
+    const quotes = getCachedQuotes(
       allItems.map((i) => ({ symbol: i.symbol, exchange: 'NSE' as const }))
     );
     const priceMap = new Map(quotes.map((q) => [q.symbol, q]));

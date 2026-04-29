@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
-import { getQuotes, Quote } from '../services/marketData.js';
+import { getCachedQuotes, Quote } from '../services/marketData.js';
 
 const router = Router();
 
@@ -19,7 +19,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
   // Fetch full quotes for every holding
   const quoteMap = new Map<string, Quote>();
   if (holdings.length) {
-    const quotes = await getQuotes(holdings.map((h) => ({ symbol: h.symbol, exchange: 'NSE' as const })));
+    const quotes = getCachedQuotes(holdings.map((h) => ({ symbol: h.symbol, exchange: 'NSE' as const })));
     for (const q of quotes) quoteMap.set(q.symbol, q);
   }
 

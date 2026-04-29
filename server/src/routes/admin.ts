@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { authMiddleware, adminMiddleware, AuthRequest } from '../middleware/auth.js';
-import { getQuotes } from '../services/marketData.js';
+import { getCachedQuotes } from '../services/marketData.js';
 
 const router = Router();
 
@@ -23,7 +23,7 @@ router.get('/users', async (req: AuthRequest, res) => {
 
     const priceMap = new Map<string, number>();
     if (uniqueSymbols.length) {
-      const quotes = await getQuotes(uniqueSymbols.map((s) => ({ symbol: s, exchange: 'NSE' as const })));
+      const quotes = getCachedQuotes(uniqueSymbols.map((s) => ({ symbol: s, exchange: 'NSE' as const })));
       for (const q of quotes) priceMap.set(q.symbol, q.price);
     }
 
@@ -85,7 +85,7 @@ router.get('/users/:id', async (req: AuthRequest, res) => {
 
     // Enrich holdings with live prices
     if (holdings.length) {
-      const quotes = await getQuotes(holdings.map((h: any) => ({ symbol: h.symbol, exchange: 'NSE' as const })));
+      const quotes = getCachedQuotes(holdings.map((h: any) => ({ symbol: h.symbol, exchange: 'NSE' as const })));
       const pm = new Map(quotes.map((q) => [q.symbol, q.price]));
       for (const h of holdings) {
         const price = pm.get(h.symbol) ?? Number(h.avg_buy_price);

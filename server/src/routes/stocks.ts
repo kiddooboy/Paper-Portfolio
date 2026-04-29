@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
-import { getQuote, getQuotes, getHistory, getIndices, isMarketOpen, getMarketStatus } from '../services/marketData.js';
+import { getQuote, getCachedQuote, getCachedQuotes, getCachedIndices, getHistory, isMarketOpen, getMarketStatus } from '../services/marketData.js';
 
 const router = Router();
 
@@ -18,15 +18,12 @@ router.get('/market-status', (_req, res) => {
 // GET /api/stocks/indices — live NIFTY 50 / SENSEX / BANK NIFTY (public, no auth)
 // Cache for 30s while market is open (multiple tabs/users hit this endlessly).
 // When market is closed, cache for 5 min.
-router.get('/indices', async (_req, res) => {
-  try {
-    const indices = await getIndices();
-    const cacheSec = isMarketOpen() ? 30 : 300;
-    res.set('Cache-Control', `public, max-age=${cacheSec}`);
-    res.json({ indices, isOpen: isMarketOpen() });
-  } catch {
-    res.json({ indices: [], isOpen: isMarketOpen() });
-  }
+router.get('/indices', (_req, res) => {
+  // Cache-only read: the background poller is the sole source of truth.
+  const indices = getCachedIndices();
+  const cacheSec = isMarketOpen() ? 30 : 300;
+  res.set('Cache-Control', `public, max-age=${cacheSec}`);
+  res.json({ indices, isOpen: isMarketOpen() });
 });
 
 // GET /api/stocks/live — Bulk live quotes for the frontend polling store
@@ -61,9 +58,10 @@ router.get('/live', authMiddleware, async (req: AuthRequest, res) => {
     new Set([...NIFTY50, ...holdingSymbols, ...watchlistSymbols, ...extra])
   );
 
-  // getQuotes serves from in-memory cache first (warmed by background poller)
-  // Only calls Yahoo for symbols that are stale — typically near-zero network cost
-  const quotes = await getQuotes(
+  // Cache-only read — the background poller (tier1/tier2) keeps the cache
+  // warm. User requests must NEVER trigger Yahoo, otherwise rate-limit
+  // failures multiply with concurrent users.
+  const quotes = getCachedQuotes(
     allSymbols.map((s) => ({ symbol: s, exchange: 'NSE' as const }))
   );
 
@@ -126,7 +124,7 @@ router.get('/', async (req, res) => {
     });
   }
 
-  const quotes = await getQuotes(
+  const quotes = getCachedQuotes(
     rows.map((r) => ({ symbol: r.symbol, exchange: r.exchange as Exchange }))
   );
   const qMap = new Map(quotes.map((q) => [`${q.symbol}:${q.exchange}`, q]));
@@ -180,7 +178,7 @@ router.get('/quote', async (req, res) => {
     .map((s) => s.trim().toUpperCase())
     .filter(Boolean);
   if (!symbols.length) return res.json([]);
-  const quotes = await getQuotes(symbols.map((s) => ({ symbol: s, exchange })));
+  const quotes = getCachedQuotes(symbols.map((s) => ({ symbol: s, exchange })));
   res.json(quotes);
 });
 
@@ -191,7 +189,7 @@ async function nifty500Items() {
 
 // GET /api/stocks/gainers — live from NIFTY 500 universe
 router.get('/gainers', async (_req, res) => {
-  const quotes = await getQuotes(await nifty500Items());
+  const quotes = getCachedQuotes(await nifty500Items());
   const gainers = quotes
     .filter((q) => q.change_percent > 0)
     .sort((a, b) => b.change_percent - a.change_percent)
@@ -201,7 +199,7 @@ router.get('/gainers', async (_req, res) => {
 
 // GET /api/stocks/losers — live from NIFTY 500 universe
 router.get('/losers', async (_req, res) => {
-  const quotes = await getQuotes(await nifty500Items());
+  const quotes = getCachedQuotes(await nifty500Items());
   const losers = quotes
     .filter((q) => q.change_percent < 0)
     .sort((a, b) => a.change_percent - b.change_percent)
@@ -211,7 +209,7 @@ router.get('/losers', async (_req, res) => {
 
 // GET /api/stocks/trending — largest absolute move in NIFTY 500
 router.get('/trending', async (_req, res) => {
-  const quotes = await getQuotes(await nifty500Items());
+  const quotes = getCachedQuotes(await nifty500Items());
   const trending = quotes
     .slice()
     .sort((a, b) => Math.abs(b.change_percent) - Math.abs(a.change_percent))
@@ -225,7 +223,9 @@ router.get('/:symbol', async (req, res) => {
   const exchange = parseExchange(req.query.exchange);
 
   const meta = (await db.prepare('SELECT * FROM stocks WHERE symbol = ? AND exchange = ?').get(symbol, exchange)) as any;
-  const quote = await getQuote(symbol, exchange);
+  // Try cache first; only fall through to Yahoo if completely missing.
+  const cached = getCachedQuote(symbol, exchange);
+  const quote = cached.price > 0 ? cached : await getQuote(symbol, exchange);
 
   if (!quote && !meta) return res.status(404).json({ error: 'Stock not found' });
 

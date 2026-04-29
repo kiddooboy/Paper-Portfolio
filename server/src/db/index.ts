@@ -142,6 +142,13 @@ class WrappedDatabase {
    * Usage:  await db.transaction(async () => { ... });
    */
   async transaction<R>(fn: () => Promise<R>): Promise<R> {
+    // Reentrant: if a transaction is already active on this async context,
+    // just run `fn` on the same client. This guarantees true atomicity when
+    // helpers like fillOrder() are called from inside an outer transaction.
+    const existing = txClient.getStore();
+    if (existing) {
+      return fn();
+    }
     const client = await getPool().connect();
     try {
       await client.query('BEGIN');
