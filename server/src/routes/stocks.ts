@@ -25,35 +25,56 @@ router.get('/indices', async (_req, res) => {
   }
 });
 
-// GET /api/stocks/live — Bulk live quotes for all user-relevant symbols
-// Merges: user holdings + watchlist items + Nifty50 basket + optional extra symbols
-// Returns a flat map { [symbol]: Quote } for easy client-side lookups
+// GET /api/stocks/live — Bulk live quotes for the frontend polling store
+// Returns: Nifty50 basket + user holdings + user watchlist + optional extra symbols
+// The full Nifty500 cache is warmed in the background by the server poller.
+// This endpoint must be fast (< 500ms) — it runs every 20s from every browser tab.
 router.get('/live', authMiddleware, async (req: AuthRequest, res) => {
   const userId = req.user!.id;
 
-  // Collect all symbols this user cares about
-  const holdingSymbols = ((await db.prepare('SELECT DISTINCT symbol FROM holdings WHERE user_id = ? AND quantity > 0').all(userId)) as any[]).map(r => r.symbol);
+  // 1. User-specific symbols (holdings + watchlist)
+  const holdingSymbols = ((await db.prepare(
+    'SELECT DISTINCT symbol FROM holdings WHERE user_id = ? AND quantity > 0'
+  ).all(userId)) as any[]).map((r) => r.symbol);
+
   const watchlistSymbols = ((await db.prepare(`
     SELECT DISTINCT wi.symbol FROM watchlist_items wi
     JOIN watchlists w ON w.id = wi.watchlist_id
     WHERE w.user_id = ?
-  `).all(userId)) as any[]).map(r => r.symbol);
+  `).all(userId)) as any[]).map((r) => r.symbol);
 
-  // Also include extra symbols from query (e.g. terminal page viewing)
-  const extra = String(req.query.symbols || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+  // 2. Extra symbols from query (e.g. terminal page viewing a specific stock)
+  const extra = String(req.query.symbols || '')
+    .split(',')
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean);
 
-  const nifty500 = ((await db.prepare(`SELECT symbol FROM stocks WHERE exchange = 'NSE'`).all()) as any[]).map(r => r.symbol);
-  const allSymbols = Array.from(new Set([...holdingSymbols, ...watchlistSymbols, ...extra, ...nifty500]));
+  // 3. Core Nifty50 basket — always included so Dashboard gainers/losers work
+  const { NIFTY50 } = await import('../services/marketData.js');
 
-  const quotes = await getQuotes(allSymbols.map(s => ({ symbol: s, exchange: 'NSE' as const })));
+  // Merge all, deduplicate
+  const allSymbols = Array.from(
+    new Set([...NIFTY50, ...holdingSymbols, ...watchlistSymbols, ...extra])
+  );
+
+  // getQuotes serves from in-memory cache first (warmed by background poller)
+  // Only calls Yahoo for symbols that are stale — typically near-zero network cost
+  const quotes = await getQuotes(
+    allSymbols.map((s) => ({ symbol: s, exchange: 'NSE' as const }))
+  );
+
   const priceMap: Record<string, any> = {};
   for (const q of quotes) {
     priceMap[q.symbol] = q;
   }
 
-  const status = getMarketStatus();
-  res.json({ status, quotes: priceMap, count: quotes.length });
+  res.json({
+    status: getMarketStatus(),
+    quotes: priceMap,
+    count: quotes.length,
+  });
 });
+
 
 // GET /api/stocks?q=&exchange=&limit=&offset=&live=1
 // Returns paginated list of known stocks (from ingested master).
