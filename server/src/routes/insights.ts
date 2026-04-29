@@ -14,14 +14,14 @@ router.get('/daily', authMiddleware, async (req: AuthRequest, res) => {
   // Get today's transactions
   const transactions = (await db.prepare(`
     SELECT * FROM transactions
-    WHERE user_id = ? AND DATE(created_at AT TIME ZONE 'Asia/Kolkata') = ?
+    WHERE user_id = ? AND DATE(created_at, '+5 hours 30 minutes') = ?
     ORDER BY created_at DESC
   `).all(userId, targetDate)) as any[];
 
   // Get today's orders
   const orders = (await db.prepare(`
     SELECT * FROM orders
-    WHERE user_id = ? AND DATE(created_at AT TIME ZONE 'Asia/Kolkata') = ?
+    WHERE user_id = ? AND DATE(created_at, '+5 hours 30 minutes') = ?
     ORDER BY created_at DESC
   `).all(userId, targetDate)) as any[];
 
@@ -63,7 +63,7 @@ router.get('/daily', authMiddleware, async (req: AuthRequest, res) => {
   const yesterdayStr = yesterday.toISOString().split('T')[0];
   const yesterdayHistory = (await db.prepare(`
     SELECT * FROM portfolio_history
-    WHERE user_id = ? AND DATE(recorded_at AT TIME ZONE 'Asia/Kolkata') = ?
+    WHERE user_id = ? AND DATE(recorded_at, '+5 hours 30 minutes') = ?
     ORDER BY recorded_at DESC LIMIT 1
   `).all(userId, yesterdayStr)) as any[];
   const yesterdayValue = yesterdayHistory?.[0]?.total_value

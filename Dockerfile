@@ -1,4 +1,7 @@
-FROM node:22-alpine
+FROM node:24-alpine
+
+# node:sqlite (built-in to Node 22.5+, stable in Node 24) means no native
+# build deps are required — keep the image lean.
 
 WORKDIR /app
 

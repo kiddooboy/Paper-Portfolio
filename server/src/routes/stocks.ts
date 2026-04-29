@@ -93,7 +93,7 @@ router.get('/', async (req, res) => {
   const where: string[] = [];
   const params: any[] = [];
   if (q) {
-    where.push('(symbol ILIKE ? OR name ILIKE ?)');
+    where.push('(symbol LIKE ? OR name LIKE ?)');
     const like = `%${String(q)}%`;
     params.push(like, like);
   }
@@ -162,7 +162,7 @@ router.get('/search', async (req, res) => {
 
   const local = (await db
     .prepare(
-      `SELECT symbol, name, exchange FROM stocks WHERE symbol ILIKE ? OR name ILIKE ? ORDER BY CASE WHEN UPPER(symbol) = ? THEN 0 WHEN symbol ILIKE ? THEN 1 ELSE 2 END, symbol LIMIT ?`
+      `SELECT symbol, name, exchange FROM stocks WHERE symbol LIKE ? OR name LIKE ? ORDER BY CASE WHEN UPPER(symbol) = ? THEN 0 WHEN symbol LIKE ? THEN 1 ELSE 2 END, symbol LIMIT ?`
     )
     .all(`%${q}%`, `%${q}%`, qUp, `${q}%`, limit)) as any[];
 

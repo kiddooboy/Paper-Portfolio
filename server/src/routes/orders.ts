@@ -44,7 +44,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     try {
       await db.transaction(async () => {
         if (transactionType === 'BUY') {
-          const user = (await db.prepare('SELECT balance FROM users WHERE id = ? FOR UPDATE').get(userId)) as any;
+          const user = (await db.prepare('SELECT balance FROM users WHERE id = ?').get(userId)) as any;
           if (!user) throw new Error('User not found');
           if (Number(user.balance) < totalAmount) {
             throw new Error('Insufficient balance');
@@ -52,7 +52,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
         }
 
         if (transactionType === 'SELL') {
-          const holding = (await db.prepare('SELECT quantity FROM holdings WHERE user_id = ? AND symbol = ? FOR UPDATE').get(userId, upperSymbol)) as any;
+          const holding = (await db.prepare('SELECT quantity FROM holdings WHERE user_id = ? AND symbol = ?').get(userId, upperSymbol)) as any;
           if (!holding || Number(holding.quantity) < quantity) {
             throw new Error(`You don't own enough shares of ${upperSymbol} to sell. Buy first or check your holdings.`);
           }

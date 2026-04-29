@@ -3,8 +3,15 @@ services:
     name: paper-portfolio
     env: docker
     dockerfilePath: ./Dockerfile
-    plan: free
+    plan: starter
     healthCheckPath: /
+    # Persistent disk so the SQLite file survives redeploys.
+    # NOTE: persistent disks require a paid plan (Starter+). On Free,
+    # the disk is ephemeral and the DB will reset on every redeploy.
+    disk:
+      name: papertrading-data
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
@@ -12,3 +19,5 @@ services:
         value: 5000
       - key: JWT_SECRET
         generateValue: true
+      - key: DB_PATH
+        value: /var/data/papertrading.db
