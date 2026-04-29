@@ -31,7 +31,6 @@ const MARKET_CLOSE_H = 15, MARKET_CLOSE_M = 30; // 3:30 PM IST
 
 function getISTDate(): Date {
   const now = new Date();
-  // Convert to IST (UTC+5:30)
   const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
   return new Date(utcMs + 5.5 * 3600000);
 }
@@ -64,13 +63,12 @@ export function getMarketStatus() {
     label,
     ist: ist.toISOString(),
     nextOpen: open ? null : getNextOpenIST(ist),
-    pollIntervalMs: open ? 10_000 : 300_000, // 10s live, 5min closed
+    pollIntervalMs: open ? 10_000 : 300_000,
   };
 }
 
 function getNextOpenIST(ist: Date): string {
   const d = new Date(ist);
-  // advance to next weekday
   do {
     if (d.getHours() * 60 + d.getMinutes() < MARKET_OPEN_H * 60 + MARKET_OPEN_M && d.getDay() >= 1 && d.getDay() <= 5) break;
     d.setDate(d.getDate() + 1);
@@ -81,56 +79,81 @@ function getNextOpenIST(ist: Date): string {
 }
 
 // ── Adaptive TTL ──
-const TTL_LIVE_MS = 10_000;   // 10 seconds during market hours
+const TTL_LIVE_MS   = 15_000;  // 15 seconds during market hours
 const TTL_CLOSED_MS = 300_000; // 5 minutes outside market hours
+// Stale-while-revalidate: serve stale data up to this age before refusing
+const STALE_GRACE_MS = 3_600_000; // 1 hour — always serve *something*
 
 function getTTL(): number {
   return isMarketOpen() ? TTL_LIVE_MS : TTL_CLOSED_MS;
 }
 
-const cache = new Map<string, { at: number; data: Quote }>();
+// ── Cache — stores BOTH live and last-known-good data ──
+// { data: Quote, at: number (last successful fetch), stale: boolean }
+interface CacheEntry { data: Quote; at: number; }
+const cache = new Map<string, CacheEntry>();
 
 function yahooTicker(symbol: string, exchange: 'NSE' | 'BSE') {
   return `${symbol}.${exchange === 'NSE' ? 'NS' : 'BO'}`;
 }
 
+function mapYahooQuote(q: any, symbol: string, exchange: 'NSE' | 'BSE'): Quote | null {
+  if (!q || typeof q.regularMarketPrice !== 'number') return null;
+  return {
+    symbol,
+    exchange,
+    price: q.regularMarketPrice,
+    change: q.regularMarketChange ?? 0,
+    change_percent: q.regularMarketChangePercent ?? 0,
+    previous_close: q.regularMarketPreviousClose ?? q.regularMarketPrice,
+    day_high: q.regularMarketDayHigh ?? q.regularMarketPrice,
+    day_low: q.regularMarketDayLow ?? q.regularMarketPrice,
+    volume: q.regularMarketVolume ?? 0,
+    currency: q.currency ?? 'INR',
+    market_cap: q.marketCap,
+    pe_ratio: q.trailingPE,
+    high_52w: q.fiftyTwoWeekHigh,
+    low_52w: q.fiftyTwoWeekLow,
+    eps: q.epsTrailingTwelveMonths,
+    name: q.longName || q.shortName,
+    exchange_long: q.fullExchangeName,
+  };
+}
+
+/** Sleep helper for rate-limit back-off between Yahoo chunks */
+function sleep(ms: number) {
+  return new Promise<void>(resolve => setTimeout(resolve, ms));
+}
+
 export async function getQuote(symbol: string, exchange: 'NSE' | 'BSE' = 'NSE'): Promise<Quote | null> {
   const key = `${symbol}:${exchange}`;
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < getTTL()) return hit.data;
+  const now = Date.now();
+
+  // Cache hit within TTL → return immediately
+  if (hit && now - hit.at < getTTL()) return hit.data;
 
   try {
     const q = (await yahooFinance.quote(yahooTicker(symbol, exchange))) as any;
-    if (!q || typeof q.regularMarketPrice !== 'number') return null;
-    const data: Quote = {
-      symbol,
-      exchange,
-      price: q.regularMarketPrice,
-      change: q.regularMarketChange ?? 0,
-      change_percent: q.regularMarketChangePercent ?? 0,
-      previous_close: q.regularMarketPreviousClose ?? q.regularMarketPrice,
-      day_high: q.regularMarketDayHigh ?? q.regularMarketPrice,
-      day_low: q.regularMarketDayLow ?? q.regularMarketPrice,
-      volume: q.regularMarketVolume ?? 0,
-      currency: q.currency ?? 'INR',
-      market_cap: q.marketCap,
-      pe_ratio: q.trailingPE,
-      high_52w: q.fiftyTwoWeekHigh,
-      low_52w: q.fiftyTwoWeekLow,
-      eps: q.epsTrailingTwelveMonths,
-      name: q.longName || q.shortName,
-      exchange_long: q.fullExchangeName,
-    };
-    cache.set(key, { at: Date.now(), data });
-    return data;
-  } catch (err) {
-    return null;
+    const data = mapYahooQuote(q, symbol, exchange);
+    if (data) {
+      cache.set(key, { data, at: now });
+      return data;
+    }
+  } catch (err: any) {
+    console.warn(`[market] getQuote(${symbol}) failed: ${err?.message ?? err}`);
   }
+
+  // Return stale cached data rather than null (prevents vanishing)
+  if (hit && now - hit.at < STALE_GRACE_MS) return hit.data;
+  return null;
 }
 
 export async function getQuotes(
   items: { symbol: string; exchange?: 'NSE' | 'BSE' }[]
 ): Promise<Quote[]> {
+  const now = Date.now();
+  const ttl = getTTL();
   const tickers: string[] = [];
   const missKey: Record<string, { symbol: string; exchange: 'NSE' | 'BSE' }> = {};
   const out: Quote[] = [];
@@ -139,7 +162,7 @@ export async function getQuotes(
     const exchange = it.exchange ?? 'NSE';
     const key = `${it.symbol}:${exchange}`;
     const hit = cache.get(key);
-    if (hit && Date.now() - hit.at < getTTL()) {
+    if (hit && now - hit.at < ttl) {
       out.push(hit.data);
     } else {
       const t = yahooTicker(it.symbol, exchange);
@@ -148,41 +171,37 @@ export async function getQuotes(
     }
   }
 
-  // Yahoo limits how many tickers per call; chunk to avoid silent failures.
-  const CHUNK = 40;
+  // Fetch missing in chunks — with a small delay between each chunk
+  // to stay well under Yahoo's rate limit (~5 req/s)
+  const CHUNK = 25; // smaller chunks → more reliable
+  const CHUNK_DELAY_MS = 500; // 500ms between chunks = 2 chunks/sec
+
   for (let i = 0; i < tickers.length; i += CHUNK) {
+    if (i > 0) await sleep(CHUNK_DELAY_MS);
     const slice = tickers.slice(i, i + CHUNK);
     try {
-      const results = (await yahooFinance.quote(slice)) as any[];
+      const results = (await yahooFinance.quote(slice)) as any;
       const arr = Array.isArray(results) ? results : [results];
       for (const q of arr) {
-        if (!q || typeof q.regularMarketPrice !== 'number') continue;
-        const src = missKey[q.symbol];
+        const src = missKey[q?.symbol];
         if (!src) continue;
-        const data: Quote = {
-          symbol: src.symbol,
-          exchange: src.exchange,
-          price: q.regularMarketPrice,
-          change: q.regularMarketChange ?? 0,
-          change_percent: q.regularMarketChangePercent ?? 0,
-          previous_close: q.regularMarketPreviousClose ?? q.regularMarketPrice,
-          day_high: q.regularMarketDayHigh ?? q.regularMarketPrice,
-          day_low: q.regularMarketDayLow ?? q.regularMarketPrice,
-          volume: q.regularMarketVolume ?? 0,
-          currency: q.currency ?? 'INR',
-          market_cap: q.marketCap,
-          pe_ratio: q.trailingPE,
-          high_52w: q.fiftyTwoWeekHigh,
-          low_52w: q.fiftyTwoWeekLow,
-          eps: q.epsTrailingTwelveMonths,
-          name: q.longName || q.shortName,
-          exchange_long: q.fullExchangeName,
-        };
-        cache.set(`${src.symbol}:${src.exchange}`, { at: Date.now(), data });
-        out.push(data);
+        const data = mapYahooQuote(q, src.symbol, src.exchange);
+        if (data) {
+          cache.set(`${src.symbol}:${src.exchange}`, { data, at: now });
+          out.push(data);
+        }
       }
-    } catch {
-      // continue to next chunk on failure
+    } catch (err: any) {
+      console.warn(`[market] getQuotes chunk ${i}–${i+CHUNK} failed: ${err?.message ?? err}`);
+      // On failure: serve stale cache for symbols in this chunk rather than nothing
+      for (const ticker of slice) {
+        const src = missKey[ticker];
+        if (!src) continue;
+        const stale = cache.get(`${src.symbol}:${src.exchange}`);
+        if (stale && now - stale.at < STALE_GRACE_MS && !out.find(o => o.symbol === src.symbol)) {
+          out.push(stale.data);
+        }
+      }
     }
   }
 
@@ -259,12 +278,13 @@ const indexCache = new Map<string, { at: number; data: IndexQuote }>();
 
 export async function getIndices(): Promise<IndexQuote[]> {
   const ttl = getTTL();
+  const now = Date.now();
   const fresh: IndexQuote[] = [];
   const missing: typeof INDICES = [];
 
   for (const idx of INDICES) {
     const hit = indexCache.get(idx.symbol);
-    if (hit && Date.now() - hit.at < ttl) fresh.push(hit.data);
+    if (hit && now - hit.at < ttl) fresh.push(hit.data);
     else missing.push(idx);
   }
 
@@ -284,17 +304,21 @@ export async function getIndices(): Promise<IndexQuote[]> {
           change_percent: q.regularMarketChangePercent ?? 0,
           previous_close: q.regularMarketPreviousClose ?? q.regularMarketPrice,
         };
-        indexCache.set(meta.symbol, { at: Date.now(), data });
+        indexCache.set(meta.symbol, { at: now, data });
         fresh.push(data);
       }
     } catch {
-      // swallow; return whatever we have
+      // Serve stale index data rather than nothing
+      for (const idx of missing) {
+        const stale = indexCache.get(idx.symbol);
+        if (stale) fresh.push(stale.data);
+      }
     }
   }
   return fresh;
 }
 
-// Popular Nifty50 + Sensex30 basket for gainers/losers widgets.
+// Popular Nifty50 basket for gainers/losers widgets.
 export const NIFTY50 = [
   'RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'ICICIBANK', 'HINDUNILVR', 'SBIN', 'BHARTIARTL',
   'ITC', 'BAJFINANCE', 'KOTAKBANK', 'LT', 'AXISBANK', 'MARUTI', 'ASIANPAINT', 'SUNPHARMA',

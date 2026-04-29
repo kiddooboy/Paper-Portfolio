@@ -70,8 +70,8 @@ router.get('/', async (req, res) => {
   const where: string[] = [];
   const params: any[] = [];
   if (q) {
-    where.push('(symbol LIKE ? OR name LIKE ?)');
-    const like = `%${String(q).toUpperCase()}%`;
+    where.push('(symbol ILIKE ? OR name ILIKE ?)');
+    const like = `%${String(q)}%`;
     params.push(like, like);
   }
   if (exchange) {
@@ -86,7 +86,7 @@ router.get('/', async (req, res) => {
   
   // Get total count for pagination
   const countResult = (await db.prepare(`SELECT COUNT(*) as total FROM stocks ${whereSql}`).get(...params)) as any;
-  const total = countResult?.total || 0;
+  const total = Number(countResult?.total ?? 0);
   
   const rows = (await db
     .prepare(`SELECT * FROM stocks ${whereSql} ORDER BY symbol LIMIT ? OFFSET ?`)
@@ -114,11 +114,11 @@ router.get('/', async (req, res) => {
       change_percent: q?.change_percent ?? 0,
       day_high: q?.day_high,
       day_low: q?.day_low,
-      volume: q?.volume ?? r.volume,
-      market_cap: q?.market_cap ?? r.market_cap,
-      pe_ratio: q?.pe_ratio ?? r.pe_ratio,
-      high_52w: q?.high_52w ?? r.high_52w,
-      low_52w: q?.low_52w ?? r.low_52w,
+      volume: q?.volume ?? Number(r.volume) ?? 0,
+      market_cap: q?.market_cap ?? Number(r.market_cap) ?? null,
+      pe_ratio: q?.pe_ratio ?? Number(r.pe_ratio) ?? null,
+      high_52w: q?.high_52w ?? Number(r.high_52w) ?? null,
+      low_52w: q?.low_52w ?? Number(r.low_52w) ?? null,
     };
   });
   res.json({ 
@@ -132,18 +132,20 @@ router.get('/', async (req, res) => {
 // GET /api/stocks/search?q=&limit=  (lightweight autocomplete, symbol+name only)
 // Restricted to NIFTY 500 stocks only — no external search fallback.
 router.get('/search', async (req, res) => {
-  const q = String(req.query.q || '').toUpperCase();
+  const q = String(req.query.q || '').trim();
   const limit = Math.min(parseInt(String(req.query.limit || '20')) || 20, 50);
   if (!q) return res.json([]);
+  const qUp = q.toUpperCase();
 
   const local = (await db
     .prepare(
-      `SELECT symbol, name, exchange FROM stocks WHERE symbol LIKE ? OR name LIKE ? ORDER BY CASE WHEN symbol = ? THEN 0 WHEN symbol LIKE ? THEN 1 ELSE 2 END, symbol LIMIT ?`
+      `SELECT symbol, name, exchange FROM stocks WHERE symbol ILIKE ? OR name ILIKE ? ORDER BY CASE WHEN UPPER(symbol) = ? THEN 0 WHEN symbol ILIKE ? THEN 1 ELSE 2 END, symbol LIMIT ?`
     )
-    .all(`%${q}%`, `%${q}%`, q, `${q}%`, limit)) as any[];
+    .all(`%${q}%`, `%${q}%`, qUp, `${q}%`, limit)) as any[];
 
   res.json(local);
 });
+
 
 // GET /api/stocks/quote?symbols=RELIANCE,TCS&exchange=NSE (batch live quotes)
 router.get('/quote', async (req, res) => {

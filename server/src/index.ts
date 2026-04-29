@@ -26,7 +26,7 @@ import cors from 'cors';
 import { initSchema, db, shutdownPool } from './db/index.js';
 import cron from 'node-cron';
 import { fillOrder } from './routes/orders.js';
-import { getQuote, getQuotes, getIndices, isMarketOpen } from './services/marketData.js';
+import { getQuote, getQuotes, getIndices, isMarketOpen, NIFTY50 } from './services/marketData.js';
 import { ingestSymbols } from './services/symbolIngest.js';
 import { startOrderExecutionScheduler } from './services/orderExecution.js';
 
@@ -181,52 +181,68 @@ async function main() {
     recordPortfolioHistory().catch(err => console.error('[cron] recordPortfolioHistory error:', err));
   });
 
-  // ── Continuous market data poller ──
-  // Keeps yfinance data flowing all the time by refreshing quotes for
-  // popular symbols (Nifty50) plus any symbols users actively hold or watch.
-  // Cache is warmed in background so client requests are always fast.
-  async function pollMarketData() {
+  // ── Two-tier market data poller ──
+  // Tier 1 (fast): Nifty50 + user-held + user-watched symbols every 20s during
+  //                market hours, every 2min when closed.
+  // Tier 2 (slow): Full NIFTY 500 sweep every 5min during market hours,
+  //                every 30min when closed.
+  //
+  // Smaller, targeted fetches stay well under Yahoo rate limits.
+  // Stale-while-revalidate in marketData.ts means old data is served when
+  // Yahoo is temporarily unavailable — data never vanishes.
+  async function pollTier1() {
     try {
-      const heldSymbols = ((await db.prepare(
+      const heldOrWatched = ((await db.prepare(
         `SELECT DISTINCT symbol FROM holdings UNION SELECT DISTINCT symbol FROM watchlist_items`
       ).all()) as any[]).map((r) => r.symbol).filter(Boolean);
 
-      const nifty500 = ((await db.prepare(`SELECT symbol FROM stocks WHERE exchange = 'NSE'`).all()) as any[]).map((r) => r.symbol);
-      const symbols = Array.from(new Set([...nifty500, ...heldSymbols]));
-      const items = symbols.map((s) => ({ symbol: s, exchange: 'NSE' as const }));
-
-      // Yahoo allows large batches; chunk to avoid url-length issues.
-      const CHUNK = 40;
-      let total = 0;
-      for (let i = 0; i < items.length; i += CHUNK) {
-        const slice = items.slice(i, i + CHUNK);
-        const quotes = await getQuotes(slice);
-        total += quotes.length;
-      }
-      // Also keep indices (NIFTY/SENSEX/BANKNIFTY) cache fresh
+      const symbols = Array.from(new Set([...NIFTY50, ...heldOrWatched]));
+      const quotes = await getQuotes(symbols.map((s) => ({ symbol: s, exchange: 'NSE' as const })));
       await getIndices();
-      const stamp = new Date().toISOString();
-      console.log(`[market] poll ok @ ${stamp} — refreshed ${total}/${items.length} symbols (open=${isMarketOpen()})`);
+      console.log(`[market] tier1 poll — ${quotes.length}/${symbols.length} symbols (open=${isMarketOpen()})`);
     } catch (err: any) {
-      console.warn('[market] poll error:', err?.message || err);
+      console.warn('[market] tier1 poll error:', err?.message ?? err);
     }
   }
 
-  function schedulePoll() {
-    const delay = isMarketOpen() ? 15_000 : 120_000; // 15s live, 2min closed
+  async function pollTier2() {
+    try {
+      const nifty500 = ((await db.prepare(`SELECT symbol FROM stocks WHERE exchange = 'NSE'`).all()) as any[]).map((r) => r.symbol);
+      if (!nifty500.length) return;
+      const quotes = await getQuotes(nifty500.map((s) => ({ symbol: s, exchange: 'NSE' as const })));
+      console.log(`[market] tier2 sweep — ${quotes.length}/${nifty500.length} NIFTY500 cached`);
+    } catch (err: any) {
+      console.warn('[market] tier2 poll error:', err?.message ?? err);
+    }
+  }
+
+  function scheduleTier1() {
+    const delay = isMarketOpen() ? 20_000 : 120_000; // 20s live, 2min closed
     setTimeout(async () => {
-      await pollMarketData();
-      schedulePoll();
+      await pollTier1();
+      scheduleTier1();
     }, delay);
   }
 
-  // Run once immediately, then keep polling.
-  pollMarketData().then(() => {
+  function scheduleTier2() {
+    const delay = isMarketOpen() ? 300_000 : 1_800_000; // 5min live, 30min closed
+    setTimeout(async () => {
+      await pollTier2();
+      scheduleTier2();
+    }, delay);
+  }
+
+  // Warm the cache immediately on startup, then start both schedulers.
+  pollTier1().then(() => {
     getQuote('RELIANCE', 'NSE').then((q) => {
       if (q) console.log(`[market] live sample: RELIANCE.NS ₹${q.price} (${q.change_percent.toFixed(2)}%)`);
-      else console.warn('[market] live sample failed — check network');
+      else console.warn('[market] live sample failed — check network / Yahoo availability');
     });
-    schedulePoll();
+    scheduleTier1();
+    // Delay tier2 by 30s so it doesn't pile on top of tier1 startup
+    setTimeout(() => {
+      pollTier2().then(() => scheduleTier2());
+    }, 30_000);
   });
 
   const server = app.listen(PORT, () => {

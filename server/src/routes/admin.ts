@@ -12,78 +12,101 @@ router.use(authMiddleware, adminMiddleware);
 // GET /api/admin/users — List all users with portfolio summary
 // ---------------------------------------------------------------------------
 router.get('/users', async (req: AuthRequest, res) => {
-  const users = (await db.prepare(`
-    SELECT id, name, email, role, balance, created_at FROM users ORDER BY created_at DESC
-  `).all()) as any[];
+  try {
+    const users = (await db.prepare(`
+      SELECT id, name, email, role, balance, created_at FROM users ORDER BY created_at DESC
+    `).all()) as any[];
 
-  // Gather holdings for all users
-  const allHoldings = (await db.prepare('SELECT * FROM holdings').all()) as any[];
-  const uniqueSymbols = Array.from(new Set(allHoldings.map((h: any) => h.symbol)));
+    // Gather holdings for all users
+    const allHoldings = (await db.prepare('SELECT * FROM holdings').all()) as any[];
+    const uniqueSymbols = Array.from(new Set(allHoldings.map((h: any) => h.symbol)));
 
-  const priceMap = new Map<string, number>();
-  if (uniqueSymbols.length) {
-    const quotes = await getQuotes(uniqueSymbols.map((s) => ({ symbol: s, exchange: 'NSE' as const })));
-    for (const q of quotes) priceMap.set(q.symbol, q.price);
-  }
-
-  const enriched = await Promise.all(users.map(async (u: any) => {
-    const holdings = allHoldings.filter((h: any) => h.user_id === u.id);
-    let investedValue = 0;
-    let currentValue = 0;
-    for (const h of holdings) {
-      const price = priceMap.get(h.symbol) ?? h.avg_buy_price;
-      investedValue += h.avg_buy_price * h.quantity;
-      currentValue += price * h.quantity;
+    const priceMap = new Map<string, number>();
+    if (uniqueSymbols.length) {
+      const quotes = await getQuotes(uniqueSymbols.map((s) => ({ symbol: s, exchange: 'NSE' as const })));
+      for (const q of quotes) priceMap.set(q.symbol, q.price);
     }
-    const totalPnl = currentValue - investedValue;
-    const totalValue = u.balance + currentValue;
 
-    const txCount = ((await db.prepare('SELECT COUNT(*) as c FROM transactions WHERE user_id = ?').get(u.id)) as any)?.c || 0;
+    // Batch-fetch all transaction counts in one query to avoid N+1
+    const txCounts = (await db.prepare(
+      `SELECT user_id, COUNT(*) as c FROM transactions GROUP BY user_id`
+    ).all()) as any[];
+    const txCountMap = new Map<number, number>();
+    for (const row of txCounts) txCountMap.set(Number(row.user_id), Number(row.c));
 
-    return {
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      role: u.role,
-      balance: u.balance,
-      investedValue: +investedValue.toFixed(2),
-      currentValue: +currentValue.toFixed(2),
-      totalValue: +totalValue.toFixed(2),
-      totalPnl: +totalPnl.toFixed(2),
-      holdingsCount: holdings.length,
-      transactionCount: txCount,
-      created_at: u.created_at,
-    };
-  }));
+    const enriched = users.map((u: any) => {
+      const holdings = allHoldings.filter((h: any) => Number(h.user_id) === Number(u.id));
+      let investedValue = 0;
+      let currentValue = 0;
+      for (const h of holdings) {
+        const price = priceMap.get(h.symbol) ?? Number(h.avg_buy_price);
+        investedValue += Number(h.avg_buy_price) * Number(h.quantity);
+        currentValue += price * Number(h.quantity);
+      }
+      const totalPnl = currentValue - investedValue;
+      const balance = Number(u.balance);
+      const totalValue = balance + currentValue;
 
-  res.json({ users: enriched, total: enriched.length });
+      return {
+        id: Number(u.id),
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        balance,
+        investedValue: +investedValue.toFixed(2),
+        currentValue: +currentValue.toFixed(2),
+        totalValue: +totalValue.toFixed(2),
+        totalPnl: +totalPnl.toFixed(2),
+        holdingsCount: holdings.length,
+        transactionCount: txCountMap.get(Number(u.id)) ?? 0,
+        created_at: u.created_at,
+      };
+    });
+
+    res.json({ users: enriched, total: enriched.length });
+  } catch (err: any) {
+    console.error('[admin/users] error:', err);
+    res.status(500).json({ error: 'Failed to fetch users', detail: err?.message });
+  }
 });
 
 // ---------------------------------------------------------------------------
 // GET /api/admin/users/:id — Detailed user view
 // ---------------------------------------------------------------------------
 router.get('/users/:id', async (req: AuthRequest, res) => {
-  const userId = +req.params.id;
-  const user = (await db.prepare('SELECT id, name, email, role, balance, created_at FROM users WHERE id = ?').get(userId)) as any;
-  if (!user) return res.status(404).json({ error: 'User not found' });
+  try {
+    const userId = +req.params.id;
+    const user = (await db.prepare('SELECT id, name, email, role, balance, created_at FROM users WHERE id = ?').get(userId)) as any;
+    if (!user) return res.status(404).json({ error: 'User not found' });
 
-  const holdings = (await db.prepare('SELECT * FROM holdings WHERE user_id = ?').all(userId)) as any[];
-  const transactions = (await db.prepare('SELECT * FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 50').all(userId)) as any[];
-  const orders = (await db.prepare('SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT 50').all(userId)) as any[];
+    const holdings = (await db.prepare('SELECT * FROM holdings WHERE user_id = ?').all(userId)) as any[];
+    const transactions = (await db.prepare('SELECT * FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 50').all(userId)) as any[];
+    const orders = (await db.prepare('SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT 50').all(userId)) as any[];
 
-  // Enrich holdings with live prices
-  if (holdings.length) {
-    const quotes = await getQuotes(holdings.map((h: any) => ({ symbol: h.symbol, exchange: 'NSE' as const })));
-    const pm = new Map(quotes.map((q) => [q.symbol, q.price]));
-    for (const h of holdings) {
-      const price = pm.get(h.symbol) ?? h.avg_buy_price;
-      h.current_price = price;
-      h.current_value = price * h.quantity;
-      h.pnl = (price - h.avg_buy_price) * h.quantity;
+    // Enrich holdings with live prices
+    if (holdings.length) {
+      const quotes = await getQuotes(holdings.map((h: any) => ({ symbol: h.symbol, exchange: 'NSE' as const })));
+      const pm = new Map(quotes.map((q) => [q.symbol, q.price]));
+      for (const h of holdings) {
+        const price = pm.get(h.symbol) ?? Number(h.avg_buy_price);
+        h.current_price = price;
+        h.current_value = +(price * Number(h.quantity)).toFixed(2);
+        h.pnl = +((price - Number(h.avg_buy_price)) * Number(h.quantity)).toFixed(2);
+        h.avg_buy_price = Number(h.avg_buy_price);
+        h.quantity = Number(h.quantity);
+      }
     }
-  }
 
-  res.json({ user, holdings, transactions, orders });
+    res.json({
+      user: { ...user, balance: Number(user.balance) },
+      holdings,
+      transactions,
+      orders,
+    });
+  } catch (err: any) {
+    console.error('[admin/users/:id] error:', err);
+    res.status(500).json({ error: 'Failed to fetch user', detail: err?.message });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -95,7 +118,7 @@ router.post('/users/:id/reset-balance', async (req: AuthRequest, res) => {
     return res.status(400).json({ error: 'Invalid balance amount' });
   }
   try {
-    await db.prepare('UPDATE users SET balance = ? WHERE id = ?').run(balance, req.params.id);
+    await db.prepare('UPDATE users SET balance = ? WHERE id = ?').run(balance, +req.params.id);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to reset balance' });
@@ -111,16 +134,9 @@ router.post('/users/:id/topup', async (req: AuthRequest, res) => {
     return res.status(400).json({ error: 'Invalid top-up amount' });
   }
   try {
-    // Get current balance
-    const user = (await db.prepare('SELECT balance FROM users WHERE id = ?').get(req.params.id)) as any;
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    // Add amount to current balance
-    const newBalance = user.balance + amount;
-    await db.prepare('UPDATE users SET balance = ? WHERE id = ?').run(newBalance, req.params.id);
-    res.json({ success: true, newBalance });
+    await db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?').run(amount, +req.params.id);
+    const user = (await db.prepare('SELECT balance FROM users WHERE id = ?').get(+req.params.id)) as any;
+    res.json({ success: true, newBalance: Number(user?.balance ?? 0) });
   } catch (err) {
     res.status(500).json({ error: 'Failed to top up balance' });
   }
@@ -138,7 +154,6 @@ router.delete('/users/:id', async (req: AuthRequest, res) => {
 
   // FK ON DELETE CASCADE handles all child rows automatically
   await db.prepare('DELETE FROM users WHERE id = ?').run(userId);
-
   res.json({ success: true });
 });
 
@@ -146,19 +161,24 @@ router.delete('/users/:id', async (req: AuthRequest, res) => {
 // GET /api/admin/stats — Platform-wide stats
 // ---------------------------------------------------------------------------
 router.get('/stats', async (req: AuthRequest, res) => {
-  const userCount = ((await db.prepare('SELECT COUNT(*) as c FROM users').get()) as any)?.c || 0;
-  const txCount = ((await db.prepare('SELECT COUNT(*) as c FROM transactions').get()) as any)?.c || 0;
-  const orderCount = ((await db.prepare('SELECT COUNT(*) as c FROM orders').get()) as any)?.c || 0;
-  const totalBalance = ((await db.prepare('SELECT SUM(balance) as s FROM users').get()) as any)?.s || 0;
-  const holdingsCount = ((await db.prepare('SELECT COUNT(DISTINCT user_id) as c FROM holdings WHERE quantity > 0').get()) as any)?.c || 0;
+  try {
+    const userCount  = Number(((await db.prepare('SELECT COUNT(*) as c FROM users').get()) as any)?.c ?? 0);
+    const txCount    = Number(((await db.prepare('SELECT COUNT(*) as c FROM transactions').get()) as any)?.c ?? 0);
+    const orderCount = Number(((await db.prepare('SELECT COUNT(*) as c FROM orders').get()) as any)?.c ?? 0);
+    const totalBalance = Number(((await db.prepare('SELECT SUM(balance) as s FROM users').get()) as any)?.s ?? 0);
+    const holdingsCount = Number(((await db.prepare('SELECT COUNT(DISTINCT user_id) as c FROM holdings WHERE quantity > 0').get()) as any)?.c ?? 0);
 
-  res.json({
-    userCount,
-    activeTraders: holdingsCount,
-    totalTransactions: txCount,
-    totalOrders: orderCount,
-    totalCashInSystem: +totalBalance.toFixed(2),
-  });
+    res.json({
+      userCount,
+      activeTraders: holdingsCount,
+      totalTransactions: txCount,
+      totalOrders: orderCount,
+      totalCashInSystem: +totalBalance.toFixed(2),
+    });
+  } catch (err: any) {
+    console.error('[admin/stats] error:', err);
+    res.status(500).json({ error: 'Failed to fetch stats', detail: err?.message });
+  }
 });
 
 export default router;
