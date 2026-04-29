@@ -160,9 +160,32 @@ class WrappedDatabase {
 export const db = new WrappedDatabase();
 
 // ────────────────────────────────────────────────────────────────────────────
+// Helper: run a single SQL statement safely (its own implicit transaction).
+// If it fails, log and continue — never poisons other statements.
+// ────────────────────────────────────────────────────────────────────────────
+async function safeExec(sql: string, label?: string) {
+  try {
+    await getPool().query(sql);
+  } catch (err: any) {
+    if (label) console.warn(`[db:migrate] ${label}: ${err?.message ?? err}`);
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Schema initialisation — production-grade
+//
+// Strategy:
+//   1. CREATE TABLE IF NOT EXISTS — in one transaction (safe, idempotent).
+//   2. Indexes — each via safeExec (IF NOT EXISTS, can't fail the batch).
+//   3. Triggers — via safeExec.
+//   4. Migrations (ALTER TABLE, DROP/ADD CONSTRAINT) — each via safeExec
+//      so one failure never poisons subsequent statements (PG 25P02 fix).
+//   5. Admin bootstrap — standalone.
 // ────────────────────────────────────────────────────────────────────────────
 export async function initSchema() {
+  // ──────────────────────────────────────────────────
+  // Phase 1: Core table creation (single transaction)
+  // ──────────────────────────────────────────────────
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
@@ -210,7 +233,7 @@ export async function initSchema() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS holdings (
         id            SERIAL PRIMARY KEY,
-        user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        user_id       INTEGER NOT NULL,
         symbol        TEXT NOT NULL,
         quantity      INTEGER NOT NULL DEFAULT 0,
         avg_buy_price NUMERIC(18,4) NOT NULL DEFAULT 0,
@@ -224,15 +247,14 @@ export async function initSchema() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS orders (
         id                SERIAL PRIMARY KEY,
-        user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        user_id           INTEGER NOT NULL,
         symbol            TEXT NOT NULL,
         type              TEXT NOT NULL CHECK(type IN ('MARKET','LIMIT')),
         transaction_type  TEXT NOT NULL CHECK(transaction_type IN ('BUY','SELL')),
         quantity          INTEGER NOT NULL,
         price             NUMERIC(18,4) NOT NULL,
         limit_price       NUMERIC(18,4),
-        status            TEXT NOT NULL DEFAULT 'PENDING'
-                            CHECK(status IN ('PENDING','FILLED','CANCELLED','EXPIRED','FAILED')),
+        status            TEXT NOT NULL DEFAULT 'PENDING',
         created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         filled_at         TIMESTAMPTZ,
         updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -243,8 +265,8 @@ export async function initSchema() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS transactions (
         id            SERIAL PRIMARY KEY,
-        user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        order_id      INTEGER REFERENCES orders(id) ON DELETE SET NULL,
+        user_id       INTEGER NOT NULL,
+        order_id      INTEGER,
         symbol        TEXT NOT NULL,
         type          TEXT NOT NULL CHECK(type IN ('BUY','SELL')),
         quantity      INTEGER NOT NULL,
@@ -258,7 +280,7 @@ export async function initSchema() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS watchlists (
         id            SERIAL PRIMARY KEY,
-        user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        user_id       INTEGER NOT NULL,
         name          TEXT NOT NULL,
         created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -269,10 +291,9 @@ export async function initSchema() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS watchlist_items (
         id            SERIAL PRIMARY KEY,
-        watchlist_id  INTEGER NOT NULL REFERENCES watchlists(id) ON DELETE CASCADE,
+        watchlist_id  INTEGER NOT NULL,
         symbol        TEXT NOT NULL,
-        added_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        UNIQUE(watchlist_id, symbol)
+        added_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `);
 
@@ -280,7 +301,7 @@ export async function initSchema() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS notifications (
         id            SERIAL PRIMARY KEY,
-        user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        user_id       INTEGER NOT NULL,
         title         TEXT NOT NULL,
         message       TEXT NOT NULL,
         type          TEXT NOT NULL DEFAULT 'system'
@@ -294,7 +315,7 @@ export async function initSchema() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS price_alerts (
         id            SERIAL PRIMARY KEY,
-        user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        user_id       INTEGER NOT NULL,
         symbol        TEXT NOT NULL,
         target_price  NUMERIC(18,4) NOT NULL,
         condition     TEXT NOT NULL CHECK(condition IN ('above','below')),
@@ -307,7 +328,7 @@ export async function initSchema() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS portfolio_history (
         id            SERIAL PRIMARY KEY,
-        user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        user_id       INTEGER NOT NULL,
         total_value   NUMERIC(18,4) NOT NULL,
         cash_balance  NUMERIC(18,4) NOT NULL,
         recorded_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -318,187 +339,197 @@ export async function initSchema() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS wallet_transactions (
         id            SERIAL PRIMARY KEY,
-        user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        user_id       INTEGER NOT NULL,
         type          TEXT NOT NULL CHECK(type IN ('DEPOSIT','WITHDRAW')),
         amount        NUMERIC(18,4) NOT NULL,
         created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `);
 
-    // ────────────────────────────────────────
-    // Indexes — cover every hot query path
-    // ────────────────────────────────────────
-    // users
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(LOWER(email))`);
-
-    // stocks
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_stocks_symbol ON stocks(symbol)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_stocks_name ON stocks(name)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_stocks_exchange ON stocks(exchange)`);
-
-    // holdings
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_holdings_user_id ON holdings(user_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_holdings_symbol ON holdings(symbol)`);
-
-    // orders
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_orders_user_status ON orders(user_id, status)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at)`);
-
-    // transactions
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_transactions_symbol ON transactions(symbol)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at)`);
-
-    // watchlists
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_watchlists_user_id ON watchlists(user_id)`);
-
-    // watchlist_items
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_watchlist_items_watchlist_id ON watchlist_items(watchlist_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_watchlist_items_symbol ON watchlist_items(symbol)`);
-
-    // notifications
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read)`);
-
-    // price_alerts
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_price_alerts_user_id ON price_alerts(user_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_price_alerts_triggered ON price_alerts(triggered)`);
-
-    // portfolio_history
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_portfolio_history_user_id ON portfolio_history(user_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_portfolio_history_recorded_at ON portfolio_history(user_id, recorded_at)`);
-
-    // wallet_transactions
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_wallet_txns_user_id ON wallet_transactions(user_id)`);
-
-    // ────────────────────────────────────────
-    // Auto-update trigger for updated_at
-    // ────────────────────────────────────────
-    await client.query(`
-      CREATE OR REPLACE FUNCTION set_updated_at()
-      RETURNS TRIGGER AS $$
-      BEGIN
-        NEW.updated_at = NOW();
-        RETURN NEW;
-      END;
-      $$ LANGUAGE plpgsql
-    `);
-
-    const tablesWithUpdatedAt = [
-      'users', 'stocks', 'holdings', 'orders', 'watchlists',
-    ];
-    for (const table of tablesWithUpdatedAt) {
-      await client.query(`
-        DO $$ BEGIN
-          IF NOT EXISTS (
-            SELECT 1 FROM pg_trigger WHERE tgname = 'trg_${table}_updated_at'
-          ) THEN
-            CREATE TRIGGER trg_${table}_updated_at
-              BEFORE UPDATE ON ${table}
-              FOR EACH ROW
-              EXECUTE FUNCTION set_updated_at();
-          END IF;
-        END $$
-      `);
-    }
-
-    // ────────────────────────────────────────
-    // Migrations (idempotent) — safe for existing DBs
-    // ────────────────────────────────────────
-
-    // Expand order status CHECK if it was created with the old set
-    try {
-      await client.query(`
-        ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_check
-      `);
-      await client.query(`
-        ALTER TABLE orders ADD CONSTRAINT orders_status_check
-          CHECK(status IN ('PENDING','FILLED','CANCELLED','EXPIRED','FAILED'))
-      `);
-    } catch {
-      // constraint may not exist by that name — ignore
-    }
-
-    // Add missing columns to existing tables
-    const migrations = [
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user'`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS mpin_hash TEXT`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`,
-      `ALTER TABLE stocks ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`,
-      `ALTER TABLE stocks ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`,
-      `ALTER TABLE holdings ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`,
-      `ALTER TABLE holdings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`,
-      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`,
-      `ALTER TABLE watchlists ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`,
-      `ALTER TABLE watchlists ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`,
-    ];
-    for (const m of migrations) {
-      try { await client.query(m); } catch { /* already exists */ }
-    }
-
-    // Add unique constraint to watchlist_items if missing
-    try {
-      await client.query(`
-        ALTER TABLE watchlist_items
-          ADD CONSTRAINT uq_watchlist_items_watchlist_symbol
-          UNIQUE (watchlist_id, symbol)
-      `);
-    } catch { /* already exists */ }
-
-    // Drop the dead stock_prices table — it is never read or written
-    await client.query(`DROP TABLE IF EXISTS stock_prices`);
-
     await client.query('COMMIT');
-    console.log('[db] schema initialised successfully');
-
-    // ── Admin bootstrap ──
-    const ADMIN_EMAIL = (
-      process.env.ADMIN_EMAIL || 'yogesh.nithyanandam@gmail.com'
-    )
-      .toLowerCase()
-      .trim();
-    const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-    const ADMIN_NAME = process.env.ADMIN_NAME || 'Admin';
-    try {
-      const existing = await getPool().query(
-        'SELECT id FROM users WHERE LOWER(email) = $1',
-        [ADMIN_EMAIL],
-      );
-      if (existing.rows.length > 0) {
-        await getPool().query(
-          `UPDATE users SET role = 'admin' WHERE id = $1`,
-          [existing.rows[0].id],
-        );
-        if (ADMIN_PASSWORD) {
-          const hashed = await bcrypt.hash(ADMIN_PASSWORD, 10);
-          await getPool().query(
-            `UPDATE users SET password = $1 WHERE id = $2`,
-            [hashed, existing.rows[0].id],
-          );
-          console.log(`[admin] reset password for ${ADMIN_EMAIL}`);
-        }
-        console.log(`[admin] ensured role for ${ADMIN_EMAIL}`);
-      } else if (ADMIN_PASSWORD) {
-        const hashed = await bcrypt.hash(ADMIN_PASSWORD, 10);
-        await getPool().query(
-          'INSERT INTO users (name, email, password, role, balance) VALUES ($1, $2, $3, $4, $5)',
-          [ADMIN_NAME, ADMIN_EMAIL, hashed, 'admin', 100000],
-        );
-        console.log(`[admin] bootstrapped admin user ${ADMIN_EMAIL}`);
-      } else {
-        console.log(
-          `[admin] ${ADMIN_EMAIL} not yet registered; set ADMIN_PASSWORD env var to auto-create`,
-        );
-      }
-    } catch (err: any) {
-      console.warn('[admin] bootstrap failed:', err?.message || err);
-    }
+    console.log('[db] core tables created/verified');
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
   } finally {
     client.release();
   }
+
+  // ──────────────────────────────────────────────────
+  // Phase 2: Foreign keys (each in its own safeExec)
+  // If the FK already exists, PG throws — we catch & ignore.
+  // If the table was freshly created without FKs, these add them.
+  // ──────────────────────────────────────────────────
+  const fks = [
+    { table: 'holdings',           col: 'user_id',      ref: 'users(id)',      onDel: 'CASCADE' },
+    { table: 'orders',             col: 'user_id',      ref: 'users(id)',      onDel: 'CASCADE' },
+    { table: 'transactions',       col: 'user_id',      ref: 'users(id)',      onDel: 'CASCADE' },
+    { table: 'transactions',       col: 'order_id',     ref: 'orders(id)',     onDel: 'SET NULL' },
+    { table: 'watchlists',         col: 'user_id',      ref: 'users(id)',      onDel: 'CASCADE' },
+    { table: 'watchlist_items',    col: 'watchlist_id',  ref: 'watchlists(id)', onDel: 'CASCADE' },
+    { table: 'notifications',      col: 'user_id',      ref: 'users(id)',      onDel: 'CASCADE' },
+    { table: 'price_alerts',       col: 'user_id',      ref: 'users(id)',      onDel: 'CASCADE' },
+    { table: 'portfolio_history',  col: 'user_id',      ref: 'users(id)',      onDel: 'CASCADE' },
+    { table: 'wallet_transactions', col: 'user_id',     ref: 'users(id)',      onDel: 'CASCADE' },
+  ];
+  for (const fk of fks) {
+    const name = `fk_${fk.table}_${fk.col}`;
+    await safeExec(
+      `ALTER TABLE ${fk.table} ADD CONSTRAINT ${name} FOREIGN KEY (${fk.col}) REFERENCES ${fk.ref} ON DELETE ${fk.onDel}`,
+      `FK ${name}`,
+    );
+  }
+  console.log('[db] foreign keys ensured');
+
+  // ──────────────────────────────────────────────────
+  // Phase 3: Indexes (each idempotent via IF NOT EXISTS)
+  // ──────────────────────────────────────────────────
+  const indexes = [
+    `CREATE INDEX IF NOT EXISTS idx_users_email ON users(LOWER(email))`,
+    `CREATE INDEX IF NOT EXISTS idx_stocks_symbol ON stocks(symbol)`,
+    `CREATE INDEX IF NOT EXISTS idx_stocks_name ON stocks(name)`,
+    `CREATE INDEX IF NOT EXISTS idx_stocks_exchange ON stocks(exchange)`,
+    `CREATE INDEX IF NOT EXISTS idx_holdings_user_id ON holdings(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_holdings_symbol ON holdings(symbol)`,
+    `CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)`,
+    `CREATE INDEX IF NOT EXISTS idx_orders_user_status ON orders(user_id, status)`,
+    `CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_transactions_symbol ON transactions(symbol)`,
+    `CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_watchlists_user_id ON watchlists(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_watchlist_items_watchlist_id ON watchlist_items(watchlist_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_watchlist_items_symbol ON watchlist_items(symbol)`,
+    `CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read)`,
+    `CREATE INDEX IF NOT EXISTS idx_price_alerts_user_id ON price_alerts(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_price_alerts_triggered ON price_alerts(triggered)`,
+    `CREATE INDEX IF NOT EXISTS idx_portfolio_history_user_id ON portfolio_history(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_portfolio_history_recorded_at ON portfolio_history(user_id, recorded_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_wallet_txns_user_id ON wallet_transactions(user_id)`,
+  ];
+  for (const sql of indexes) {
+    await safeExec(sql, 'index');
+  }
+  console.log('[db] indexes ensured');
+
+  // ──────────────────────────────────────────────────
+  // Phase 4: Triggers for updated_at
+  // ──────────────────────────────────────────────────
+  await safeExec(`
+    CREATE OR REPLACE FUNCTION set_updated_at()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      NEW.updated_at = NOW();
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql
+  `, 'updated_at function');
+
+  const tablesWithUpdatedAt = ['users', 'stocks', 'holdings', 'orders', 'watchlists'];
+  for (const table of tablesWithUpdatedAt) {
+    await safeExec(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_trigger WHERE tgname = 'trg_${table}_updated_at'
+        ) THEN
+          CREATE TRIGGER trg_${table}_updated_at
+            BEFORE UPDATE ON ${table}
+            FOR EACH ROW
+            EXECUTE FUNCTION set_updated_at();
+        END IF;
+      END $$
+    `, `trigger ${table}`);
+  }
+  console.log('[db] triggers ensured');
+
+  // ──────────────────────────────────────────────────
+  // Phase 5: Migrations — each independently (25P02-safe)
+  // ──────────────────────────────────────────────────
+
+  // Expand order status CHECK to include EXPIRED and FAILED
+  await safeExec(
+    `ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_check`,
+    'drop old status check',
+  );
+  await safeExec(
+    `ALTER TABLE orders ADD CONSTRAINT orders_status_check CHECK(status IN ('PENDING','FILLED','CANCELLED','EXPIRED','FAILED'))`,
+    'add expanded status check',
+  );
+
+  // Add missing columns to existing tables
+  const columnMigrations = [
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user'`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS mpin_hash TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`,
+    `ALTER TABLE stocks ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`,
+    `ALTER TABLE stocks ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`,
+    `ALTER TABLE holdings ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`,
+    `ALTER TABLE holdings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`,
+    `ALTER TABLE orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`,
+    `ALTER TABLE watchlists ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`,
+    `ALTER TABLE watchlists ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`,
+  ];
+  for (const m of columnMigrations) {
+    await safeExec(m, 'column migration');
+  }
+
+  // Add unique constraint to watchlist_items if missing
+  await safeExec(
+    `ALTER TABLE watchlist_items ADD CONSTRAINT uq_watchlist_items_watchlist_symbol UNIQUE (watchlist_id, symbol)`,
+    'watchlist_items unique',
+  );
+
+  // Drop the dead stock_prices table — it is never read or written
+  await safeExec(`DROP TABLE IF EXISTS stock_prices`, 'drop stock_prices');
+
+  console.log('[db] migrations complete');
+
+  // ──────────────────────────────────────────────────
+  // Phase 6: Admin bootstrap
+  // ──────────────────────────────────────────────────
+  const ADMIN_EMAIL = (
+    process.env.ADMIN_EMAIL || 'yogesh.nithyanandam@gmail.com'
+  )
+    .toLowerCase()
+    .trim();
+  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+  const ADMIN_NAME = process.env.ADMIN_NAME || 'Admin';
+  try {
+    const existing = await getPool().query(
+      'SELECT id FROM users WHERE LOWER(email) = $1',
+      [ADMIN_EMAIL],
+    );
+    if (existing.rows.length > 0) {
+      await getPool().query(
+        `UPDATE users SET role = 'admin' WHERE id = $1`,
+        [existing.rows[0].id],
+      );
+      if (ADMIN_PASSWORD) {
+        const hashed = await bcrypt.hash(ADMIN_PASSWORD, 10);
+        await getPool().query(
+          `UPDATE users SET password = $1 WHERE id = $2`,
+          [hashed, existing.rows[0].id],
+        );
+        console.log(`[admin] reset password for ${ADMIN_EMAIL}`);
+      }
+      console.log(`[admin] ensured role for ${ADMIN_EMAIL}`);
+    } else if (ADMIN_PASSWORD) {
+      const hashed = await bcrypt.hash(ADMIN_PASSWORD, 10);
+      await getPool().query(
+        'INSERT INTO users (name, email, password, role, balance) VALUES ($1, $2, $3, $4, $5)',
+        [ADMIN_NAME, ADMIN_EMAIL, hashed, 'admin', 100000],
+      );
+      console.log(`[admin] bootstrapped admin user ${ADMIN_EMAIL}`);
+    } else {
+      console.log(
+        `[admin] ${ADMIN_EMAIL} not yet registered; set ADMIN_PASSWORD env var to auto-create`,
+      );
+    }
+  } catch (err: any) {
+    console.warn('[admin] bootstrap failed:', err?.message || err);
+  }
+
+  console.log('[db] schema initialised successfully');
 }
