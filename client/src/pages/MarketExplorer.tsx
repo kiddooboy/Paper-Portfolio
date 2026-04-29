@@ -33,7 +33,11 @@ export default function MarketExplorer() {
           url = '/api/stocks/trending';
         }
         const res = await axios.get(url, { params, signal: controller.signal });
-        setStocks(res.data || []);
+        if (url === '/api/stocks') {
+          setStocks(res.data?.stocks || []);
+        } else {
+          setStocks(res.data || []);
+        }
       } catch {}
       setLoading(false);
     }, query ? 300 : 0);
