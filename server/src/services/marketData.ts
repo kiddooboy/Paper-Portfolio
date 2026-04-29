@@ -146,9 +146,14 @@ export async function getQuote(symbol: string, exchange: 'NSE' | 'BSE' = 'NSE', 
     console.warn(`[market] getQuote(${symbol}) failed: ${err?.message ?? err}`);
   }
 
-  // Return stale cached data rather than null (prevents vanishing)
+  // If we reach here, Yahoo didn't return data or threw an error
+  // If we have stale cache, serve it
   if (hit && now - hit.at < STALE_GRACE_MS) return hit.data;
-  return null;
+
+  // Otherwise, cache a dummy to prevent immediate retry spam
+  const dummy: Quote = { symbol, exchange, price: 0, change: 0, change_percent: 0, previous_close: 0, day_high: 0, day_low: 0, volume: 0, currency: 'INR' };
+  cache.set(key, { data: dummy, at: now });
+  return dummy;
 }
 
 export async function getQuotes(
@@ -188,13 +193,28 @@ export async function getQuotes(
     try {
       const results = (await yahooFinance.quote(slice)) as any;
       const arr = Array.isArray(results) ? results : [results];
+      const foundTickers = new Set<string>();
+
       for (const q of arr) {
+        if (q?.symbol) foundTickers.add(q.symbol);
         const src = missKey[q?.symbol];
         if (!src) continue;
         const data = mapYahooQuote(q, src.symbol, src.exchange);
         if (data) {
           cache.set(`${src.symbol}:${src.exchange}`, { data, at: now });
           out.push(data);
+        }
+      }
+
+      // Cache dummies for anything Yahoo didn't return to prevent infinite retry spam
+      for (const ticker of slice) {
+        if (!foundTickers.has(ticker)) {
+          const src = missKey[ticker];
+          if (src) {
+            const dummy: Quote = { symbol: src.symbol, exchange: src.exchange, price: 0, change: 0, change_percent: 0, previous_close: 0, day_high: 0, day_low: 0, volume: 0, currency: 'INR' };
+            cache.set(`${src.symbol}:${src.exchange}`, { data: dummy, at: now });
+            out.push(dummy);
+          }
         }
       }
     } catch (err: any) {
