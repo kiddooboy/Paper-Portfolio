@@ -1,17 +1,18 @@
-import { useEffect, useState } from 'react';
-import axios from 'axios';
+import { useEffect } from 'react';
 import { Bell, Check } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useNotificationsStore } from '../store/notificationsStore';
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState<any[]>([]);
-  useEffect(() => { fetch(); }, []);
-  const fetch = async () => { try { const r = await axios.get('/api/notifications'); setNotifications(r.data); } catch {} };
+  const notifications = useNotificationsStore((s) => s.items);
+  const fetchNotifications = useNotificationsStore((s) => s.fetch);
+  const storeMarkRead = useNotificationsStore((s) => s.markRead);
+
+  useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
 
   const markRead = async (id: number) => {
-    await axios.post(`/api/notifications/${id}/read`);
-    fetch();
-    // Dispatch event to update header notification count
+    await storeMarkRead(id);
+    // Notify any listeners (e.g. header badge) that read state changed
     window.dispatchEvent(new CustomEvent('notification:read'));
   };
 

@@ -16,9 +16,13 @@ router.get('/market-status', (_req, res) => {
 });
 
 // GET /api/stocks/indices — live NIFTY 50 / SENSEX / BANK NIFTY (public, no auth)
+// Cache for 30s while market is open (multiple tabs/users hit this endlessly).
+// When market is closed, cache for 5 min.
 router.get('/indices', async (_req, res) => {
   try {
     const indices = await getIndices();
+    const cacheSec = isMarketOpen() ? 30 : 300;
+    res.set('Cache-Control', `public, max-age=${cacheSec}`);
     res.json({ indices, isOpen: isMarketOpen() });
   } catch {
     res.json({ indices: [], isOpen: isMarketOpen() });

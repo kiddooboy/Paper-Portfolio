@@ -14,12 +14,28 @@ interface AuthState {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
+  hydrated: boolean; // true once persist rehydration has finished
   login: (token: string, user: User) => void;
   logout: () => void;
   updateBalance: (balance: number) => void;
   setUser: (user: User) => void;
   loginMpin: (email: string, mpin: string) => Promise<void>;
   setMpin: (mpin: string) => Promise<void>;
+  setHydrated: () => void;
+}
+
+// Registry of "reset on logout" callbacks from other stores.
+// Other stores call registerLogoutCleanup(() => store.reset()) at module load.
+type Cleanup = () => void;
+const logoutCleanups: Cleanup[] = [];
+export function registerLogoutCleanup(fn: Cleanup) {
+  logoutCleanups.push(fn);
+}
+
+function runLogoutCleanups() {
+  for (const fn of logoutCleanups) {
+    try { fn(); } catch (err) { console.warn('[auth] cleanup failed:', err); }
+  }
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -28,6 +44,7 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       token: null,
       isAuthenticated: false,
+      hydrated: false,
       login: (token, user) => {
         set({ token, user, isAuthenticated: true });
         axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -35,6 +52,9 @@ export const useAuthStore = create<AuthState>()(
         try { localStorage.setItem('last_email', user.email); } catch {}
       },
       logout: () => {
+        // Run all registered cleanup callbacks BEFORE wiping auth state
+        // so that other stores can clean up while still authenticated context exists.
+        runLogoutCleanups();
         set({ token: null, user: null, isAuthenticated: false });
         delete axios.defaults.headers.common['Authorization'];
       },
@@ -47,7 +67,7 @@ export const useAuthStore = create<AuthState>()(
           const res = await axios.post('/api/auth/login-mpin', { email, mpin });
           const { token, user } = res.data;
           set({ token, user, isAuthenticated: true });
-          localStorage.setItem('token', token);
+          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
           try { localStorage.setItem('last_email', user.email); } catch {}
         } catch (err: any) {
           throw new Error(err?.response?.data?.error || 'MPIN login failed');
@@ -60,6 +80,7 @@ export const useAuthStore = create<AuthState>()(
           throw new Error(err?.response?.data?.error || 'Failed to set MPIN');
         }
       },
+      setHydrated: () => set({ hydrated: true }),
     }),
     {
       name: 'auth-storage',
@@ -75,6 +96,8 @@ export const useAuthStore = create<AuthState>()(
           // Make sure auth flag matches token presence
           if (!state.isAuthenticated && state.user) state.isAuthenticated = true;
         }
+        // Mark hydrated so App.tsx can run bootstrap exactly once.
+        state?.setHydrated?.();
       },
     }
   )
@@ -89,14 +112,26 @@ if (storedToken) {
   axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
 }
 
-// Auto-logout on any 401 so stale/expired tokens don't poison the UI.
-// Skip /api/auth endpoints so login/register 401s surface to the form.
+// ─────────────────────────────────────────────────────────────────
+// Smart 401 interceptor.
+//
+// Old behaviour: ANY 401 → instant logout. Too aggressive: a single
+// transient backend hiccup would log the user out, forcing them to
+// re-enter credentials on every fetch failure.
+//
+// New behaviour: only logout if /api/auth/me returns 401 (the canonical
+// "is my token still valid?" probe used by bootstrap). For other endpoints,
+// surface the 401 to the caller without nuking the session.  Bootstrap
+// re-validates the session via /me on every app load and on focus, so an
+// expired token is still caught — just gracefully.
+// ─────────────────────────────────────────────────────────────────
 axios.interceptors.response.use(
   (r) => r,
   (err) => {
     const url: string | undefined = err?.config?.url;
-    const isAuthCall = typeof url === 'string' && url.includes('/api/auth/');
-    if (err?.response?.status === 401 && !isAuthCall) {
+    const is401 = err?.response?.status === 401;
+    const isMeProbe = typeof url === 'string' && url.endsWith('/api/auth/me');
+    if (is401 && isMeProbe) {
       const state = useAuthStore.getState();
       if (state.isAuthenticated) {
         state.logout();

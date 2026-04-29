@@ -1,12 +1,12 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useMarketStore } from '../store/marketStore';
+import { useNotificationsStore } from '../store/notificationsStore';
 import { useEffect, useState } from 'react';
 import Sidebar from './Sidebar';
 import MobileNav from './MobileNav';
 import GlobalSearch from './GlobalSearch';
 import { Bell, TrendingUp, Moon, Sun, MessageSquare } from 'lucide-react';
-import axios from 'axios';
 import { cn } from '../lib/utils';
 
 export default function Layout() {
@@ -14,7 +14,8 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [dark, setDark] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const unreadCount = useNotificationsStore((s) => s.unreadCount);
+  const fetchNotifications = useNotificationsStore((s) => s.fetch);
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -36,30 +37,23 @@ export default function Layout() {
     return () => clearInterval(interval);
   }, []);
 
+  // Refresh notifications periodically (more frequent on /notifications page)
   useEffect(() => {
     if (!isAuthenticated) return;
-    const fetchCount = async () => {
-      try {
-        const res = await axios.get('/api/notifications/unread-count');
-        setUnreadCount(res.data.count);
-      } catch {}
-    };
-    fetchCount();
-    // Refresh every 30 seconds normally, every 3 seconds on notifications page
-    const interval = setInterval(fetchCount, location.pathname === '/notifications' ? 3000 : 30000);
+    fetchNotifications(true);
+    const interval = setInterval(
+      () => fetchNotifications(true),
+      location.pathname === '/notifications' ? 5_000 : 60_000,
+    );
     return () => clearInterval(interval);
-  }, [isAuthenticated, location.pathname]);
+  }, [isAuthenticated, location.pathname, fetchNotifications]);
 
-  // Listen for notification read events to update count immediately
+  // Listen for notification read events to refresh count immediately
   useEffect(() => {
-    const handleNotificationRead = () => {
-      axios.get('/api/notifications/unread-count')
-        .then(res => setUnreadCount(res.data.count))
-        .catch(() => {});
-    };
+    const handleNotificationRead = () => fetchNotifications(true);
     window.addEventListener('notification:read', handleNotificationRead);
     return () => window.removeEventListener('notification:read', handleNotificationRead);
-  }, []);
+  }, [fetchNotifications]);
 
   if (!isAuthenticated) return null;
 

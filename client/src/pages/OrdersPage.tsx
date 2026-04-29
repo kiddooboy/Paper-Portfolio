@@ -1,23 +1,29 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { formatCurrency, cn } from '../lib/utils';
 import { XCircle, Clock, CheckCircle, XCircle as XCircleIcon } from 'lucide-react';
+import { useOrdersStore } from '../store/ordersStore';
+import { usePortfolioStore } from '../store/portfolioStore';
 
 export default function OrdersPage() {
-  const [orders, setOrders] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const orders = useOrdersStore((s) => s.orders);
+  const loadingFromStore = useOrdersStore((s) => s.loading);
+  const fetchOrders = useOrdersStore((s) => s.fetch);
+  const refreshPortfolio = usePortfolioStore((s) => s.fetch);
+  const loading = loadingFromStore && orders.length === 0;
 
-  const fetchOrders = async () => {
-    try { const res = await axios.get('/api/orders'); setOrders(res.data); } catch {}
-    setLoading(false);
-  };
-
-  useEffect(() => { fetchOrders(); }, []);
+  useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
   const cancelOrder = async (id: number) => {
-    try { await axios.post(`/api/orders/${id}/cancel`); toast.success('Order cancelled'); fetchOrders(); }
-    catch (err: any) { toast.error(err.response?.data?.error || 'Failed'); }
+    try {
+      await axios.post(`/api/orders/${id}/cancel`);
+      toast.success('Order cancelled');
+      // Refresh both orders and portfolio (cancel may free up funds)
+      await Promise.all([fetchOrders(true), refreshPortfolio(true)]);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed');
+    }
   };
 
   const pendingOrders = orders.filter(o => o.status === 'PENDING');

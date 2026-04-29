@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
+import { bootstrap } from '../store/bootstrap';
 import { Eye, EyeOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 import AuthLayout from '../components/AuthLayout';
@@ -21,6 +22,7 @@ export default function Register() {
     try {
       const res = await axios.post('/api/auth/register', { name, email, password });
       login(res.data.token, res.data.user);
+      await bootstrap();
       toast.success('Account created! You got ₹1,00,000 virtual balance.');
       navigate(`/setup-mpin?email=${encodeURIComponent(email)}`);
     } catch (err: any) {

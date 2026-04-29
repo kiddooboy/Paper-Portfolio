@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { formatCurrency, formatPercent, cn } from '../lib/utils';
 import { useMarketStore } from '../store/marketStore';
+import { usePortfolioStore } from '../store/portfolioStore';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
   AreaChart, Area, XAxis, YAxis, CartesianGrid, BarChart, Bar,
@@ -20,27 +21,28 @@ type SortKey = 'value' | 'pnl' | 'pnl_pct' | 'weight' | 'day' | 'qty' | 'avg';
 type SortDir = 'asc' | 'desc';
 
 export default function PortfolioPage() {
-  const [rawData, setRawData] = useState<any>(null);
+  const rawData = usePortfolioStore((s) => s.data);
+  const portfolioLoading = usePortfolioStore((s) => s.loading);
+  const fetchPortfolio = usePortfolioStore((s) => s.fetch);
   const [history, setHistory] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('value');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [tab, setTab] = useState<'holdings' | 'transactions'>('holdings');
   const allQuotes = useMarketStore((s) => s.quotes);
+  const loading = (portfolioLoading && !rawData) || !historyLoaded;
 
+  // Refresh portfolio store on mount; fetch history once.
   useEffect(() => {
+    fetchPortfolio();
     (async () => {
       try {
-        const [p, h] = await Promise.all([
-          axios.get('/api/portfolio'),
-          axios.get('/api/portfolio/history'),
-        ]);
-        setRawData(p.data);
-        setHistory(h.data);
+        const h = await axios.get('/api/portfolio/history');
+        setHistory(h.data || []);
       } catch {}
-      setLoading(false);
+      setHistoryLoaded(true);
     })();
-  }, []);
+  }, [fetchPortfolio]);
 
   // Live-enrich holdings from global market store for real-time updates
   const data = useMemo(() => {

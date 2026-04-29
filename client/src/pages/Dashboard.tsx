@@ -5,14 +5,17 @@ import { TrendingUp, TrendingDown } from 'lucide-react';
 import { formatCurrency, formatNumber, cn } from '../lib/utils';
 import { useAuthStore } from '../store/authStore';
 import { useMarketStore } from '../store/marketStore';
+import { usePortfolioStore } from '../store/portfolioStore';
 import StockLogo from '../components/StockLogo';
 
 export default function Dashboard() {
-  const [portfolio, setPortfolio] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const portfolio = usePortfolioStore((s) => s.data);
+  const portfolioLoading = usePortfolioStore((s) => s.loading);
+  const fetchPortfolioStore = usePortfolioStore((s) => s.fetch);
   const [indexData, setIndexData] = useState<any>(null);
   const updateBalance = useAuthStore((s) => s.updateBalance);
   const allQuotes = useMarketStore((s) => s.quotes);
+  const loading = portfolioLoading && !portfolio;
 
 
   // Derive gainers/losers, most bought by volume, and index data from the global live quote store
@@ -60,17 +63,18 @@ export default function Dashboard() {
     return { ...portfolio, holdings, investedValue, currentValue, totalPnl, totalPnlPercent: +totalPnlPercent.toFixed(2) };
   }, [portfolio, allQuotes]);
 
+  // Refresh portfolio in store on mount (bootstrap may have already loaded it)
+  useEffect(() => {
+    fetchPortfolioStore();
+  }, [fetchPortfolioStore]);
+
+  // Keep auth balance in sync with the latest portfolio fetch
+  useEffect(() => {
+    if (portfolio?.balance !== undefined) updateBalance(portfolio.balance);
+  }, [portfolio?.balance, updateBalance]);
+
   useEffect(() => {
     let cancelled = false;
-    const fetchPortfolio = async () => {
-      try {
-        const pRes = await axios.get('/api/portfolio');
-        if (cancelled) return;
-        setPortfolio(pRes.data);
-        if (pRes.data.balance !== undefined) updateBalance(pRes.data.balance);
-      } catch {}
-      setLoading(false);
-    };
     const fetchIndices = async () => {
       try {
         const res = await axios.get('/api/stocks/indices');
@@ -92,14 +96,13 @@ export default function Dashboard() {
         setIndexData(map);
       } catch {}
     };
-    fetchPortfolio();
     fetchIndices();
     const id = setInterval(fetchIndices, 30_000);
     return () => {
       cancelled = true;
       clearInterval(id);
     };
-  }, [updateBalance]);
+  }, []);
 
   if (loading) {
     return (
@@ -266,7 +269,10 @@ export default function Dashboard() {
             {gainers.slice(0, 5).map((s: any) => (
               <Link key={s.symbol} to={`/terminal/${s.symbol}?exchange=${s.exchange || 'NSE'}`} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50">
                 <span className="flex items-center gap-2 text-sm font-medium"><StockLogo symbol={s.symbol} size={32} />{s.symbol}</span>
-                <span className="text-sm text-gain font-medium">+{(s.change_percent ?? 0).toFixed(2)}%</span>
+                <div className="text-right">
+                  <span className="text-sm font-medium tabular-nums block">{formatCurrency(s.price ?? 0)}</span>
+                  <span className="text-xs text-gain font-medium">+{(s.change_percent ?? 0).toFixed(2)}%</span>
+                </div>
               </Link>
             ))}
           </div>
@@ -277,7 +283,10 @@ export default function Dashboard() {
             {losers.slice(0, 5).map((s: any) => (
               <Link key={s.symbol} to={`/terminal/${s.symbol}?exchange=${s.exchange || 'NSE'}`} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50">
                 <span className="flex items-center gap-2 text-sm font-medium"><StockLogo symbol={s.symbol} size={32} />{s.symbol}</span>
-                <span className="text-sm text-loss font-medium">{(s.change_percent ?? 0).toFixed(2)}%</span>
+                <div className="text-right">
+                  <span className="text-sm font-medium tabular-nums block">{formatCurrency(s.price ?? 0)}</span>
+                  <span className="text-xs text-loss font-medium">{(s.change_percent ?? 0).toFixed(2)}%</span>
+                </div>
               </Link>
             ))}
           </div>

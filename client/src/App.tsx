@@ -19,20 +19,24 @@ import PositionsPage from './pages/PositionsPage';
 import AIChatPage from './pages/AIChatPage';
 import WalletPage from './pages/WalletPage';
 import { useAuthStore } from './store/authStore';
-import { startMarketPolling, stopMarketPolling } from './store/marketStore';
+import { bootstrap, teardown, installFocusRevalidation } from './store/bootstrap';
 
 function App() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const hydrated = useAuthStore((s) => s.hydrated);
 
-  // Start/stop adaptive market polling based on auth state
+  // Wait for zustand persist rehydration before deciding what to do.
+  // This prevents a flash of "logged out" UI while we read localStorage.
   useEffect(() => {
+    if (!hydrated) return;
     if (isAuthenticated) {
-      startMarketPolling();
+      bootstrap();
+      installFocusRevalidation();
     } else {
-      stopMarketPolling();
+      teardown();
     }
-    return () => stopMarketPolling();
-  }, [isAuthenticated]);
+    return () => teardown();
+  }, [hydrated, isAuthenticated]);
 
   return (
     <Routes>

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
+import { bootstrap } from '../store/bootstrap';
 import { Eye, EyeOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 import AuthLayout from '../components/AuthLayout';
@@ -23,6 +24,8 @@ export default function Login() {
     try {
       const res = await axios.post('/api/auth/login', { email, password });
       login(res.data.token, res.data.user);
+      // Pre-fetch all user data BEFORE navigating so dashboard has data on first paint
+      await bootstrap();
       toast.success('Welcome back!');
       navigate('/');
     } catch (err: any) {

@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { Lock, Eye, EyeOff } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuthStore } from '../store/authStore';
+import { bootstrap } from '../store/bootstrap';
 import AuthLayout from '../components/AuthLayout';
 
 export default function MpinLoginPage() {
@@ -30,6 +31,7 @@ export default function MpinLoginPage() {
     try {
       const res = await axios.post('/api/auth/login-mpin', { email, mpin });
       login(res.data.token, res.data.user);
+      await bootstrap();
       toast.success('Welcome back!');
       navigate('/');
     } catch (err: any) {

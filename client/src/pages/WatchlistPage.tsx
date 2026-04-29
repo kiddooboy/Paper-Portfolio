@@ -5,17 +5,19 @@ import { Trash2, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatCurrency } from '../lib/utils';
 import { useMarketStore } from '../store/marketStore';
+import { useWatchlistStore } from '../store/watchlistStore';
 import StockLogo from '../components/StockLogo';
 import GlobalSearch from '../components/GlobalSearch';
 
 export default function WatchlistPage() {
-  const [watchlists, setWatchlists] = useState<any[]>([]);
+  const watchlists = useWatchlistStore((s) => s.watchlists);
+  const fetchWatchlists = useWatchlistStore((s) => s.fetch);
   const [newName, setNewName] = useState('');
   const [showNew, setShowNew] = useState(false);
   const allQuotes = useMarketStore((s) => s.quotes);
 
-  const fetch = async () => { try { const r = await axios.get('/api/watchlists'); setWatchlists(r.data); } catch {} };
-  useEffect(() => { fetch(); }, []);
+  const fetch = () => fetchWatchlists(true);
+  useEffect(() => { fetchWatchlists(); }, [fetchWatchlists]);
 
   // Enrich watchlist items with live prices from global store
   const enrichedWatchlists = useMemo(() => {

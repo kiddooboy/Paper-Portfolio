@@ -35,14 +35,19 @@ interface MarketState {
   addSymbols: (symbols: string[]) => void;
   fetchLive: () => Promise<void>;
   getQuote: (symbol: string) => LiveQuote | undefined;
+  reset: () => void;
 }
 
-export const useMarketStore = create<MarketState>((set, get) => ({
-  quotes: {},
-  status: null,
+const initialMarketState = {
+  quotes: {} as Record<string, LiveQuote>,
+  status: null as MarketStatus | null,
   lastFetched: 0,
   loading: false,
-  extraSymbols: [],
+  extraSymbols: [] as string[],
+};
+
+export const useMarketStore = create<MarketState>((set, get) => ({
+  ...initialMarketState,
 
   addSymbols: (symbols) => {
     const current = get().extraSymbols;
@@ -74,6 +79,9 @@ export const useMarketStore = create<MarketState>((set, get) => ({
   },
 
   getQuote: (symbol) => get().quotes[symbol.toUpperCase()],
+
+  // Clear all market data on logout to prevent leakage between user sessions
+  reset: () => set({ ...initialMarketState }),
 }));
 
 // ── Adaptive polling manager ──

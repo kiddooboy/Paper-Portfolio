@@ -5,13 +5,13 @@ import { Search, Filter } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 import StockLogo from '../components/StockLogo';
 
-type Tab = 'all' | 'trending' | 'gainers' | 'losers';
+type Tab = 'gainers' | 'losers';
 
 export default function MarketExplorer() {
   const [stocks, setStocks] = useState<any[]>([]);
   const [query, setQuery] = useState('');
   const [exchange, setExchange] = useState<'NSE' | 'BSE' | ''>('');
-  const [activeTab, setActiveTab] = useState<Tab>('trending');
+  const [activeTab, setActiveTab] = useState<Tab>('gainers');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -25,12 +25,10 @@ export default function MarketExplorer() {
           url = '/api/stocks';
           params = { q: query.trim(), limit: 48, live: 1 };
           if (exchange) params.exchange = exchange;
-        } else if (activeTab === 'gainers') {
-          url = '/api/stocks/gainers';
         } else if (activeTab === 'losers') {
           url = '/api/stocks/losers';
-        } else if (activeTab === 'trending' || activeTab === 'all') {
-          url = '/api/stocks/trending';
+        } else {
+          url = '/api/stocks/gainers';
         }
         const res = await axios.get(url, { params, signal: controller.signal });
         if (url === '/api/stocks') {
@@ -49,7 +47,6 @@ export default function MarketExplorer() {
 
   const tabs: { key: Tab; label: string }[] = useMemo(
     () => [
-      { key: 'trending', label: 'Trending' },
       { key: 'gainers', label: 'Gainers' },
       { key: 'losers', label: 'Losers' },
     ],
