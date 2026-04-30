@@ -1,18 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
 import { formatCurrency, formatPercent, cn } from '../lib/utils';
 import { useMarketStore } from '../store/marketStore';
 import { usePortfolioStore } from '../store/portfolioStore';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, BarChart, Bar,
 } from 'recharts';
 import StockLogo from '../components/StockLogo';
 import {
-  ArrowUpRight, TrendingUp, TrendingDown,
+  ArrowUpRight, TrendingUp,
   Shield, Target, Award, AlertTriangle, Activity,
-  BarChart3, Wallet, PiggyBank, Repeat,
+  BarChart3, PiggyBank, Repeat,
 } from 'lucide-react';
 
 const COLORS = ['#00B386', '#6366F1', '#F59E0B', '#EB5B3C', '#10B981', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316'];
@@ -24,24 +22,15 @@ export default function PortfolioPage() {
   const rawData = usePortfolioStore((s) => s.data);
   const portfolioLoading = usePortfolioStore((s) => s.loading);
   const fetchPortfolio = usePortfolioStore((s) => s.fetch);
-  const [history, setHistory] = useState<any[]>([]);
-  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('value');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [tab, setTab] = useState<'holdings' | 'transactions'>('holdings');
   const allQuotes = useMarketStore((s) => s.quotes);
-  const loading = (portfolioLoading && !rawData) || !historyLoaded;
+  const loading = (portfolioLoading && !rawData);
 
-  // Refresh portfolio store on mount; fetch history once.
+  // Refresh portfolio store on mount
   useEffect(() => {
     fetchPortfolio();
-    (async () => {
-      try {
-        const h = await axios.get('/api/portfolio/history');
-        setHistory(h.data || []);
-      } catch {}
-      setHistoryLoaded(true);
-    })();
   }, [fetchPortfolio]);
 
   // Live-enrich holdings from global market store for real-time updates
@@ -111,12 +100,6 @@ export default function PortfolioPage() {
   const ts = data?.tradeStats || {};
   const isEmpty = !data?.holdings?.length;
 
-  // ── P&L waterfall data for bar chart ──
-  const pnlWaterfall = (data?.holdings || []).map((h: any) => ({
-    name: h.symbol,
-    pnl: +h.pnl.toFixed(2),
-    fill: h.pnl >= 0 ? '#00B386' : '#EB5B3C',
-  }));
 
   return (
     <div className="space-y-5">
@@ -218,7 +201,7 @@ export default function PortfolioPage() {
           </div>
 
           {/* ═══════════ ALLOCATION CHARTS ═══════════ */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 gap-5">
             {/* Sector Donut */}
             <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-4">
               <h3 className="font-semibold mb-1 flex items-center gap-2"><BarChart3 className="w-4 h-4 text-indigo-500" /> Sector Allocation</h3>
@@ -241,33 +224,10 @@ export default function PortfolioPage() {
                 ))}
               </div>
             </div>
-
-            {/* Stock Allocation Donut */}
-            <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-4">
-              <h3 className="font-semibold mb-1 flex items-center gap-2"><Wallet className="w-4 h-4 text-emerald-500" /> Stock Allocation</h3>
-              <div className="h-64 mt-2">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={data?.stockAllocation || []} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={2} label={({name, percent}: any) => `${name} ${percent}%`} labelLine={false}>
-                      {(data?.stockAllocation || []).map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip formatter={(v: any) => formatCurrency(v)} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="flex flex-wrap gap-2 mt-2">
-                {(data?.stockAllocation || []).map((s: any, i: number) => (
-                  <span key={s.name} className="inline-flex items-center gap-1.5 text-[11px]">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
-                    {s.name} <span className="text-gray-400">{s.percent}%</span>
-                  </span>
-                ))}
-              </div>
-            </div>
           </div>
 
-          {/* ═══════════ P&L BREAKDOWN + WATERFALL ═══════════ */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          {/* ═══════════ P&L BREAKDOWN ═══════════ */}
+          <div className="grid grid-cols-1 gap-5">
             {/* Realized vs Unrealized */}
             <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-4 space-y-4">
               <h3 className="font-semibold flex items-center gap-2"><TrendingUp className="w-4 h-4 text-gain" /> P&L Breakdown</h3>
@@ -283,49 +243,9 @@ export default function PortfolioPage() {
                 <div className="flex justify-between"><span>Sell Volume</span><span className="font-medium text-gray-700 dark:text-gray-300">{formatCurrency(ts.sellVolume || 0)}</span></div>
               </div>
             </div>
-
-            {/* P&L Waterfall by stock */}
-            <div className="lg:col-span-2 bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-4">
-              <h3 className="font-semibold mb-2 flex items-center gap-2"><TrendingDown className="w-4 h-4 text-loss" /> P&L by Stock</h3>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={pnlWaterfall} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-                    <XAxis type="number" tickFormatter={(v) => `₹${Math.round(v / 1000)}K`} />
-                    <YAxis type="category" dataKey="name" width={70} tick={{ fontSize: 11 }} />
-                    <Tooltip formatter={(v: any) => formatCurrency(v)} />
-                    <Bar dataKey="pnl" radius={[0, 4, 4, 0]}>
-                      {pnlWaterfall.map((e: any, i: number) => <Cell key={i} fill={e.fill} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
           </div>
 
-          {/* ═══════════ PORTFOLIO VALUE HISTORY ═══════════ */}
-          {history.length > 0 && (
-            <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-4">
-              <h3 className="font-semibold mb-2 flex items-center gap-2"><Activity className="w-4 h-4 text-indigo-500" /> Portfolio Value Over Time</h3>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={history.slice().reverse()}>
-                    <defs>
-                      <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#00B386" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#00B386" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-                    <XAxis dataKey="recorded_at" tickFormatter={(v) => new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} tick={{ fontSize: 10 }} />
-                    <YAxis tickFormatter={(v) => `₹${Math.round(v / 1000)}K`} tick={{ fontSize: 10 }} />
-                    <Tooltip formatter={(v: any) => formatCurrency(v)} labelFormatter={(v) => new Date(v).toLocaleDateString('en-IN')} />
-                    <Area type="monotone" dataKey="total_value" stroke="#00B386" fill="url(#areaGrad)" strokeWidth={2} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          )}
+
 
           {/* ═══════════ HOLDINGS / TRANSACTIONS TABS ═══════════ */}
           <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
