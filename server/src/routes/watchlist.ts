@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { db } from '../db/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { getCachedQuotes } from '../services/marketData.js';
+import { logActivity, getClientIp } from '../services/activityLogger.js';
 
 const router = Router();
 
@@ -54,6 +55,7 @@ router.post('/:id/items', authMiddleware, async (req: AuthRequest, res) => {
   if (!known) return res.status(400).json({ error: 'Only NIFTY 500 stocks can be added to watchlist' });
 
   await db.prepare('INSERT INTO watchlist_items (watchlist_id, symbol) VALUES (?, ?)').run(watchlistId, upperSymbol);
+  logActivity(req.user!.id, 'WATCHLIST_ADD', { symbol: upperSymbol }, getClientIp(req));
   res.json({ success: true });
 });
 
@@ -104,6 +106,7 @@ router.post('/toggle', authMiddleware, async (req: AuthRequest, res) => {
 
   if (existingItem) {
     await db.prepare('DELETE FROM watchlist_items WHERE id = ?').run(existingItem.id);
+    logActivity(userId, 'WATCHLIST_REMOVE', { symbol }, getClientIp(req));
     return res.json({ inWatchlist: false, action: 'removed' });
   }
 
@@ -112,6 +115,7 @@ router.post('/toggle', authMiddleware, async (req: AuthRequest, res) => {
     watchlistId,
     symbol
   );
+  logActivity(userId, 'WATCHLIST_ADD', { symbol }, getClientIp(req));
   res.json({ inWatchlist: true, action: 'added', watchlistId });
 });
 
@@ -120,6 +124,7 @@ router.delete('/:id/items/:symbol', authMiddleware, async (req: AuthRequest, res
   const symbol = req.params.symbol;
 
   await db.prepare('DELETE FROM watchlist_items WHERE watchlist_id = ? AND symbol = ?').run(watchlistId, symbol);
+  logActivity(req.user!.id, 'WATCHLIST_REMOVE', { symbol, watchlistId }, getClientIp(req));
   res.json({ success: true });
 });
 

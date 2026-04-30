@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { db } from '../db/index.js';
 import { generateToken, authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { z } from 'zod';
+import { logActivity, getClientIp } from '../services/activityLogger.js';
 
 const router = Router();
 
@@ -39,9 +40,15 @@ router.post('/register', async (req, res) => {
 
     const role = email === ADMIN_EMAIL ? 'admin' : 'user';
     const hashedPw = await bcrypt.hash(password, 10);
-    const result = await db.prepare('INSERT INTO users (name, email, password, role, balance) VALUES (?, ?, ?, ?, ?)').run(name, email, hashedPw, role, 100000);
+    const now = new Date().toISOString();
+    const result = await db.prepare(
+      'INSERT INTO users (name, email, password, role, balance, last_login) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(name, email, hashedPw, role, 100000, now);
     const userId = result.lastInsertRowid as number;
     const token = generateToken(userId, email, role);
+
+    logActivity(userId, 'REGISTER', { name, email }, getClientIp(req));
+
     res.json({ token, user: { id: userId, name, email, role, balance: 100000 } });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Invalid data' });
@@ -60,6 +67,13 @@ router.post('/login', async (req, res) => {
 
     const role = user.role || 'user';
     const token = generateToken(user.id, user.email, role);
+
+    // Update last_login
+    const now = new Date().toISOString();
+    db.prepare('UPDATE users SET last_login = ? WHERE id = ?').run(now, user.id);
+
+    logActivity(user.id, 'LOGIN', { method: 'password' }, getClientIp(req));
+
     res.json({ token, user: { id: user.id, name: user.name, email: user.email, role, balance: user.balance } });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Invalid data' });
@@ -73,6 +87,9 @@ router.post('/set-mpin', authMiddleware, async (req: AuthRequest, res) => {
     const userId = req.user!.id;
     const hashedMpin = await bcrypt.hash(mpin, 10);
     await db.prepare('UPDATE users SET mpin_hash = ? WHERE id = ?').run(hashedMpin, userId);
+
+    logActivity(userId, 'SET_MPIN', undefined, getClientIp(req));
+
     res.json({ success: true });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Invalid data' });
@@ -93,6 +110,13 @@ router.post('/login-mpin', async (req, res) => {
 
     const role = user.role || 'user';
     const token = generateToken(user.id, user.email, role);
+
+    // Update last_login
+    const now = new Date().toISOString();
+    db.prepare('UPDATE users SET last_login = ? WHERE id = ?').run(now, user.id);
+
+    logActivity(user.id, 'LOGIN_MPIN', { method: 'mpin' }, getClientIp(req));
+
     res.json({ token, user: { id: user.id, name: user.name, email: user.email, role, balance: user.balance } });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Invalid data' });
@@ -100,9 +124,22 @@ router.post('/login-mpin', async (req, res) => {
 });
 
 router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
-  const user = (await db.prepare('SELECT id, name, email, role, balance, created_at FROM users WHERE id = ?').get(req.user!.id)) as any;
+  const user = (await db.prepare(
+    'SELECT id, name, email, role, balance, mpin_hash, last_login, created_at FROM users WHERE id = ?'
+  ).get(req.user!.id)) as any;
   if (!user) return res.status(401).json({ error: 'User not found' });
-  res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role || 'user', balance: user.balance, created_at: user.created_at } });
+  res.json({
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role || 'user',
+      balance: user.balance,
+      has_mpin: !!user.mpin_hash,
+      last_login: user.last_login,
+      created_at: user.created_at,
+    },
+  });
 });
 
 export default router;

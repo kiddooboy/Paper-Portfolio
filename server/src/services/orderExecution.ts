@@ -1,6 +1,7 @@
 import { db } from '../db/index.js';
 import { getQuote, isMarketOpen } from './marketData.js';
 import { fillOrder } from '../routes/orders.js';
+import { logActivity } from './activityLogger.js';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Order execution engine for queued / pending orders.
@@ -47,6 +48,14 @@ async function failOrder(order: PendingOrder, reason: string) {
     `Order Failed: ${order.transaction_type} ${order.symbol}`,
     `Your queued ${order.type} ${order.transaction_type} order for ${order.quantity} ${order.symbol} share(s) could not be executed: ${reason}`,
   );
+  logActivity(order.user_id, 'ORDER_FAILED', {
+    orderId: order.id,
+    symbol: order.symbol,
+    type: order.type,
+    transactionType: order.transaction_type,
+    quantity: order.quantity,
+    reason,
+  });
 }
 
 /**
@@ -93,6 +102,15 @@ async function tryFillOrder(order: PendingOrder, currentPrice: number): Promise<
   console.log(
     `[OrderExecution] Filled order ${order.id}: ${order.transaction_type} ${order.quantity} ${order.symbol} @ ₹${currentPrice.toFixed(2)}`,
   );
+  logActivity(order.user_id, 'ORDER_FILLED', {
+    orderId: order.id,
+    symbol: order.symbol,
+    type: order.type,
+    transactionType: order.transaction_type,
+    quantity: order.quantity,
+    price: currentPrice,
+    total: currentPrice * order.quantity,
+  });
   return true;
 }
 

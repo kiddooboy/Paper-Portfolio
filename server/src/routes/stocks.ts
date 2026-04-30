@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { db } from '../db/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { getQuote, getCachedQuote, getCachedQuotes, getCachedIndices, getHistory, isMarketOpen, getMarketStatus } from '../services/marketData.js';
+import { logActivity, getClientIp } from '../services/activityLogger.js';
 
 const router = Router();
 
@@ -284,6 +285,8 @@ router.post('/:symbol/alert', authMiddleware, async (req: AuthRequest, res) => {
   await db.prepare(
     `INSERT INTO price_alerts (user_id, symbol, target_price, condition) VALUES (?, ?, ?, ?)`
   ).run(userId, symbol, targetPrice, condition);
+
+  logActivity(userId, 'PRICE_ALERT_SET', { symbol, targetPrice, condition }, getClientIp(req));
 
   res.json({ success: true, message: 'Price alert set' });
 });

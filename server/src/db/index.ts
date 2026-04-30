@@ -2,6 +2,7 @@ import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import bcrypt from 'bcryptjs';
 import path from 'node:path';
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -18,9 +19,16 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 // continue to work without modification.
 // ────────────────────────────────────────────────────────────────────────────
 
+// Anchor DB path to the *server* package root (one level above src/)
+// so the database file is always in the same location regardless of
+// which directory the process is started from.
+const __db_filename = fileURLToPath(import.meta.url);
+const __db_dirname = path.dirname(__db_filename);
+const SERVER_ROOT = path.resolve(__db_dirname, '..');  // server/src -> server/
+
 const DB_PATH =
   process.env.DB_PATH ||
-  path.resolve(process.cwd(), 'data', 'papertrading.db');
+  path.resolve(SERVER_ROOT, 'data', 'papertrading.db');
 
 // Ensure the parent directory exists.
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
@@ -263,6 +271,15 @@ export async function initSchema() {
         amount        REAL NOT NULL,
         created_at    TEXT NOT NULL DEFAULT (datetime('now'))
       );
+
+      CREATE TABLE IF NOT EXISTS activity_log (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        action        TEXT NOT NULL,
+        details       TEXT,
+        ip_address    TEXT,
+        created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+      );
     `);
     raw.exec('COMMIT');
     console.log('[db] core tables created/verified');
@@ -296,9 +313,16 @@ export async function initSchema() {
     `CREATE INDEX IF NOT EXISTS idx_portfolio_history_user_id ON portfolio_history(user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_portfolio_history_recorded_at ON portfolio_history(user_id, recorded_at)`,
     `CREATE INDEX IF NOT EXISTS idx_wallet_txns_user_id  ON wallet_transactions(user_id)`,
+    // Activity log indexes
+    `CREATE INDEX IF NOT EXISTS idx_activity_log_user_id    ON activity_log(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_activity_log_action     ON activity_log(action)`,
+    `CREATE INDEX IF NOT EXISTS idx_activity_log_created_at ON activity_log(created_at)`,
   ];
   for (const sql of indexes) safeExec(sql, 'index');
   console.log('[db] indexes ensured');
+
+  // ── Phase 2b: Migrations (add columns to existing tables) ──
+  safeExec(`ALTER TABLE users ADD COLUMN last_login TEXT`, 'migration: users.last_login');
 
   // ── Phase 3: updated_at triggers ──
   // Drop-and-recreate so any older incompatible trigger definition (e.g.

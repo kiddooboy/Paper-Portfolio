@@ -28,6 +28,7 @@ import cron from 'node-cron';
 import { getQuote, getQuotes, getIndices, isMarketOpen, NIFTY50 } from './services/marketData.js';
 import { ingestSymbols } from './services/symbolIngest.js';
 import { startOrderExecutionScheduler } from './services/orderExecution.js';
+import { logActivity } from './services/activityLogger.js';
 
 import authRoutes from './routes/auth.js';
 import stockRoutes from './routes/stocks.js';
@@ -109,6 +110,12 @@ async function main() {
           `Price Alert: ${alert.symbol}`,
           `${alert.symbol} is now ${alert.condition === 'above' ? 'above' : 'below'} ₹${alert.target_price}`
         );
+        logActivity(alert.user_id, 'PRICE_ALERT_TRIGGERED', {
+          symbol: alert.symbol,
+          targetPrice: alert.target_price,
+          condition: alert.condition,
+          currentPrice: price,
+        });
       }
     }
   }

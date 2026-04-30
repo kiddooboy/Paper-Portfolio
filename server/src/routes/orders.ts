@@ -3,6 +3,7 @@ import { db } from '../db/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { getQuote, isMarketOpen } from '../services/marketData.js';
 import { z } from 'zod';
+import { logActivity, getClientIp } from '../services/activityLogger.js';
 
 const router = Router();
 
@@ -105,6 +106,22 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
         ? 'Markets are closed. Order queued for execution at next market open (9:15 AM IST).'
         : undefined,
     });
+
+    // Activity logging (fire-and-forget, after response)
+    const action = transactionType === 'BUY' ? 'BUY_ORDER' : 'SELL_ORDER';
+    logActivity(userId, action as any, {
+      orderId,
+      symbol: upperSymbol,
+      type,
+      quantity,
+      price: orderPrice,
+      total: totalAmount,
+      queued,
+      status: queued ? 'QUEUED' : (marketOpen && type === 'MARKET' ? 'FILLED' : 'PENDING'),
+    }, getClientIp(req));
+    if (queued) {
+      logActivity(userId, 'ORDER_QUEUED', { orderId, symbol: upperSymbol, type, quantity }, getClientIp(req));
+    }
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Invalid data' });
   }
@@ -183,6 +200,15 @@ router.post('/:id/cancel', authMiddleware, async (req: AuthRequest, res) => {
   if (order.status !== 'PENDING') return res.status(400).json({ error: 'Order already processed' });
 
   await db.prepare("UPDATE orders SET status = 'CANCELLED' WHERE id = ?").run(orderId);
+
+  logActivity(userId, 'CANCEL_ORDER', {
+    orderId,
+    symbol: order.symbol,
+    type: order.type,
+    transactionType: order.transaction_type,
+    quantity: order.quantity,
+  }, getClientIp(req));
+
   res.json({ success: true });
 });
 
