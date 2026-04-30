@@ -1,127 +1,224 @@
 import { db } from '../db/index.js';
-import { getQuote } from './marketData.js';
+import { getQuote, isMarketOpen } from './marketData.js';
 import { fillOrder } from '../routes/orders.js';
 
-/**
- * Execute all pending orders at market close
- * This should be scheduled to run at 3:30 PM IST daily
- */
-export async function executePendingOrdersAtClose() {
-  console.log('[OrderExecution] Starting end-of-day order execution...');
+// ────────────────────────────────────────────────────────────────────────────
+// Order execution engine for queued / pending orders.
+//
+// Behavioural rules:
+//   • Orders placed AFTER hours are inserted as PENDING (no balance debit,
+//     no holdings change). They sit waiting for the market to reopen.
+//   • At MARKET OPEN (9:15 AM IST), `executePendingOrdersAtOpen` runs and:
+//        – fills every PENDING MARKET order at the current (open) price
+//        – fills every PENDING LIMIT order whose price condition is met
+//        – leaves un-met LIMIT orders as PENDING (user can cancel them)
+//   • DURING market hours, a periodic sweep (every 60s) re-checks PENDING
+//     LIMIT orders so they fill the moment their threshold is touched.
+//   • If a queued order can no longer be filled (insufficient balance /
+//     no holdings) at execution time, it is marked FAILED and a
+//     notification is created for the user.
+// ────────────────────────────────────────────────────────────────────────────
 
-  // Get all pending orders
-  const pendingOrders = (await db.prepare(`
-    SELECT * FROM orders WHERE status = 'PENDING'
-  `).all()) as any[];
+interface PendingOrder {
+  id: number;
+  user_id: number;
+  symbol: string;
+  type: 'MARKET' | 'LIMIT';
+  transaction_type: 'BUY' | 'SELL';
+  quantity: number;
+  limit_price: number | null;
+  status: string;
+}
 
-  if (pendingOrders.length === 0) {
-    console.log('[OrderExecution] No pending orders to execute');
-    return;
+async function notify(userId: number, title: string, message: string) {
+  try {
+    await db.prepare(
+      `INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, 'order')`,
+    ).run(userId, title, message);
+  } catch (err) {
+    console.error('[OrderExecution] notify failed:', err);
   }
+}
 
-  console.log(`[OrderExecution] Found ${pendingOrders.length} pending orders`);
-
-  let executed = 0;
-  let failed = 0;
-
-  for (const order of pendingOrders) {
-    try {
-      // Get current market price
-      const quote = await getQuote(order.symbol, order.exchange || 'NSE');
-      if (!quote) {
-        console.error(`[OrderExecution] Failed to get quote for ${order.symbol}`);
-        failed++;
-        // Mark as failed
-        await db.prepare("UPDATE orders SET status = 'FAILED' WHERE id = ?").run(order.id);
-        continue;
-      }
-
-      const currentPrice = quote.price;
-
-      // For LIMIT orders, check if price is favorable
-      if (order.type === 'LIMIT') {
-        const shouldExecute = order.transaction_type === 'BUY'
-          ? currentPrice <= (order.limit_price || Infinity)
-          : currentPrice >= (order.limit_price || 0);
-
-        if (!shouldExecute) {
-          console.log(`[OrderExecution] LIMIT order ${order.id} not executed - price not favorable`);
-          // Keep as pending for next day or cancel
-          await db.prepare("UPDATE orders SET status = 'EXPIRED' WHERE id = ?").run(order.id);
-          continue;
-        }
-      }
-
-      // Execute the order
-      await fillOrder(order.id, order.user_id, order.symbol, order.transaction_type, order.quantity, currentPrice);
-      executed++;
-      console.log(`[OrderExecution] Executed order ${order.id}: ${order.transaction_type} ${order.quantity} ${order.symbol} @ ${currentPrice}`);
-
-      // Create notification for the user
-      await db.prepare(`
-        INSERT INTO notifications (user_id, title, message, type)
-        VALUES (?, ?, ?, 'order')
-      `).run(
-        order.user_id,
-        `Order Filled: ${order.transaction_type} ${order.symbol}`,
-        `Your ${order.transaction_type} order for ${order.quantity} shares of ${order.symbol} has been executed at ₹${currentPrice.toFixed(2)}`
-      );
-    } catch (error) {
-      console.error(`[OrderExecution] Failed to execute order ${order.id}:`, error);
-      failed++;
-      await db.prepare("UPDATE orders SET status = 'FAILED' WHERE id = ?").run(order.id);
-    }
-  }
-
-  console.log(`[OrderExecution] Execution complete: ${executed} executed, ${failed} failed`);
+async function failOrder(order: PendingOrder, reason: string) {
+  await db.prepare(`UPDATE orders SET status = 'FAILED' WHERE id = ?`).run(order.id);
+  await notify(
+    order.user_id,
+    `Order Failed: ${order.transaction_type} ${order.symbol}`,
+    `Your queued ${order.type} ${order.transaction_type} order for ${order.quantity} ${order.symbol} share(s) could not be executed: ${reason}`,
+  );
 }
 
 /**
- * Start the scheduled order execution job
- * Runs daily at 3:30 PM IST
+ * Try to fill one pending order at `currentPrice`. Returns true if filled.
+ *  - For MARKET orders: always fills (after re-validation).
+ *  - For LIMIT orders: only fills if the limit condition is met.
+ *  - Re-validates balance (BUY) / holdings (SELL); marks FAILED if not.
  */
-let executionTimer: NodeJS.Timeout | null = null;
+async function tryFillOrder(order: PendingOrder, currentPrice: number): Promise<boolean> {
+  // For LIMIT orders, check the condition first.
+  if (order.type === 'LIMIT') {
+    const limit = order.limit_price ?? 0;
+    const ok = order.transaction_type === 'BUY' ? currentPrice <= limit : currentPrice >= limit;
+    if (!ok) return false; // keep PENDING — sweep will retry next tick
+  }
+
+  // Re-validate balance/holdings at the moment of execution.
+  const totalAmount = currentPrice * order.quantity;
+  if (order.transaction_type === 'BUY') {
+    const user = (await db.prepare('SELECT balance FROM users WHERE id = ?').get(order.user_id)) as any;
+    if (!user || Number(user.balance) < totalAmount) {
+      await failOrder(order, 'Insufficient balance at execution time');
+      return false;
+    }
+  } else {
+    const holding = (await db
+      .prepare('SELECT quantity FROM holdings WHERE user_id = ? AND symbol = ?')
+      .get(order.user_id, order.symbol)) as any;
+    if (!holding || Number(holding.quantity) < order.quantity) {
+      await failOrder(order, 'Insufficient holdings at execution time');
+      return false;
+    }
+  }
+
+  // fillOrder handles balance/holdings/transaction/notification atomically.
+  await fillOrder(
+    order.id,
+    order.user_id,
+    order.symbol,
+    order.transaction_type,
+    order.quantity,
+    currentPrice,
+  );
+  console.log(
+    `[OrderExecution] Filled order ${order.id}: ${order.transaction_type} ${order.quantity} ${order.symbol} @ ₹${currentPrice.toFixed(2)}`,
+  );
+  return true;
+}
+
+/**
+ * Sweep all PENDING orders, filling those whose conditions are satisfied.
+ * Used both at market-open (where MARKET orders are also filled) and
+ * during the periodic intra-day sweep (LIMIT orders only — but MARKET
+ * orders are also processed defensively).
+ */
+async function sweepPendingOrders(label: string) {
+  const pending = (await db
+    .prepare(`SELECT * FROM orders WHERE status = 'PENDING' ORDER BY created_at ASC`)
+    .all()) as unknown as PendingOrder[];
+
+  if (pending.length === 0) return { filled: 0, kept: 0, failed: 0 };
+
+  let filled = 0, kept = 0, failed = 0;
+  for (const order of pending) {
+    try {
+      const quote = await getQuote(order.symbol, 'NSE');
+      if (!quote) {
+        kept++;
+        continue; // try again next sweep
+      }
+      const ok = await tryFillOrder(order, quote.price);
+      if (ok) filled++; else kept++;
+    } catch (err) {
+      console.error(`[OrderExecution] order ${order.id} sweep error:`, err);
+      try {
+        await failOrder(order, 'Internal error during execution');
+        failed++;
+      } catch {}
+    }
+  }
+  if (filled || failed) {
+    console.log(`[OrderExecution:${label}] ${filled} filled, ${kept} kept pending, ${failed} failed (of ${pending.length})`);
+  }
+  return { filled, kept, failed };
+}
+
+/** Public: full sweep at market open. */
+export async function executePendingOrdersAtOpen() {
+  console.log('[OrderExecution] === Market open sweep starting ===');
+  await sweepPendingOrders('open');
+}
+
+/** Public: periodic sweep during market hours (cheap — no-ops if nothing pending). */
+export async function executePendingOrdersIntraday() {
+  if (!isMarketOpen()) return;
+  await sweepPendingOrders('intraday');
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Scheduler
+// ────────────────────────────────────────────────────────────────────────────
+let openTimer: NodeJS.Timeout | null = null;
+let intradayInterval: NodeJS.Timeout | null = null;
+
+/** Returns the next 9:15 AM IST (skipping weekends) as a UTC Date.
+ *  9:15 AM IST  ==  3:45 AM UTC (IST = UTC + 5:30). */
+function nextMarketOpen(): Date {
+  const now = new Date();
+  // Build today's 9:15 IST in UTC terms.
+  const target = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 3, 45, 0, 0),
+  );
+  if (now.getTime() >= target.getTime()) {
+    target.setUTCDate(target.getUTCDate() + 1);
+  }
+  // Skip weekends — compute the day-of-week of `target` AS SEEN IN IST.
+  while (true) {
+    const istDay = new Date(target.getTime() + 5.5 * 3600000).getUTCDay();
+    if (istDay === 0 || istDay === 6) {
+      target.setUTCDate(target.getUTCDate() + 1);
+    } else {
+      break;
+    }
+  }
+  return target;
+}
+
+function scheduleNextOpen() {
+  const nextOpenUtc = nextMarketOpen();
+  const delayMs = Math.max(1000, nextOpenUtc.getTime() - Date.now());
+  console.log(
+    `[OrderExecution] Next market-open execution scheduled for ${nextOpenUtc.toISOString()} (in ${Math.round(delayMs / 60000)} minutes)`,
+  );
+  openTimer = setTimeout(async () => {
+    try {
+      await executePendingOrdersAtOpen();
+    } catch (err) {
+      console.error('[OrderExecution] open sweep failed:', err);
+    }
+    scheduleNextOpen();
+  }, delayMs);
+}
 
 export function startOrderExecutionScheduler() {
-  if (executionTimer) {
+  if (openTimer || intradayInterval) {
     console.log('[OrderExecution] Scheduler already running');
     return;
   }
+  console.log('[OrderExecution] Starting scheduler — open=9:15 IST, intraday sweep every 60s');
 
-  console.log('[OrderExecution] Starting scheduler for 3:30 PM IST execution');
+  // 1) Market-open one-shot timer (re-arms each day).
+  scheduleNextOpen();
 
-  // Calculate time until next 3:30 PM IST
-  function scheduleNextExecution() {
-    const now = new Date();
-    const istTime = new Date(now.getTime() + 5.5 * 60 * 60 * 1000); // UTC+5:30
-    
-    const targetTime = new Date(istTime);
-    targetTime.setHours(15, 30, 0, 0); // 3:30 PM
+  // 2) Periodic intra-day sweep (every 60s, no-op when market is closed).
+  intradayInterval = setInterval(() => {
+    executePendingOrdersIntraday().catch((err) =>
+      console.error('[OrderExecution] intraday sweep failed:', err),
+    );
+  }, 60_000);
 
-    // If target time has passed today, schedule for tomorrow
-    if (istTime > targetTime) {
-      targetTime.setDate(targetTime.getDate() + 1);
-    }
-
-    const delay = targetTime.getTime() - istTime.getTime();
-    const delayMs = delay > 0 ? delay : 24 * 60 * 60 * 1000; // Default to 24 hours
-
-    console.log(`[OrderExecution] Next execution scheduled for ${targetTime.toISOString()} (in ${Math.round(delayMs / 1000 / 60)} minutes)`);
-
-    executionTimer = setTimeout(async () => {
-      await executePendingOrdersAtClose();
-      // Schedule next day
-      scheduleNextExecution();
-    }, delayMs);
+  // 3) If the server happens to be started while market is already open,
+  //    immediately run a sweep so any leftover PENDING orders from a previous
+  //    after-hours session don't have to wait an extra minute.
+  if (isMarketOpen()) {
+    executePendingOrdersAtOpen().catch((err) =>
+      console.error('[OrderExecution] startup sweep failed:', err),
+    );
   }
-
-  scheduleNextExecution();
 }
 
 export function stopOrderExecutionScheduler() {
-  if (executionTimer) {
-    clearTimeout(executionTimer);
-    executionTimer = null;
-    console.log('[OrderExecution] Scheduler stopped');
-  }
+  if (openTimer) { clearTimeout(openTimer); openTimer = null; }
+  if (intradayInterval) { clearInterval(intradayInterval); intradayInterval = null; }
+  console.log('[OrderExecution] Scheduler stopped');
 }

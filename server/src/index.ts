@@ -25,7 +25,6 @@ import express from 'express';
 import cors from 'cors';
 import { initSchema, db, shutdownPool } from './db/index.js';
 import cron from 'node-cron';
-import { fillOrder } from './routes/orders.js';
 import { getQuote, getQuotes, getIndices, isMarketOpen, NIFTY50 } from './services/marketData.js';
 import { ingestSymbols } from './services/symbolIngest.js';
 import { startOrderExecutionScheduler } from './services/orderExecution.js';
@@ -83,37 +82,6 @@ async function main() {
     });
   }
 
-  async function checkLimitOrders() {
-    const pending = (await db
-      .prepare(`SELECT * FROM orders WHERE status = 'PENDING' AND type = 'LIMIT'`)
-      .all()) as any[];
-    if (!pending.length) return;
-
-    const uniqueSymbols = Array.from(new Set(pending.map((o) => o.symbol)));
-    const quotes = await getQuotes(
-      uniqueSymbols.map((s) => ({ symbol: s, exchange: 'NSE' as const }))
-    );
-    const priceMap = new Map(quotes.map((q) => [q.symbol, q.price]));
-
-    for (const order of pending) {
-      const currentPrice = priceMap.get(order.symbol);
-      if (currentPrice == null) continue;
-      const shouldFill =
-        (order.transaction_type === 'BUY' && currentPrice <= order.limit_price) ||
-        (order.transaction_type === 'SELL' && currentPrice >= order.limit_price);
-      if (shouldFill) {
-        fillOrder(
-          order.id,
-          order.user_id,
-          order.symbol,
-          order.transaction_type,
-          order.quantity,
-          currentPrice
-        );
-      }
-    }
-  }
-
   async function checkPriceAlerts() {
     const alerts = (await db
       .prepare('SELECT * FROM price_alerts WHERE triggered = FALSE')
@@ -169,10 +137,10 @@ async function main() {
     }
   }
 
-  // Every minute during market hours: check pending limit orders and price alerts.
+  // Every minute during market hours: check price alerts.
+  // Pending order sweeps (MARKET + LIMIT) are handled by the orderExecution scheduler.
   cron.schedule('*/60 * * * * *', () => {
     if (!isMarketOpen()) return;
-    checkLimitOrders().catch(err => console.error('[cron] checkLimitOrders error:', err));
     checkPriceAlerts().catch(err => console.error('[cron] checkPriceAlerts error:', err));
   });
 

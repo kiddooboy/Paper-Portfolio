@@ -5,6 +5,7 @@ import { formatCurrency, cn } from '../lib/utils';
 import { XCircle, Clock, CheckCircle, XCircle as XCircleIcon } from 'lucide-react';
 import { useOrdersStore } from '../store/ordersStore';
 import { usePortfolioStore } from '../store/portfolioStore';
+import { useMarketStore } from '../store/marketStore';
 
 export default function OrdersPage() {
   const orders = useOrdersStore((s) => s.orders);
@@ -12,6 +13,8 @@ export default function OrdersPage() {
   const fetchOrders = useOrdersStore((s) => s.fetch);
   const refreshPortfolio = usePortfolioStore((s) => s.fetch);
   const loading = loadingFromStore && orders.length === 0;
+  const marketStatus = useMarketStore((s) => s.status);
+  const isMarketClosed = marketStatus ? !marketStatus.isOpen : false;
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
@@ -39,10 +42,20 @@ export default function OrdersPage() {
       {/* Pending Orders */}
       {pendingOrders.length > 0 && (
         <div className="space-y-3">
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Clock className="w-5 h-5 text-yellow-500" />
-            Pending Orders ({pendingOrders.length})
-          </h2>
+          <div>
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <Clock className="w-5 h-5 text-yellow-500" />
+              Pending Orders ({pendingOrders.length})
+            </h2>
+            {isMarketClosed && (
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 ml-7">
+                🕐 Market is closed — pending orders will execute at next market open
+                {marketStatus?.nextOpen && (
+                  <span className="font-medium"> ({new Date(marketStatus.nextOpen).toLocaleString('en-IN', { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: true })})</span>
+                )}
+              </p>
+            )}
+          </div>
           {pendingOrders.map((o) => (
             <div key={o.id} className="bg-white dark:bg-groww-card rounded-xl border border-yellow-200 dark:border-yellow-900/30 p-4 flex items-center justify-between">
               <div>
@@ -55,9 +68,13 @@ export default function OrdersPage() {
                 {o.limit_price && <p className="text-xs text-gray-400">Limit: {formatCurrency(o.limit_price)}</p>}
                 <p className="text-xs text-gray-400">{new Date(o.created_at).toLocaleString()}</p>
               </div>
-              <div className="text-right">
-                <span className="text-xs font-semibold px-2 py-1 rounded-full bg-yellow-50 text-yellow-600 dark:bg-yellow-900/20">PENDING</span>
-                <button onClick={()=>cancelOrder(o.id)} className="ml-2 text-gray-400 hover:text-red-500"><XCircle className="w-4 h-4"/></button>
+              <div className="text-right flex flex-col items-end gap-1">
+                {isMarketClosed ? (
+                  <span className="text-xs font-semibold px-2 py-1 rounded-full bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400">QUEUED</span>
+                ) : (
+                  <span className="text-xs font-semibold px-2 py-1 rounded-full bg-yellow-50 text-yellow-600 dark:bg-yellow-900/20">PENDING</span>
+                )}
+                <button onClick={()=>cancelOrder(o.id)} className="text-gray-400 hover:text-red-500 mt-1" title="Cancel order"><XCircle className="w-4 h-4"/></button>
               </div>
             </div>
           ))}

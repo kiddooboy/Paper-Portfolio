@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { ArrowLeft, TrendingUp, TrendingDown, Bell, Bookmark, BookmarkCheck } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Bell, Bookmark, BookmarkCheck, Clock } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
 import { useAuthStore } from '../store/authStore';
 import { useMarketStore } from '../store/marketStore';
@@ -114,6 +114,10 @@ export default function TerminalPage() {
   }, [orderType, limitPrice, quote]);
   const totalValue = executionPrice * qty;
 
+  // Market status from the global store
+  const marketStatus = useMarketStore((s) => s.status);
+  const isMarketClosed = marketStatus ? !marketStatus.isOpen : false;
+
   const placeOrder = async () => {
     if (!quote) return;
     if (orderType === 'LIMIT' && !limitPrice) {
@@ -122,7 +126,7 @@ export default function TerminalPage() {
     }
     setPlacing(true);
     try {
-      await axios.post('/api/orders', {
+      const res = await axios.post('/api/orders', {
         symbol: symbol.toUpperCase(),
         exchange,
         type: orderType,
@@ -130,7 +134,11 @@ export default function TerminalPage() {
         quantity: qty,
         limitPrice: orderType === 'LIMIT' ? parseFloat(limitPrice) : undefined,
       });
-      toast.success(`${tab.toUpperCase()} order ${orderType === 'MARKET' ? 'filled' : 'placed'}`);
+      if (res.data.queued) {
+        toast.success(res.data.message || `Order queued — will execute at next market open (9:15 AM IST)`, { duration: 5000, icon: '🕐' });
+      } else {
+        toast.success(`${tab.toUpperCase()} order ${res.data.status === 'FILLED' ? 'filled' : 'placed'} successfully!`);
+      }
       // Refresh balance
       const p = await axios.get('/api/portfolio');
       if (p.data.balance !== undefined) updateBalance(p.data.balance);
@@ -295,6 +303,22 @@ export default function TerminalPage() {
             </button>
           </div>
 
+          {/* Market closed banner */}
+          {isMarketClosed && (
+            <div className="mx-3 mt-3 px-3 py-2.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 flex items-start gap-2">
+              <Clock className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">Market Closed</p>
+                <p className="text-[11px] text-amber-600 dark:text-amber-500 mt-0.5">
+                  Orders will be queued and executed at next market open
+                  {marketStatus?.nextOpen && (
+                    <span className="font-medium"> — {new Date(marketStatus.nextOpen).toLocaleString('en-IN', { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: true })}</span>
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Order form */}
           <div className="p-4 space-y-4 flex-1">
             <div>
@@ -385,7 +409,9 @@ export default function TerminalPage() {
             >
               {placing
                 ? 'Placing…'
-                : `${tab === 'buy' ? 'BUY' : 'SELL'} ${qty} ${symbol}`}
+                : isMarketClosed
+                  ? `🕐 Queue ${tab === 'buy' ? 'BUY' : 'SELL'} ${qty} ${symbol}`
+                  : `${tab === 'buy' ? 'BUY' : 'SELL'} ${qty} ${symbol}`}
             </button>
             <Link
               to={`/orders`}

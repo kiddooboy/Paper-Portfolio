@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { TrendingUp, TrendingDown } from 'lucide-react';
+import { TrendingUp, TrendingDown, Clock } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
 import { useAuthStore } from '../store/authStore';
 import StockLogo from '../components/StockLogo';
 import TradingViewWidget from '../components/TradingViewWidget';
+import { useMarketStore } from '../store/marketStore';
 
 export default function StockDetail() {
   const { symbol } = useParams<{ symbol: string }>();
@@ -18,6 +19,8 @@ export default function StockDetail() {
   const [alertPrice, setAlertPrice] = useState('');
   const [alertCond, setAlertCond] = useState<'above' | 'below'>('above');
   useAuthStore((s) => s.user?.balance || 0);
+  const marketStatus = useMarketStore((s) => s.status);
+  const isMarketClosed = marketStatus ? !marketStatus.isOpen : false;
 
   useEffect(() => {
     if (!symbol) return;
@@ -30,14 +33,18 @@ export default function StockDetail() {
 
   const handleOrder = async () => {
     try {
-      await axios.post('/api/orders', {
+      const res = await axios.post('/api/orders', {
         symbol,
         type: orderType,
         transactionType: tab,
         quantity: Number(qty),
         limitPrice: orderType === 'LIMIT' ? Number(limitPrice) : undefined,
       });
-      toast.success(`${tab} order placed successfully!`);
+      if (res.data.queued) {
+        toast.success(res.data.message || 'Order queued for next market open', { duration: 5000, icon: '🕐' });
+      } else {
+        toast.success(`${tab} order ${res.data.status === 'FILLED' ? 'filled' : 'placed'} successfully!`);
+      }
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Order failed');
     }
@@ -123,6 +130,20 @@ export default function StockDetail() {
           <button onClick={() => setTab('buy')} className={cn('flex-1 py-2 rounded-lg text-sm font-semibold', tab === 'buy' ? 'bg-groww-primary text-white' : 'bg-gray-100 dark:bg-gray-800')}>Buy</button>
           <button onClick={() => setTab('sell')} className={cn('flex-1 py-2 rounded-lg text-sm font-semibold', tab === 'sell' ? 'bg-groww-loss text-white' : 'bg-gray-100 dark:bg-gray-800')}>Sell</button>
         </div>
+        {isMarketClosed && (
+          <div className="mb-4 px-3 py-2.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 flex items-start gap-2">
+            <Clock className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">Market Closed</p>
+              <p className="text-[11px] text-amber-600 dark:text-amber-500 mt-0.5">
+                Orders will be queued and executed at next market open
+                {marketStatus?.nextOpen && (
+                  <span className="font-medium"> — {new Date(marketStatus.nextOpen).toLocaleString('en-IN', { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: true })}</span>
+                )}
+              </p>
+            </div>
+          </div>
+        )}
         <div className="space-y-3">
           <div className="flex gap-2">
             <button onClick={() => setOrderType('MARKET')} className={cn('px-3 py-1.5 rounded-md text-xs font-medium', orderType === 'MARKET' ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900' : 'bg-gray-100 dark:bg-gray-800')}>Market</button>
@@ -143,7 +164,7 @@ export default function StockDetail() {
             <span className="font-semibold">{formatCurrency(total)}</span>
           </div>
           <button onClick={handleOrder} className={cn('w-full py-2.5 rounded-lg text-white font-semibold', tab === 'buy' ? 'bg-groww-primary hover:bg-green-600' : 'bg-groww-loss hover:bg-red-600')}>
-            {tab === 'buy' ? 'Buy' : 'Sell'} {symbol}
+            {isMarketClosed ? `🕐 Queue ${tab === 'buy' ? 'Buy' : 'Sell'}` : tab === 'buy' ? 'Buy' : 'Sell'} {symbol}
           </button>
         </div>
       </div>

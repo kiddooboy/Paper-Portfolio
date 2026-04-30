@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
-import { getQuote } from '../services/marketData.js';
+import { getQuote, isMarketOpen } from '../services/marketData.js';
 import { z } from 'zod';
 
 const router = Router();
@@ -36,11 +36,22 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     const currentPrice = quote.price;
     const orderPrice = type === 'MARKET' ? currentPrice : (limitPrice || currentPrice);
     const totalAmount = orderPrice * quantity;
+    const marketOpen = isMarketOpen();
 
-    // Validate + place + fill inside ONE transaction with row locks.
+    // Validate + place + (maybe) fill inside ONE transaction.
     // This prevents a user from over-buying / over-selling when two
     // requests (e.g. two browser tabs) hit the server concurrently.
+    //
+    // Rules:
+    //   • Market OPEN  + MARKET order → fill immediately at current price.
+    //   • Market OPEN  + LIMIT  order → leave PENDING; the periodic sweep
+    //     fills it as soon as the price condition is met.
+    //   • Market CLOSED + any order   → queue as PENDING. It will be filled
+    //     by the open-time scheduler at 9:15 AM IST on the next trading day
+    //     (MARKET orders fill at the open price; LIMIT orders fill if
+    //     conditions are met, otherwise stay PENDING).
     let orderId = 0;
+    let queued = false;
     try {
       await db.transaction(async () => {
         if (transactionType === 'BUY') {
@@ -65,15 +76,35 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
 
         orderId = result.lastInsertRowid as number;
 
-        if (type === 'MARKET') {
+        if (marketOpen && type === 'MARKET') {
+          // Live fill at current price
           await fillOrder(orderId, userId, upperSymbol, transactionType, quantity, currentPrice);
+        } else if (!marketOpen) {
+          queued = true;
+          // Notify the user that the order has been queued for next open
+          await db.prepare(`
+            INSERT INTO notifications (user_id, title, message, type)
+            VALUES (?, ?, ?, 'order')
+          `).run(
+            userId,
+            `Order Queued: ${transactionType} ${upperSymbol}`,
+            `Markets are closed. Your ${type} ${transactionType} order for ${quantity} ${upperSymbol} share(s) will be executed when markets reopen at 9:15 AM IST on the next trading day.`,
+          );
         }
       });
     } catch (e: any) {
       return res.status(400).json({ error: e?.message || 'Order failed' });
     }
 
-    res.json({ success: true, orderId });
+    res.json({
+      success: true,
+      orderId,
+      queued,
+      status: queued ? 'PENDING' : (marketOpen && type === 'MARKET' ? 'FILLED' : 'PENDING'),
+      message: queued
+        ? 'Markets are closed. Order queued for execution at next market open (9:15 AM IST).'
+        : undefined,
+    });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Invalid data' });
   }
