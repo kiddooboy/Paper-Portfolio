@@ -25,18 +25,21 @@ function App() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const hydrated = useAuthStore((s) => s.hydrated);
 
-  // Wait for zustand persist rehydration before deciding what to do.
-  // This prevents a flash of "logged out" UI while we read localStorage.
   useEffect(() => {
     if (!hydrated) return;
-    if (isAuthenticated) {
-      bootstrap();
-      installFocusRevalidation();
-    } else {
-      teardown();
-    }
+    
+    // Always attempt bootstrap on load since we rely on cookies.
+    bootstrap().finally(() => {
+      useAuthStore.getState().setInitialized();
+      if (useAuthStore.getState().isAuthenticated) {
+        installFocusRevalidation();
+      } else {
+        teardown();
+      }
+    });
+
     return () => teardown();
-  }, [hydrated, isAuthenticated]);
+  }, [hydrated]);
 
   return (
     <Routes>

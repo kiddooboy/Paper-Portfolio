@@ -10,7 +10,7 @@ import { Bell, TrendingUp, Moon, Sun, MessageSquare } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export default function Layout() {
-  const { isAuthenticated, logout } = useAuthStore();
+  const { isAuthenticated, logout, isInitializing } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
   const [dark, setDark] = useState(false);
@@ -19,8 +19,8 @@ export default function Layout() {
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
-    if (!isAuthenticated) navigate('/login');
-  }, [isAuthenticated, navigate]);
+    if (!isInitializing && !isAuthenticated) navigate('/login');
+  }, [isInitializing, isAuthenticated, navigate]);
 
   useEffect(() => {
     if (!dark) {
@@ -54,6 +54,14 @@ export default function Layout() {
     window.addEventListener('notification:read', handleNotificationRead);
     return () => window.removeEventListener('notification:read', handleNotificationRead);
   }, [fetchNotifications]);
+
+  if (isInitializing && !isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="w-8 h-8 border-4 border-groww-primary border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) return null;
 

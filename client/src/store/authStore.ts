@@ -14,6 +14,7 @@ interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   hydrated: boolean; // true once persist rehydration has finished
+  isInitializing: boolean; // true while the initial /me cookie check is running
   login: (user: User) => void;
   logout: () => void;
   updateBalance: (balance: number) => void;
@@ -21,6 +22,7 @@ interface AuthState {
   loginMpin: (email: string, mpin: string) => Promise<void>;
   setMpin: (mpin: string) => Promise<void>;
   setHydrated: () => void;
+  setInitialized: () => void;
 }
 
 // Registry of "reset on logout" callbacks from other stores.
@@ -43,6 +45,7 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       isAuthenticated: false,
       hydrated: false,
+      isInitializing: true,
       login: (user) => {
         set({ user, isAuthenticated: true });
         // Remember the device has a registered user, even after logout
@@ -77,6 +80,7 @@ export const useAuthStore = create<AuthState>()(
         }
       },
       setHydrated: () => set({ hydrated: true }),
+      setInitialized: () => set({ isInitializing: false }),
     }),
     {
       name: 'auth-storage',
