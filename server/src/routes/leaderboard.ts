@@ -5,7 +5,7 @@ import { getCachedQuotes } from '../services/marketData.js';
 const router = Router();
 
 router.get('/', async (req, res) => {
-  const users = (await db.prepare('SELECT id, name, balance FROM users').all()) as any[];
+  const users = (await db.prepare("SELECT id, name, balance FROM users WHERE role != 'admin' OR role IS NULL").all()) as any[];
   const holdings = (await db.prepare(`
     SELECT h.user_id, h.symbol, h.quantity, h.avg_buy_price
     FROM holdings h
