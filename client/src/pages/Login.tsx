@@ -23,7 +23,7 @@ export default function Login() {
     setLoading(true);
     try {
       const res = await axios.post('/api/auth/login', { email, password });
-      login(res.data.token, res.data.user);
+      login(res.data.user);
       // Pre-fetch all user data BEFORE navigating so dashboard has data on first paint
       await bootstrap();
       toast.success('Welcome back!');

@@ -23,6 +23,7 @@ if (fs.existsSync(envPath)) {
 
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import { initSchema, db, shutdownPool } from './db/index.js';
 import cron from 'node-cron';
 import { getQuote, getQuotes, getIndices, isMarketOpen, NIFTY50 } from './services/marketData.js';
@@ -55,7 +56,8 @@ async function main() {
 
   const app = express();
 
-  app.use(cors());
+  app.use(cors({ origin: true, credentials: true }));
+  app.use(cookieParser());
   app.use(express.json());
 
   // API routes

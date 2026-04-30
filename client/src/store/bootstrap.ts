@@ -22,13 +22,12 @@ export async function bootstrap(): Promise<boolean> {
 
   inFlight = (async () => {
     const auth = useAuthStore.getState();
-    if (!auth.token) return false;
 
-    // 1) Validate the JWT and refresh user data from server
+    // 1) Validate the JWT cookie and refresh user data from server
     try {
       const res = await axios.get('/api/auth/me');
       const fresh = res.data?.user;
-      if (fresh) auth.setUser(fresh);
+      if (fresh) auth.login(fresh);
     } catch (err: any) {
       // 401 will trigger logout via interceptor; other errors are non-fatal.
       if (err?.response?.status !== 401) {

@@ -19,11 +19,18 @@ export function verifyToken(token: string) {
 }
 
 export async function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  let token = req.cookies?.auth_token;
+  
+  if (!token) {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    }
+  }
+
+  if (!token) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-  const token = authHeader.split(' ')[1];
   try {
     const decoded = verifyToken(token);
     // Guard against stale tokens whose user no longer exists (e.g. DB reset).

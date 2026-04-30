@@ -12,10 +12,9 @@ interface User {
 
 interface AuthState {
   user: User | null;
-  token: string | null;
   isAuthenticated: boolean;
   hydrated: boolean; // true once persist rehydration has finished
-  login: (token: string, user: User) => void;
+  login: (user: User) => void;
   logout: () => void;
   updateBalance: (balance: number) => void;
   setUser: (user: User) => void;
@@ -42,12 +41,10 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       user: null,
-      token: null,
       isAuthenticated: false,
       hydrated: false,
-      login: (token, user) => {
-        set({ token, user, isAuthenticated: true });
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      login: (user) => {
+        set({ user, isAuthenticated: true });
         // Remember the device has a registered user, even after logout
         try { localStorage.setItem('last_email', user.email); } catch {}
       },
@@ -55,8 +52,8 @@ export const useAuthStore = create<AuthState>()(
         // Run all registered cleanup callbacks BEFORE wiping auth state
         // so that other stores can clean up while still authenticated context exists.
         runLogoutCleanups();
-        set({ token: null, user: null, isAuthenticated: false });
-        delete axios.defaults.headers.common['Authorization'];
+        set({ user: null, isAuthenticated: false });
+        axios.post('/api/auth/logout').catch(() => {});
       },
       updateBalance: (balance) => set((state) => ({
         user: state.user ? { ...state.user, balance } : null,
@@ -65,9 +62,8 @@ export const useAuthStore = create<AuthState>()(
       loginMpin: async (email, mpin) => {
         try {
           const res = await axios.post('/api/auth/login-mpin', { email, mpin });
-          const { token, user } = res.data;
-          set({ token, user, isAuthenticated: true });
-          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+          const { user } = res.data;
+          set({ user, isAuthenticated: true });
           try { localStorage.setItem('last_email', user.email); } catch {}
         } catch (err: any) {
           throw new Error(err?.response?.data?.error || 'MPIN login failed');
@@ -86,32 +82,17 @@ export const useAuthStore = create<AuthState>()(
       name: 'auth-storage',
       storage: createJSONStorage(() => sessionStorage),
       partialize: (state) => ({
-        token: state.token,
         user: state.user,
         isAuthenticated: state.isAuthenticated,
       }),
-      // On page load, restore axios header from the rehydrated token
+      // On page load, restore state
       onRehydrateStorage: () => (state) => {
-        if (state?.token) {
-          axios.defaults.headers.common['Authorization'] = `Bearer ${state.token}`;
-          // Make sure auth flag matches token presence
-          if (!state.isAuthenticated && state.user) state.isAuthenticated = true;
-        }
         // Mark hydrated so App.tsx can run bootstrap exactly once.
         state?.setHydrated?.();
       },
     }
   )
 );
-
-// Initialize axios headers if token exists
-let storedToken;
-try {
-  storedToken = JSON.parse(sessionStorage.getItem('auth-storage') || '{}')?.state?.token;
-} catch {}
-if (storedToken) {
-  axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
-}
 
 // ─────────────────────────────────────────────────────────────────
 // Smart 401 interceptor.

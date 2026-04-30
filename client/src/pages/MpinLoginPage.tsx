@@ -30,7 +30,7 @@ export default function MpinLoginPage() {
     setLoading(true);
     try {
       const res = await axios.post('/api/auth/login-mpin', { email, mpin });
-      login(res.data.token, res.data.user);
+      login(res.data.user);
       await bootstrap();
       toast.success('Welcome back!');
       navigate('/');

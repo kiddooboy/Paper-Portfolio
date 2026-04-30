@@ -49,6 +49,7 @@ router.post('/register', async (req, res) => {
 
     logActivity(userId, 'REGISTER', { name, email }, getClientIp(req));
 
+    res.cookie('auth_token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 });
     res.json({ token, user: { id: userId, name, email, role, balance: 100000 } });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Invalid data' });
@@ -74,6 +75,7 @@ router.post('/login', async (req, res) => {
 
     logActivity(user.id, 'LOGIN', { method: 'password' }, getClientIp(req));
 
+    res.cookie('auth_token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 });
     res.json({ token, user: { id: user.id, name: user.name, email: user.email, role, balance: user.balance } });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Invalid data' });
@@ -117,6 +119,7 @@ router.post('/login-mpin', async (req, res) => {
 
     logActivity(user.id, 'LOGIN_MPIN', { method: 'mpin' }, getClientIp(req));
 
+    res.cookie('auth_token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 });
     res.json({ token, user: { id: user.id, name: user.name, email: user.email, role, balance: user.balance } });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Invalid data' });
@@ -140,6 +143,11 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
       created_at: user.created_at,
     },
   });
+});
+
+router.post('/logout', (req, res) => {
+  res.clearCookie('auth_token');
+  res.json({ success: true });
 });
 
 export default router;

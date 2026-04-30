@@ -21,7 +21,7 @@ export default function Register() {
     setLoading(true);
     try {
       const res = await axios.post('/api/auth/register', { name, email, password });
-      login(res.data.token, res.data.user);
+      login(res.data.user);
       await bootstrap();
       toast.success('Account created! You got ₹1,00,000 virtual balance.');
       navigate(`/setup-mpin?email=${encodeURIComponent(email)}`);
