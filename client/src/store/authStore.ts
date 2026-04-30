@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import axios from 'axios';
 
 interface User {
@@ -84,6 +84,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
+      storage: createJSONStorage(() => sessionStorage),
       partialize: (state) => ({
         token: state.token,
         user: state.user,
@@ -106,7 +107,7 @@ export const useAuthStore = create<AuthState>()(
 // Initialize axios headers if token exists
 let storedToken;
 try {
-  storedToken = JSON.parse(localStorage.getItem('auth-storage') || '{}')?.state?.token;
+  storedToken = JSON.parse(sessionStorage.getItem('auth-storage') || '{}')?.state?.token;
 } catch {}
 if (storedToken) {
   axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
