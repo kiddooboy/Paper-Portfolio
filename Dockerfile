@@ -1,7 +1,4 @@
-FROM node:24-alpine
-
-# node:sqlite (built-in to Node 22.5+, stable in Node 24) means no native
-# build deps are required — keep the image lean.
+FROM node:24-alpine AS builder
 
 WORKDIR /app
 
@@ -15,29 +12,24 @@ RUN cd server && npm install
 COPY client/ ./client/
 COPY server/ ./server/
 
-# Build client, then remove its node_modules (not needed at runtime)
-WORKDIR /app/client
-RUN npm run build && rm -rf node_modules
+# Build client and server
+RUN cd client && npm run build
+RUN cd server && npm run build
 
-# Build server
-WORKDIR /app/server
-RUN npm run build
+# --- Production image (no client node_modules) ---
+FROM node:24-alpine
 
-# Move to production directory
 WORKDIR /app
 
-# Copy server build and node_modules to /app root (client/dist already at /app/client/dist)
-RUN cp -r server/dist ./dist && \
-    cp -r server/node_modules ./node_modules && \
-    cp server/package*.json ./ && \
-    rm -rf client/src server/src server/node_modules
+# Copy only what's needed at runtime
+COPY --from=builder /app/server/dist ./dist
+COPY --from=builder /app/server/node_modules ./node_modules
+COPY --from=builder /app/server/package*.json ./
+COPY --from=builder /app/client/dist ./client/dist
 
-# Set environment variables
 ENV NODE_ENV=production
 ENV PORT=5000
 
-# Expose port
 EXPOSE 5000
 
-# Start the server
 CMD ["node", "dist/index.js"]
