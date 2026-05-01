@@ -126,12 +126,12 @@ export default function Layout() {
 }
 
 const INDEX_SYMBOLS = [
-  { key: '^NSEI',    label: 'NIFTY 50' },
-  { key: '^BSESN',   label: 'SENSEX' },
-  { key: '^NSEBANK', label: 'BANKNIFTY' },
-  { key: '^CNX100',  label: 'NIFTY 100' },
-  { key: '^CNX500',  label: 'NIFTY 500' },
-  { key: '^CNXIT',   label: 'NIFTY IT' },
+  { key: '^NSEI',      label: 'NIFTY 50' },
+  { key: '^BSESN',     label: 'SENSEX' },
+  { key: '^NSEBANK',   label: 'BANKNIFTY' },
+  { key: '^CNX100',    label: 'NIFTY 100' },
+  { key: '^CNXIT',     label: 'NIFTY IT' },
+  { key: '^NSEMDCP50', label: 'MIDCAP 50' },
 ];
 
 function IndexTicker() {

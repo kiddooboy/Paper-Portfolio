@@ -387,12 +387,12 @@ export async function searchSymbols(query: string, limit = 15) {
 
 // ── Indian market indices (public, no auth required) ──
 export const INDICES = [
-  { symbol: '^NSEI',    name: 'NIFTY 50' },
-  { symbol: '^BSESN',   name: 'SENSEX' },
-  { symbol: '^NSEBANK', name: 'BANK NIFTY' },
-  { symbol: '^CNX100',  name: 'NIFTY 100' },
-  { symbol: '^CNX500',  name: 'NIFTY 500' },
-  { symbol: '^CNXIT',   name: 'NIFTY IT' },
+  { symbol: '^NSEI',       name: 'NIFTY 50' },
+  { symbol: '^BSESN',      name: 'SENSEX' },
+  { symbol: '^NSEBANK',    name: 'BANK NIFTY' },
+  { symbol: '^CNX100',     name: 'NIFTY 100' },
+  { symbol: '^CNXIT',      name: 'NIFTY IT' },
+  { symbol: '^NSEMDCP50',  name: 'MIDCAP 50' },
 ];
 
 export interface IndexQuote {
