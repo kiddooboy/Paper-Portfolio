@@ -3,11 +3,12 @@ import { useAuthStore } from '../store/authStore';
 import { useMarketStore } from '../store/marketStore';
 import { useNotificationsStore } from '../store/notificationsStore';
 import { useEffect, useState } from 'react';
+import axios from 'axios';
 import Sidebar from './Sidebar';
 import MobileNav from './MobileNav';
 import GlobalSearch from './GlobalSearch';
 import { Bell, TrendingUp, Moon, Sun, MessageSquare } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn, formatCurrency } from '../lib/utils';
 
 export default function Layout() {
   const { isAuthenticated, logout, isInitializing } = useAuthStore();
@@ -98,6 +99,8 @@ export default function Layout() {
         </div>
       </header>
 
+      <IndexTicker />
+
       <div className="flex">
         <aside className="hidden lg:block w-60 shrink-0 sticky top-[60px] h-[calc(100vh-60px)] border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-groww-dark">
           <Sidebar activePath={location.pathname} />
@@ -118,6 +121,61 @@ export default function Layout() {
       >
         <MessageSquare className="w-6 h-6" />
       </button>
+    </div>
+  );
+}
+
+const INDEX_SYMBOLS = [
+  { key: '^NSEI',    label: 'NIFTY 50' },
+  { key: '^BSESN',   label: 'SENSEX' },
+  { key: '^NSEBANK', label: 'BANKNIFTY' },
+  { key: '^CNXFIN',  label: 'FINNIFTY' },
+];
+
+function IndexTicker() {
+  const [indices, setIndices] = useState<Record<string, any>>({});
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetch = async () => {
+      try {
+        const res = await axios.get('/api/stocks/indices');
+        if (cancelled) return;
+        const map: Record<string, any> = {};
+        for (const idx of res.data?.indices || []) map[idx.symbol] = idx;
+        setIndices(map);
+        setIsOpen(!!res.data?.isOpen);
+      } catch {}
+    };
+    fetch();
+    const id = setInterval(fetch, 30_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
+  const items = INDEX_SYMBOLS.map(({ key, label }) => {
+    const d = indices[key];
+    return { label, price: d?.price ?? 0, change: d?.change ?? 0, pct: d?.change_percent ?? 0 };
+  });
+
+  return (
+    <div className="w-full bg-white dark:bg-groww-dark border-b border-gray-200 dark:border-gray-800 overflow-x-auto">
+      <div className="flex items-center divide-x divide-gray-200 dark:divide-gray-800 min-w-max">
+        {items.map(({ label, price, change, pct }) => (
+          <div key={label} className="flex items-center gap-2 px-4 py-1.5 shrink-0">
+            <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap">{label}</span>
+            <span className="text-[12px] font-semibold tabular-nums whitespace-nowrap">{price > 0 ? formatCurrency(price) : '—'}</span>
+            {price > 0 && (
+              <span className={cn('text-[11px] font-medium tabular-nums whitespace-nowrap', pct >= 0 ? 'text-gain' : 'text-loss')}>
+                {pct >= 0 ? '+' : ''}{change.toFixed(2)} ({pct >= 0 ? '+' : ''}{pct.toFixed(2)}%)
+              </span>
+            )}
+            {isOpen && price > 0 && (
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shrink-0" title="Live" />
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

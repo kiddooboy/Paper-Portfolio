@@ -128,6 +128,39 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
 
+      {/* ── Your Investments panel ── */}
+      {p && (
+        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-5">
+          <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-3">Your investments</h2>
+          <div className="flex flex-wrap gap-6 items-end">
+            <div>
+              <p className="text-xs text-gray-400 mb-0.5">Current</p>
+              <p className="text-2xl font-bold">{formatCurrency(p.currentValue || 0)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 mb-0.5">1D returns</p>
+              <p className={cn('text-sm font-semibold tabular-nums', (p.dayChangeTotal ?? 0) >= 0 ? 'text-gain' : 'text-loss')}>
+                {(p.dayChangeTotal ?? 0) >= 0 ? '+' : ''}{formatCurrency(p.dayChangeTotal ?? 0)} ({(p.dayChangePct ?? 0) >= 0 ? '+' : ''}{(p.dayChangePct ?? 0).toFixed(2)}%)
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 mb-0.5">Total returns</p>
+              <p className={cn('text-sm font-semibold tabular-nums', (p.totalPnl || 0) >= 0 ? 'text-gain' : 'text-loss')}>
+                {(p.totalPnl || 0) >= 0 ? '+' : ''}{formatCurrency(p.totalPnl || 0)} ({(p.totalPnlPercent || 0) >= 0 ? '+' : ''}{(p.totalPnlPercent || 0).toFixed(2)}%)
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 mb-0.5">Invested</p>
+              <p className="text-sm font-semibold tabular-nums">{formatCurrency(p.investedValue || 0)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 mb-0.5">Available cash</p>
+              <p className="text-sm font-semibold tabular-nums">{formatCurrency(p.balance || 0)}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {(() => {
           const stock = nifty;
