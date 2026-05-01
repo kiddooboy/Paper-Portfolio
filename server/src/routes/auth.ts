@@ -4,6 +4,7 @@ import { db } from '../db/index.js';
 import { generateToken, authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { z } from 'zod';
 import { logActivity, getClientIp } from '../services/activityLogger.js';
+import { verifyFirebaseToken } from '../lib/firebaseAdmin.js';
 
 const router = Router();
 
@@ -146,6 +147,48 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
       created_at: user.created_at,
     },
   });
+});
+
+// POST /auth/firebase — sign in or register via Firebase Google token
+router.post('/firebase', async (req, res) => {
+  try {
+    const { idToken } = req.body;
+    if (!idToken) return res.status(400).json({ error: 'idToken is required' });
+
+    const decoded = await verifyFirebaseToken(idToken);
+    const { uid, email: rawEmail, name: firebaseName } = decoded;
+
+    if (!rawEmail) return res.status(400).json({ error: 'Google account has no email' });
+    const email = rawEmail.toLowerCase().trim();
+    const name = firebaseName || email.split('@')[0];
+
+    let user = (await db.prepare(
+      'SELECT id, name, email, role, balance FROM users WHERE LOWER(email) = ?'
+    ).get(email)) as any;
+
+    const now = new Date().toISOString();
+
+    if (!user) {
+      // New user — create account (no password needed)
+      const role = email === ADMIN_EMAIL ? 'admin' : 'user';
+      const result = db.prepare(
+        'INSERT INTO users (name, email, password, role, balance, firebase_uid, last_login) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).run(name, email, '', role, 100000, uid, now);
+      user = { id: result.lastInsertRowid, name, email, role, balance: 100000 };
+      logActivity(user.id, 'REGISTER', { name, email, method: 'google' }, getClientIp(req));
+    } else {
+      // Existing user — update firebase_uid if not set and last_login
+      db.prepare('UPDATE users SET firebase_uid = COALESCE(firebase_uid, ?), last_login = ? WHERE id = ?')
+        .run(uid, now, user.id);
+      logActivity(user.id, 'LOGIN', { method: 'google' }, getClientIp(req));
+    }
+
+    const token = generateToken(user.id, user.email, user.role);
+    res.cookie('auth_token', token, { httpOnly: true, secure: req.secure || req.headers['x-forwarded-proto'] === 'https', sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 });
+    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, balance: user.balance } });
+  } catch (err: any) {
+    res.status(401).json({ error: err.message || 'Firebase authentication failed' });
+  }
 });
 
 router.post('/logout', (req, res) => {
