@@ -154,6 +154,9 @@ export default function Login() {
         )}
 
         <p className="text-center text-sm text-gray-500 dark:text-gray-400">
+          <Link to="/forgot-password" className="text-groww-primary hover:underline">Forgot password?</Link>
+        </p>
+        <p className="text-center text-sm text-gray-500 dark:text-gray-400">
           Don't have an account?{' '}
           <Link to="/register" className="text-groww-primary font-semibold hover:underline">
             Sign up

@@ -195,11 +195,13 @@ export async function initSchema() {
         id                INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         symbol            TEXT NOT NULL,
-        type              TEXT NOT NULL CHECK(type IN ('MARKET','LIMIT')),
+        type              TEXT NOT NULL CHECK(type IN ('MARKET','LIMIT','SL','SL-M')),
         transaction_type  TEXT NOT NULL CHECK(transaction_type IN ('BUY','SELL')),
         quantity          INTEGER NOT NULL,
         price             REAL NOT NULL,
         limit_price       REAL,
+        trigger_price     REAL,
+        product_type      TEXT NOT NULL DEFAULT 'CNC' CHECK(product_type IN ('CNC','MIS')),
         status            TEXT NOT NULL DEFAULT 'PENDING'
                             CHECK(status IN ('PENDING','FILLED','CANCELLED','EXPIRED','FAILED')),
         created_at        TEXT NOT NULL DEFAULT (datetime('now')),
@@ -280,6 +282,28 @@ export async function initSchema() {
         ip_address    TEXT,
         created_at    TEXT NOT NULL DEFAULT (datetime('now'))
       );
+
+      CREATE TABLE IF NOT EXISTS trade_pnl (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        symbol          TEXT NOT NULL,
+        buy_order_id    INTEGER REFERENCES orders(id) ON DELETE SET NULL,
+        sell_order_id   INTEGER REFERENCES orders(id) ON DELETE SET NULL,
+        quantity        INTEGER NOT NULL,
+        buy_price       REAL NOT NULL,
+        sell_price      REAL NOT NULL,
+        realized_pnl    REAL NOT NULL,
+        closed_at       TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS password_reset_otps (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        email       TEXT NOT NULL,
+        otp_hash    TEXT NOT NULL,
+        expires_at  TEXT NOT NULL,
+        used        INTEGER NOT NULL DEFAULT 0,
+        created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+      );
     `);
     raw.exec('COMMIT');
     console.log('[db] core tables created/verified');
@@ -326,6 +350,21 @@ export async function initSchema() {
   safeExec(`ALTER TABLE users ADD COLUMN firebase_uid TEXT`, 'migration: users.firebase_uid');
   safeExec(`ALTER TABLE users MODIFY COLUMN password TEXT`, 'migration: users.password nullable');
   safeExec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_firebase_uid ON users(firebase_uid) WHERE firebase_uid IS NOT NULL`, 'index: users.firebase_uid');
+
+  // Orders: new columns for SL/SL-M, MIS/CNC
+  safeExec(`ALTER TABLE orders ADD COLUMN trigger_price REAL`, 'migration: orders.trigger_price');
+  safeExec(`ALTER TABLE orders ADD COLUMN product_type TEXT NOT NULL DEFAULT 'CNC'`, 'migration: orders.product_type');
+
+  // Stocks: fundamental data columns
+  safeExec(`ALTER TABLE stocks ADD COLUMN roe REAL`, 'migration: stocks.roe');
+  safeExec(`ALTER TABLE stocks ADD COLUMN book_value REAL`, 'migration: stocks.book_value');
+  safeExec(`ALTER TABLE stocks ADD COLUMN debt_to_equity REAL`, 'migration: stocks.debt_to_equity');
+  safeExec(`ALTER TABLE stocks ADD COLUMN div_yield REAL`, 'migration: stocks.div_yield');
+
+  // New table indexes
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_trade_pnl_user_id ON trade_pnl(user_id)`, 'index: trade_pnl.user_id');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_trade_pnl_symbol ON trade_pnl(symbol, user_id)`, 'index: trade_pnl.symbol');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_password_reset_otps_email ON password_reset_otps(email)`, 'index: password_reset_otps.email');
 
   // ── Phase 3: updated_at triggers ──
   // Drop-and-recreate so any older incompatible trigger definition (e.g.

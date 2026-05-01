@@ -119,20 +119,9 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
   const worstPerformer = sorted[sorted.length - 1] || null;
   const biggestHolding = holdings[0] || null; // already sorted by value desc
 
-  // ── Realized P&L (from SELL transactions) ──
-  const sellTxns = (await db.prepare(`
-    SELECT symbol, quantity, price, total_amount FROM transactions
-    WHERE user_id = ? AND type = 'SELL'
-  `).all(userId)) as any[];
-
-  let realizedPnl = 0;
-  for (const tx of sellTxns) {
-    // Approximate: realized pnl = sell proceeds - (avg_buy at time... approximation)
-    // We store total_amount for the sell. Estimate cost basis from current avg (rough).
-    const holdingMatch = holdings.find((h: any) => h.symbol === tx.symbol);
-    const costBasis = holdingMatch ? holdingMatch.avg_buy_price * tx.quantity : tx.price * tx.quantity;
-    realizedPnl += tx.total_amount - costBasis;
-  }
+  // ── Realized P&L — from FIFO trade_pnl table (accurate) ──
+  const pnlRow = (await db.prepare(`SELECT COALESCE(SUM(realized_pnl), 0) as total FROM trade_pnl WHERE user_id = ?`).get(userId)) as any;
+  const realizedPnl = Number(pnlRow?.total || 0);
   const unrealizedPnl = totalPnl;
 
   // ── Transactions ──
@@ -191,10 +180,30 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
 // GET /api/portfolio/history — value snapshots
 // ---------------------------------------------------------------------------
 router.get('/history', authMiddleware, async (req: AuthRequest, res) => {
-  const history = await db.prepare(`
-    SELECT * FROM portfolio_history WHERE user_id = ? ORDER BY recorded_at DESC LIMIT 60
+  const history = db.prepare(`
+    SELECT * FROM portfolio_history WHERE user_id = ? ORDER BY recorded_at ASC LIMIT 90
   `).all(req.user!.id);
   res.json(history);
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/portfolio/trade-pnl — FIFO realized P&L per trade
+// ---------------------------------------------------------------------------
+router.get('/trade-pnl', authMiddleware, async (req: AuthRequest, res) => {
+  const rows = db.prepare(`
+    SELECT tp.*,
+           bo.created_at as buy_date,
+           so.created_at as sell_date
+    FROM trade_pnl tp
+    LEFT JOIN orders bo ON bo.id = tp.buy_order_id
+    LEFT JOIN orders so ON so.id = tp.sell_order_id
+    WHERE tp.user_id = ?
+    ORDER BY tp.closed_at DESC
+    LIMIT 200
+  `).all(req.user!.id);
+
+  const totalRealized = (rows as any[]).reduce((s, r) => s + Number(r.realized_pnl), 0);
+  res.json({ trades: rows, totalRealized: +totalRealized.toFixed(2) });
 });
 
 export default router;

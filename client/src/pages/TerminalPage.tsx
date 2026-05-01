@@ -21,9 +21,11 @@ export default function TerminalPage() {
   const [loading, setLoading] = useState(true);
 
   const [tab, setTab] = useState<'buy' | 'sell'>('buy');
-  const [orderType, setOrderType] = useState<'MARKET' | 'LIMIT'>('MARKET');
+  const [orderType, setOrderType] = useState<'MARKET' | 'LIMIT' | 'SL' | 'SL-M'>('MARKET');
+  const [productType, setProductType] = useState<'CNC' | 'MIS'>('CNC');
   const [qty, setQty] = useState(1);
   const [limitPrice, setLimitPrice] = useState('');
+  const [triggerPrice, setTriggerPrice] = useState('');
   const [placing, setPlacing] = useState(false);
 
   const [alertOpen, setAlertOpen] = useState(false);
@@ -108,10 +110,12 @@ export default function TerminalPage() {
 
   const isGain = (quote?.change_percent ?? 0) >= 0;
   const executionPrice = useMemo(() => {
-    if (orderType === 'MARKET') return quote?.price ?? 0;
+    if (orderType === 'MARKET' || orderType === 'SL-M') return quote?.price ?? 0;
     const lp = parseFloat(limitPrice);
+    const tp = parseFloat(triggerPrice);
+    if (orderType === 'SL') return Number.isFinite(lp) && lp > 0 ? lp : (Number.isFinite(tp) && tp > 0 ? tp : quote?.price ?? 0);
     return Number.isFinite(lp) && lp > 0 ? lp : quote?.price ?? 0;
-  }, [orderType, limitPrice, quote]);
+  }, [orderType, limitPrice, triggerPrice, quote]);
   const totalValue = executionPrice * qty;
 
   // Market status from the global store
@@ -120,10 +124,8 @@ export default function TerminalPage() {
 
   const placeOrder = async () => {
     if (!quote) return;
-    if (orderType === 'LIMIT' && !limitPrice) {
-      toast.error('Enter a limit price');
-      return;
-    }
+    if (orderType === 'LIMIT' && !limitPrice) { toast.error('Enter a limit price'); return; }
+    if ((orderType === 'SL' || orderType === 'SL-M') && !triggerPrice) { toast.error('Enter a trigger price'); return; }
     setPlacing(true);
     try {
       const res = await axios.post('/api/orders', {
@@ -132,7 +134,9 @@ export default function TerminalPage() {
         type: orderType,
         transactionType: tab.toUpperCase(),
         quantity: qty,
-        limitPrice: orderType === 'LIMIT' ? parseFloat(limitPrice) : undefined,
+        limitPrice: (orderType === 'LIMIT' || orderType === 'SL') && limitPrice ? parseFloat(limitPrice) : undefined,
+        triggerPrice: (orderType === 'SL' || orderType === 'SL-M') && triggerPrice ? parseFloat(triggerPrice) : undefined,
+        productType,
       });
       if (res.data.queued) {
         toast.success(res.data.message || `Order queued — will execute at next market open (9:15 AM IST)`, { duration: 5000, icon: '🕐' });
@@ -320,63 +324,65 @@ export default function TerminalPage() {
           )}
 
           {/* Order form */}
-          <div className="p-4 space-y-4 flex-1">
-            <div>
-              <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">
-                Order Type
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => setOrderType('MARKET')}
-                  className={cn(
-                    'py-2 text-sm rounded-lg border transition',
-                    orderType === 'MARKET'
-                      ? 'border-groww-primary bg-groww-primary/10 text-groww-primary font-medium'
-                      : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300'
-                  )}
-                >
-                  Market
-                </button>
-                <button
-                  onClick={() => setOrderType('LIMIT')}
-                  className={cn(
-                    'py-2 text-sm rounded-lg border transition',
-                    orderType === 'LIMIT'
-                      ? 'border-groww-primary bg-groww-primary/10 text-groww-primary font-medium'
-                      : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300'
-                  )}
-                >
-                  Limit
-                </button>
+          <div className="p-4 space-y-3 flex-1">
+            {/* Product type: CNC / MIS */}
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] uppercase tracking-wide text-gray-500">Product</span>
+              <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden ml-1">
+                {(['CNC', 'MIS'] as const).map(pt => (
+                  <button key={pt} onClick={() => setProductType(pt)}
+                    className={cn('px-3 py-1 text-xs font-semibold transition',
+                      productType === pt ? 'bg-groww-primary text-white' : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800')}>
+                    {pt}
+                  </button>
+                ))}
               </div>
+              <span className="text-[10px] text-gray-400 ml-1">{productType === 'MIS' ? 'Intraday — auto square-off 3:20 PM' : 'Delivery'}</span>
+            </div>
+
+            {/* Order type: 4 buttons */}
+            <div>
+              <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Order Type</label>
+              <div className="grid grid-cols-4 gap-1.5">
+                {(['MARKET', 'LIMIT', 'SL', 'SL-M'] as const).map(ot => (
+                  <button key={ot} onClick={() => setOrderType(ot)}
+                    className={cn('py-1.5 text-xs rounded-lg border transition font-medium',
+                      orderType === ot
+                        ? 'border-groww-primary bg-groww-primary/10 text-groww-primary'
+                        : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300')}>
+                    {ot}
+                  </button>
+                ))}
+              </div>
+              {(orderType === 'SL' || orderType === 'SL-M') && (
+                <p className="text-[10px] text-amber-500 mt-1">
+                  {orderType === 'SL-M' ? 'Triggers a market order when price hits trigger' : 'Triggers a limit order when price hits trigger'}
+                </p>
+              )}
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">
-                Quantity
-              </label>
-              <input
-                type="number"
-                min={1}
-                value={qty}
+              <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Quantity</label>
+              <input type="number" min={1} value={qty}
                 onChange={(e) => setQty(Math.max(1, parseInt(e.target.value) || 1))}
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm tabular-nums"
-              />
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm tabular-nums" />
             </div>
 
-            {orderType === 'LIMIT' && (
+            {(orderType === 'SL' || orderType === 'SL-M') && (
               <div>
-                <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">
-                  Limit Price
-                </label>
-                <input
-                  type="number"
-                  step="0.05"
-                  value={limitPrice}
-                  placeholder={String(price.toFixed(2))}
+                <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Trigger Price</label>
+                <input type="number" step="0.05" value={triggerPrice} placeholder={String(price.toFixed(2))}
+                  onChange={(e) => setTriggerPrice(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-gray-900 text-sm tabular-nums" />
+              </div>
+            )}
+
+            {(orderType === 'LIMIT' || orderType === 'SL') && (
+              <div>
+                <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Limit Price</label>
+                <input type="number" step="0.05" value={limitPrice} placeholder={String(price.toFixed(2))}
                   onChange={(e) => setLimitPrice(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm tabular-nums"
-                />
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm tabular-nums" />
               </div>
             )}
 

@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
+import axios from 'axios';
 import { Link } from 'react-router-dom';
 import { formatCurrency, formatPercent, cn } from '../lib/utils';
 import { useMarketStore } from '../store/marketStore';
 import { usePortfolioStore } from '../store/portfolioStore';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid,
 } from 'recharts';
 import StockLogo from '../components/StockLogo';
 import {
   ArrowUpRight, TrendingUp,
   Shield, Target, Award, AlertTriangle, Activity,
-  BarChart3, PiggyBank, Repeat,
+  BarChart3, PiggyBank, Repeat, TrendingDown,
 } from 'lucide-react';
 
 const COLORS = ['#00B386', '#6366F1', '#F59E0B', '#EB5B3C', '#10B981', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316'];
@@ -24,14 +26,23 @@ export default function PortfolioPage() {
   const fetchPortfolio = usePortfolioStore((s) => s.fetch);
   const [sortKey, setSortKey] = useState<SortKey>('value');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
-  const [tab, setTab] = useState<'holdings' | 'transactions'>('holdings');
+  const [tab, setTab] = useState<'holdings' | 'transactions' | 'pnl'>('holdings');
+  const [tradePnl, setTradePnl] = useState<{ trades: any[]; totalRealized: number } | null>(null);
+  const [historyData, setHistoryData] = useState<any[]>([]);
   const allQuotes = useMarketStore((s) => s.quotes);
   const loading = (portfolioLoading && !rawData);
 
-  // Refresh portfolio store on mount
+  useEffect(() => { fetchPortfolio(); }, [fetchPortfolio]);
+
   useEffect(() => {
-    fetchPortfolio();
-  }, [fetchPortfolio]);
+    axios.get('/api/portfolio/history').then(r => setHistoryData(r.data || [])).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (tab === 'pnl' && !tradePnl) {
+      axios.get('/api/portfolio/trade-pnl').then(r => setTradePnl(r.data)).catch(() => {});
+    }
+  }, [tab, tradePnl]);
 
   // Live-enrich holdings from global market store for real-time updates
   const data = useMemo(() => {
@@ -123,6 +134,31 @@ export default function PortfolioPage() {
           </div>
         </div>
       </div>
+
+      {/* ═══════════ PORTFOLIO HISTORY CHART ═══════════ */}
+      {historyData.length > 1 ? (
+        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-4">
+          <h3 className="font-semibold mb-3 flex items-center gap-2 text-sm">
+            <TrendingUp className="w-4 h-4 text-gain" /> Portfolio Value History
+          </h3>
+          <div className="h-40">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={historyData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="recorded_at" tickFormatter={v => new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} tick={{ fontSize: 10 }} />
+                <YAxis tickFormatter={v => `₹${(v/1000).toFixed(0)}k`} tick={{ fontSize: 10 }} width={48} />
+                <Tooltip formatter={(v: any) => [formatCurrency(v), 'Portfolio Value']} labelFormatter={v => new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })} />
+                <Line type="monotone" dataKey="total_value" stroke="#00B386" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-4 text-center text-sm text-gray-400">
+          <TrendingDown className="w-6 h-6 mx-auto mb-1 text-gray-300" />
+          Portfolio history will appear after the first market close (3:31 PM IST)
+        </div>
+      )}
 
       {isEmpty ? (
         <div className="text-center py-20 bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800">
@@ -247,7 +283,7 @@ export default function PortfolioPage() {
 
 
 
-          {/* ═══════════ HOLDINGS / TRANSACTIONS TABS ═══════════ */}
+          {/* ═══════════ HOLDINGS / TRANSACTIONS / P&L TABS ═══════════ */}
           <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
             <div className="flex border-b border-gray-200 dark:border-gray-700">
               <button onClick={() => setTab('holdings')} className={cn('flex-1 py-3 text-sm font-medium transition', tab === 'holdings' ? 'text-groww-primary border-b-2 border-groww-primary' : 'text-gray-500')}>
@@ -256,9 +292,12 @@ export default function PortfolioPage() {
               <button onClick={() => setTab('transactions')} className={cn('flex-1 py-3 text-sm font-medium transition', tab === 'transactions' ? 'text-groww-primary border-b-2 border-groww-primary' : 'text-gray-500')}>
                 Transactions ({data?.transactions?.length || 0})
               </button>
+              <button onClick={() => setTab('pnl')} className={cn('flex-1 py-3 text-sm font-medium transition', tab === 'pnl' ? 'text-groww-primary border-b-2 border-groww-primary' : 'text-gray-500')}>
+                Realized P&L
+              </button>
             </div>
 
-            {tab === 'holdings' ? (
+            {tab === 'holdings' && (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -302,7 +341,9 @@ export default function PortfolioPage() {
                   </tbody>
                 </table>
               </div>
-            ) : (
+            )}
+
+            {tab === 'transactions' && (
               <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-[500px] overflow-y-auto">
                 {(data?.transactions || []).map((t: any) => (
                   <div key={t.id} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition">
@@ -323,6 +364,61 @@ export default function PortfolioPage() {
                 ))}
                 {!data?.transactions?.length && (
                   <p className="text-center text-sm text-gray-500 py-8">No transactions yet</p>
+                )}
+              </div>
+            )}
+
+            {tab === 'pnl' && (
+              <div>
+                {tradePnl ? (
+                  <>
+                    <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                      <span className="text-sm text-gray-500">Total Realized P&L</span>
+                      <span className={cn('font-bold tabular-nums', (tradePnl.totalRealized || 0) >= 0 ? 'text-gain' : 'text-loss')}>
+                        {(tradePnl.totalRealized || 0) >= 0 ? '+' : ''}{formatCurrency(tradePnl.totalRealized || 0)}
+                      </span>
+                    </div>
+                    {tradePnl.trades.length > 0 ? (
+                      <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+                        <table className="w-full text-sm">
+                          <thead className="sticky top-0 bg-white dark:bg-groww-card z-10">
+                            <tr className="text-left text-[11px] text-gray-500 uppercase tracking-wider border-b border-gray-100 dark:border-gray-800">
+                              <th className="px-4 py-2.5">Symbol</th>
+                              <th className="px-3 py-2.5">Qty</th>
+                              <th className="px-3 py-2.5">Buy Price</th>
+                              <th className="px-3 py-2.5">Sell Price</th>
+                              <th className="px-3 py-2.5">Realized P&L</th>
+                              <th className="px-3 py-2.5">Sell Date</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {tradePnl.trades.map((t: any) => (
+                              <tr key={t.id} className="border-t border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition">
+                                <td className="px-4 py-2.5">
+                                  <Link to={`/terminal/${t.symbol}?exchange=NSE`} className="font-medium hover:text-groww-primary">{t.symbol}</Link>
+                                </td>
+                                <td className="px-3 py-2.5 tabular-nums text-gray-600 dark:text-gray-400">{t.quantity}</td>
+                                <td className="px-3 py-2.5 tabular-nums">{formatCurrency(t.buy_price)}</td>
+                                <td className="px-3 py-2.5 tabular-nums">{formatCurrency(t.sell_price)}</td>
+                                <td className={cn('px-3 py-2.5 tabular-nums font-semibold', t.realized_pnl >= 0 ? 'text-gain' : 'text-loss')}>
+                                  {t.realized_pnl >= 0 ? '+' : ''}{formatCurrency(t.realized_pnl)}
+                                </td>
+                                <td className="px-3 py-2.5 text-xs text-gray-400">
+                                  {t.sell_date ? new Date(t.sell_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' }) : '—'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="text-center text-sm text-gray-500 py-8">No realized trades yet — sell a stock to see P&L here</p>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex items-center justify-center py-10">
+                    <div className="w-5 h-5 border-2 border-groww-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
                 )}
               </div>
             )}

@@ -5,6 +5,7 @@ import { generateToken, authMiddleware, AuthRequest } from '../middleware/auth.j
 import { z } from 'zod';
 import { logActivity, getClientIp } from '../services/activityLogger.js';
 import { verifyFirebaseToken } from '../lib/firebaseAdmin.js';
+import { sendOtpEmail } from '../services/mailer.js';
 
 const router = Router();
 
@@ -194,6 +195,67 @@ router.post('/firebase', async (req, res) => {
 router.post('/logout', (req, res) => {
   res.clearCookie('auth_token');
   res.json({ success: true });
+});
+
+// POST /auth/forgot-password — send OTP to email
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = z.object({ email: z.string().email() }).parse(req.body);
+    const user = db.prepare('SELECT id FROM users WHERE LOWER(email) = ?').get(email.toLowerCase().trim()) as any;
+    // Always respond OK to avoid email enumeration
+    if (!user) return res.json({ success: true, message: 'If that email exists, an OTP has been sent.' });
+
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const otpHash = await bcrypt.hash(otp, 10);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+    db.prepare(`INSERT INTO password_reset_otps (email, otp_hash, expires_at) VALUES (?, ?, ?)`).run(email.toLowerCase().trim(), otpHash, expiresAt);
+
+    try {
+      await sendOtpEmail(email, otp);
+    } catch (err: any) {
+      console.error('[auth] sendOtpEmail failed:', err?.message);
+      return res.status(500).json({ error: 'Failed to send email. SMTP not configured.' });
+    }
+
+    logActivity(user.id, 'FORGOT_PASSWORD' as any, { email }, getClientIp(req));
+    res.json({ success: true, message: 'OTP sent to your email.' });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Invalid data' });
+  }
+});
+
+// POST /auth/reset-password — verify OTP and set new password
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { email, otp, newPassword } = z.object({
+      email: z.string().email(),
+      otp: z.string().length(6),
+      newPassword: z.string().min(6),
+    }).parse(req.body);
+
+    const lowerEmail = email.toLowerCase().trim();
+    const now = new Date().toISOString();
+
+    const otpRow = db.prepare(`
+      SELECT * FROM password_reset_otps
+      WHERE email = ? AND used = 0 AND expires_at > ?
+      ORDER BY created_at DESC LIMIT 1
+    `).get(lowerEmail, now) as any;
+
+    if (!otpRow) return res.status(400).json({ error: 'Invalid or expired OTP' });
+
+    const valid = await bcrypt.compare(otp, otpRow.otp_hash);
+    if (!valid) return res.status(400).json({ error: 'Incorrect OTP' });
+
+    const hashedPw = await bcrypt.hash(newPassword, 10);
+    db.prepare('UPDATE users SET password = ? WHERE LOWER(email) = ?').run(hashedPw, lowerEmail);
+    db.prepare('UPDATE password_reset_otps SET used = 1 WHERE id = ?').run(otpRow.id);
+
+    res.json({ success: true, message: 'Password reset successfully. You can now log in.' });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Invalid data' });
+  }
 });
 
 export default router;

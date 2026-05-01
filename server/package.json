@@ -11,6 +11,7 @@
     "reset-db": "tsx src/scripts/seed.ts --reset"
   },
   "dependencies": {
+    "@types/nodemailer": "^8.0.0",
     "axios": "^1.15.2",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
@@ -21,6 +22,7 @@
     "firebase-admin": "^13.8.0",
     "jsonwebtoken": "^9.0.2",
     "node-cron": "^3.0.3",
+    "nodemailer": "^8.0.7",
     "ws": "^8.16.0",
     "yahoo-finance2": "^3.14.0",
     "zod": "^3.22.4"

@@ -18,6 +18,7 @@ import AdminPage from './pages/AdminPage';
 import PositionsPage from './pages/PositionsPage';
 import AIChatPage from './pages/AIChatPage';
 import WalletPage from './pages/WalletPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import { useAuthStore } from './store/authStore';
 import { bootstrap, teardown, installFocusRevalidation } from './store/bootstrap';
 
@@ -46,6 +47,7 @@ function App() {
       <Route path="/register" element={<Register />} />
       <Route path="/mpin-login" element={<MpinLoginPage />} />
       <Route path="/setup-mpin" element={<SetupMpinPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route element={<Layout />}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/market" element={<MarketExplorer />} />
