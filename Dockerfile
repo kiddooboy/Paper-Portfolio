@@ -15,9 +15,9 @@ RUN cd server && npm install
 COPY client/ ./client/
 COPY server/ ./server/
 
-# Build client
+# Build client, then remove its node_modules (not needed at runtime)
 WORKDIR /app/client
-RUN npm run build
+RUN npm run build && rm -rf node_modules
 
 # Build server
 WORKDIR /app/server
@@ -29,7 +29,8 @@ WORKDIR /app
 # Copy server build and node_modules to /app root (client/dist already at /app/client/dist)
 RUN cp -r server/dist ./dist && \
     cp -r server/node_modules ./node_modules && \
-    cp server/package*.json ./
+    cp server/package*.json ./ && \
+    rm -rf client/src server/src server/node_modules
 
 # Set environment variables
 ENV NODE_ENV=production
