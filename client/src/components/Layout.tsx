@@ -129,7 +129,9 @@ const INDEX_SYMBOLS = [
   { key: '^NSEI',    label: 'NIFTY 50' },
   { key: '^BSESN',   label: 'SENSEX' },
   { key: '^NSEBANK', label: 'BANKNIFTY' },
-  { key: '^CNXFIN',  label: 'FINNIFTY' },
+  { key: '^CNX100',  label: 'NIFTY 100' },
+  { key: '^CNX500',  label: 'NIFTY 500' },
+  { key: '^CNXIT',   label: 'NIFTY IT' },
 ];
 
 function IndexTicker() {

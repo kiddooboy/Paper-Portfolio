@@ -1,5 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
-import axios from 'axios';
+import { useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { TrendingUp, TrendingDown, Activity } from 'lucide-react';
 import { formatCurrency, formatNumber, cn } from '../lib/utils';
@@ -12,26 +11,18 @@ export default function Dashboard() {
   const portfolio = usePortfolioStore((s) => s.data);
   const portfolioLoading = usePortfolioStore((s) => s.loading);
   const fetchPortfolioStore = usePortfolioStore((s) => s.fetch);
-  const [indexData, setIndexData] = useState<any>(null);
-  const [isMarketOpen, setIsMarketOpen] = useState(false);
   const updateBalance = useAuthStore((s) => s.updateBalance);
   const allQuotes = useMarketStore((s) => s.quotes);
   const loading = portfolioLoading && !portfolio;
 
-
-  // Derive gainers/losers, most bought by volume, and index data from the global live quote store
-  const { gainers, losers, mostBought, nifty, sensex, bankNifty, breadth } = useMemo(() => {
+  // Derive gainers/losers, most bought by volume from the global live quote store
+  const { gainers, losers, mostBought, breadth } = useMemo(() => {
     const arr = Object.values(allQuotes);
     const sorted = arr.filter(q => q && typeof q.change_percent === 'number');
     const g = sorted.filter(q => q.change_percent > 0).sort((a, b) => b.change_percent - a.change_percent).slice(0, 5);
     const l = sorted.filter(q => q.change_percent < 0).sort((a, b) => a.change_percent - b.change_percent).slice(0, 5);
     const mb = sorted.filter(q => q.volume && q.volume > 0).sort((a, b) => (b.volume || 0) - (a.volume || 0)).slice(0, 5);
 
-    const n = indexData?.['^NSEI'] || { symbol: '^NSEI', name: 'Nifty 50', exchange: 'NSE', price: 0, change_percent: 0 };
-    const s = indexData?.['^BSESN'] || { symbol: '^BSESN', name: 'Sensex', exchange: 'BSE', price: 0, change_percent: 0 };
-    const bn = indexData?.['^NSEBANK'] || { symbol: '^NSEBANK', name: 'Bank Nifty', exchange: 'NSE', price: 0, change_percent: 0 };
-
-    // Market breadth from all cached quotes
     const advances = sorted.filter(q => q.change_percent > 0).length;
     const declines = sorted.filter(q => q.change_percent < 0).length;
     const unchanged = sorted.length - advances - declines;
@@ -39,14 +30,13 @@ export default function Dashboard() {
 
     return {
       gainers: g, losers: l, mostBought: mb,
-      nifty: n, sensex: s, bankNifty: bn,
       breadth: { advances, declines, unchanged, total,
         advPct: Math.round(advances / total * 100),
         decPct: Math.round(declines / total * 100),
         adRatio: declines > 0 ? (advances / declines).toFixed(2) : '∞',
       },
     };
-  }, [allQuotes, indexData]);
+  }, [allQuotes]);
 
   // Enrich portfolio holdings with live prices from global store
   const enrichedPortfolio = useMemo(() => {
@@ -82,33 +72,6 @@ export default function Dashboard() {
     if (portfolio?.balance !== undefined) updateBalance(portfolio.balance);
   }, [portfolio?.balance, updateBalance]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const fetchIndices = async () => {
-      try {
-        const res = await axios.get('/api/stocks/indices');
-        if (cancelled) return;
-        const map: Record<string, any> = {};
-        for (const idx of res.data?.indices || []) {
-          map[idx.symbol] = {
-            symbol: idx.symbol,
-            name: idx.name,
-            exchange: idx.symbol === '^BSESN' ? 'BSE' : 'NSE',
-            price: idx.price,
-            change_percent: idx.change_percent,
-          };
-        }
-        setIndexData(map);
-        setIsMarketOpen(!!res.data?.isOpen);
-      } catch {}
-    };
-    fetchIndices();
-    const id = setInterval(fetchIndices, 30_000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, []);
 
   if (loading) {
     return (
@@ -161,142 +124,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {(() => {
-          const stock = nifty;
-          const ex = stock.exchange || 'NSE';
-          const cp = stock.change_percent ?? 0;
-          const price = stock.price ?? 0;
-          return (
-            <Link
-              key={`${stock.symbol}:${ex}`}
-              to={`/terminal/${stock.symbol}?exchange=${ex}`}
-              className="bg-white dark:bg-groww-card rounded-xl p-4 border border-gray-100 dark:border-gray-800 hover:shadow-md transition"
-            >
-              <div className="flex justify-between items-start mb-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <StockLogo symbol={stock.symbol} size={44} />
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <h3 className="font-semibold text-sm truncate">{stock.name}</h3>
-                      <span className="text-[9px] px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500">
-                        {stock.symbol}
-                      </span>
-                      {isMarketOpen && (
-                        <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400">
-                          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                          LIVE
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-500 truncate max-w-[160px]">
-                      {ex}
-                    </p>
-                  </div>
-                </div>
-                <span
-                  className={cn(
-                    'text-sm font-medium tabular-nums',
-                    cp >= 0 ? 'text-gain' : 'text-loss'
-                  )}
-                >
-                  {cp >= 0 ? '+' : ''}
-                  {cp.toFixed(2)}%
-                </span>
-              </div>
-              <div className="flex justify-between items-end">
-                <span className="text-lg font-bold tabular-nums">
-                  {formatCurrency(price)}
-                </span>
-              </div>
-            </Link>
-          );
-        })()}
-        {(() => {
-          const stock = sensex;
-          const ex = stock.exchange || 'BSE';
-          const cp = stock.change_percent ?? 0;
-          const price = stock.price ?? 0;
-          return (
-            <Link
-              key={`${stock.symbol}:${ex}`}
-              to={`/terminal/${stock.symbol}?exchange=${ex}`}
-              className="bg-white dark:bg-groww-card rounded-xl p-4 border border-gray-100 dark:border-gray-800 hover:shadow-md transition"
-            >
-              <div className="flex justify-between items-start mb-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <StockLogo symbol={stock.symbol} size={44} />
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <h3 className="font-semibold text-sm truncate">{stock.name}</h3>
-                      <span className="text-[9px] px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500">
-                        {stock.symbol}
-                      </span>
-                      {isMarketOpen && (
-                        <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400">
-                          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                          LIVE
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-500 truncate max-w-[160px]">
-                      {ex}
-                    </p>
-                  </div>
-                </div>
-                <span
-                  className={cn(
-                    'text-sm font-medium tabular-nums',
-                    cp >= 0 ? 'text-gain' : 'text-loss'
-                  )}
-                >
-                  {cp >= 0 ? '+' : ''}
-                  {cp.toFixed(2)}%
-                </span>
-              </div>
-              <div className="flex justify-between items-end">
-                <span className="text-lg font-bold tabular-nums">
-                  {formatCurrency(price)}
-                </span>
-              </div>
-            </Link>
-          );
-        })()}
-        {(() => {
-          const stock = bankNifty;
-          const ex = stock.exchange || 'NSE';
-          const cp = stock.change_percent ?? 0;
-          const price = stock.price ?? 0;
-          return (
-            <Link
-              key={`${stock.symbol}:${ex}`}
-              to={`/terminal/${stock.symbol}?exchange=${ex}`}
-              className="bg-white dark:bg-groww-card rounded-xl p-4 border border-gray-100 dark:border-gray-800 hover:shadow-md transition"
-            >
-              <div className="flex justify-between items-start mb-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <StockLogo symbol={stock.symbol} size={44} />
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <h3 className="font-semibold text-sm truncate">{stock.name}</h3>
-                      <span className="text-[9px] px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500">
-                        {stock.symbol}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500 truncate max-w-[160px]">{ex}</p>
-                  </div>
-                </div>
-                <span className={cn('text-sm font-medium tabular-nums', cp >= 0 ? 'text-gain' : 'text-loss')}>
-                  {cp >= 0 ? '+' : ''}{cp.toFixed(2)}%
-                </span>
-              </div>
-              <div className="flex justify-between items-end">
-                <span className="text-lg font-bold tabular-nums">{formatCurrency(price)}</span>
-              </div>
-            </Link>
-          );
-        })()}
-      </div>
 
       {/* Market Breadth */}
       {breadth.total > 10 && (
