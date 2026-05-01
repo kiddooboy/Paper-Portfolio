@@ -348,30 +348,38 @@ export async function initSchema() {
   const ADMIN_EMAIL = (
     process.env.ADMIN_EMAIL || 'yogesh.nithyanandam@gmail.com'
   ).toLowerCase().trim();
-  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+  const DEFAULT_ADMIN_PASSWORD = 'admin123';
+  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD;
   const ADMIN_NAME = process.env.ADMIN_NAME || 'Admin';
+
   try {
     const existing = raw
-      .prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE')
+      .prepare('SELECT id, role FROM users WHERE email = ? COLLATE NOCASE')
       .get(ADMIN_EMAIL) as any;
+
     if (existing) {
-      raw.prepare(`UPDATE users SET role = 'admin' WHERE id = ?`).run(existing.id);
-      if (ADMIN_PASSWORD) {
-        const hashed = await bcrypt.hash(ADMIN_PASSWORD, 10);
-        raw.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashed, existing.id);
-        console.log(`[admin] reset password for ${ADMIN_EMAIL}`);
+      // Ensure existing user has admin role
+      if (existing.role !== 'admin') {
+        raw.prepare(`UPDATE users SET role = 'admin' WHERE id = ?`).run(existing.id);
+        console.log(`[admin] elevated ${ADMIN_EMAIL} to admin role`);
       }
-      console.log(`[admin] ensured role for ${ADMIN_EMAIL}`);
-    } else if (ADMIN_PASSWORD) {
+
+      // Only reset password if explicitly provided via env
+      if (process.env.ADMIN_PASSWORD) {
+        const hashed = await bcrypt.hash(process.env.ADMIN_PASSWORD, 10);
+        raw.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashed, existing.id);
+        console.log(`[admin] reset password for ${ADMIN_EMAIL} from ADMIN_PASSWORD env var`);
+      } else {
+        console.log(`[admin] ensured role for ${ADMIN_EMAIL}`);
+      }
+    } else {
+      // Create new admin user with provided or default password
       const hashed = await bcrypt.hash(ADMIN_PASSWORD, 10);
       raw
         .prepare('INSERT INTO users (name, email, password, role, balance) VALUES (?, ?, ?, ?, ?)')
-        .run(ADMIN_NAME, ADMIN_EMAIL, hashed, 'admin', 100000);
-      console.log(`[admin] bootstrapped admin user ${ADMIN_EMAIL}`);
-    } else {
-      console.log(
-        `[admin] ${ADMIN_EMAIL} not yet registered; set ADMIN_PASSWORD env var to auto-create`,
-      );
+        .run(ADMIN_NAME, ADMIN_EMAIL, hashed, 'admin', 500000); // 5x starting balance for admin
+      
+      console.log(`[admin] bootstrapped admin user ${ADMIN_EMAIL} (using ${process.env.ADMIN_PASSWORD ? 'provided' : 'default'} password)`);
     }
   } catch (err: any) {
     console.warn('[admin] bootstrap failed:', err?.message || err);

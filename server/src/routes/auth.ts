@@ -7,7 +7,7 @@ import { logActivity, getClientIp } from '../services/activityLogger.js';
 
 const router = Router();
 
-const ADMIN_EMAIL = 'yogesh.nithyanandam@gmail.com';
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'yogesh.nithyanandam@gmail.com').toLowerCase().trim();
 
 const registerSchema = z.object({
   name: z.string().min(2),
