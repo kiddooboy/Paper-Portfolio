@@ -13,7 +13,7 @@ export default function Layout() {
   const { isAuthenticated, logout, isInitializing } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
-  const [dark, setDark] = useState(false);
+  const [dark, setDark] = useState(true);
   const unreadCount = useNotificationsStore((s) => s.unreadCount);
   const fetchNotifications = useNotificationsStore((s) => s.fetch);
   const [currentTime, setCurrentTime] = useState(new Date());
