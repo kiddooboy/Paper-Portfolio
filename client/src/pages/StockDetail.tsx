@@ -94,7 +94,7 @@ export default function StockDetail() {
         <TradingViewWidget
           symbol={symbol.toUpperCase()}
           exchange={(stock?.exchange === 'BSE' ? 'BSE' : 'NSE')}
-          height={500}
+          height={600}
         />
       )}
 

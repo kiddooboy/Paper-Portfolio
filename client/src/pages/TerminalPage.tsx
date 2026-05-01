@@ -260,9 +260,9 @@ export default function TerminalPage() {
       {/* Body */}
       <div className="flex-1 flex flex-col lg:flex-row min-h-0">
         {/* Chart area */}
-        <div className="flex-1 flex flex-col min-h-[420px] lg:min-h-0">
-          <div className="flex-1 bg-white dark:bg-groww-card border-b lg:border-b-0 lg:border-r border-gray-100 dark:border-gray-800" style={{ minHeight: '400px' }}>
-            <TradingViewWidget symbol={symbol.toUpperCase()} exchange={exchange} height={520} />
+        <div className="flex-1 flex flex-col min-h-[600px] lg:min-h-0">
+          <div className="flex-1 bg-white dark:bg-groww-card border-b lg:border-b-0 lg:border-r border-gray-100 dark:border-gray-800" style={{ minHeight: '600px' }}>
+            <TradingViewWidget symbol={symbol.toUpperCase()} exchange={exchange} height={800} />
           </div>
           {/* Key stats strip */}
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 p-3 bg-white dark:bg-groww-card border-t border-gray-100 dark:border-gray-800 text-xs">

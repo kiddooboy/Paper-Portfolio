@@ -16,7 +16,7 @@ function TradingViewWidget({
   symbol,
   exchange = 'NSE',
   theme = 'light',
-  height = 500,
+  height = 600,
   interval = 'D',
 }: TradingViewWidgetProps) {
   const containerRef = useRef<HTMLDivElement>(null);
