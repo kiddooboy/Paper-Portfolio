@@ -68,6 +68,9 @@ export function getMarketStatus() {
 }
 
 function getNextOpenIST(ist: Date): string {
+  // ist is a fake-UTC date whose numeric value represents IST wall time.
+  // We work in that fake space, then convert back to real UTC before returning.
+  const IST_OFFSET_MS = 5.5 * 3600000;
   const d = new Date(ist);
   do {
     if (d.getHours() * 60 + d.getMinutes() < MARKET_OPEN_H * 60 + MARKET_OPEN_M && d.getDay() >= 1 && d.getDay() <= 5) break;
@@ -75,7 +78,8 @@ function getNextOpenIST(ist: Date): string {
     d.setHours(MARKET_OPEN_H, MARKET_OPEN_M, 0, 0);
   } while (d.getDay() === 0 || d.getDay() === 6);
   d.setHours(MARKET_OPEN_H, MARKET_OPEN_M, 0, 0);
-  return d.toISOString();
+  // d is fake-UTC (IST wall time); subtract IST offset to get real UTC
+  return new Date(d.getTime() - IST_OFFSET_MS).toISOString();
 }
 
 // ── Adaptive TTL ──
