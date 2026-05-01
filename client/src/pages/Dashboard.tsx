@@ -13,6 +13,7 @@ export default function Dashboard() {
   const portfolioLoading = usePortfolioStore((s) => s.loading);
   const fetchPortfolioStore = usePortfolioStore((s) => s.fetch);
   const [indexData, setIndexData] = useState<any>(null);
+  const [isMarketOpen, setIsMarketOpen] = useState(false);
   const updateBalance = useAuthStore((s) => s.updateBalance);
   const allQuotes = useMarketStore((s) => s.quotes);
   const loading = portfolioLoading && !portfolio;
@@ -98,6 +99,7 @@ export default function Dashboard() {
           };
         }
         setIndexData(map);
+        setIsMarketOpen(!!res.data?.isOpen);
       } catch {}
     };
     fetchIndices();
@@ -147,6 +149,12 @@ export default function Dashboard() {
                       <span className="text-[9px] px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500">
                         {stock.symbol}
                       </span>
+                      {isMarketOpen && (
+                        <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400">
+                          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                          LIVE
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-gray-500 truncate max-w-[160px]">
                       {ex}
@@ -191,6 +199,12 @@ export default function Dashboard() {
                       <span className="text-[9px] px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500">
                         {stock.symbol}
                       </span>
+                      {isMarketOpen && (
+                        <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400">
+                          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                          LIVE
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-gray-500 truncate max-w-[160px]">
                       {ex}
