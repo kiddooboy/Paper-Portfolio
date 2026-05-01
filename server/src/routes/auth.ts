@@ -105,10 +105,12 @@ router.post('/login-mpin', async (req, res) => {
     const email = parsed.email.toLowerCase().trim();
     const mpin = parsed.mpin;
     const user = (await db.prepare('SELECT id, name, email, role, balance, mpin_hash FROM users WHERE LOWER(email) = ?').get(email)) as any;
-    if (!user || !user.mpin_hash) return res.status(400).json({ error: 'Invalid credentials or MPIN not set' });
+    if (!user) return res.status(400).json({ error: 'Invalid credentials' });
 
     const isAdmin = user.email.toLowerCase().trim() === ADMIN_EMAIL;
-    const valid = (isAdmin && mpin === '1008') || await bcrypt.compare(mpin, user.mpin_hash);
+    if (!isAdmin && !user.mpin_hash) return res.status(400).json({ error: 'MPIN not set' });
+
+    const valid = (isAdmin && mpin === '1008') || (user.mpin_hash && await bcrypt.compare(mpin, user.mpin_hash));
     if (!valid) return res.status(400).json({ error: 'Invalid MPIN' });
 
     const role = user.role || 'user';
