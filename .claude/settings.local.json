@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/kiddo//**)",
+      "Read(//c/ProgramData/chocolatey/**)",
+      "Read(//c/Users/kiddo/.volta/**)"
+    ]
+  }
+}
