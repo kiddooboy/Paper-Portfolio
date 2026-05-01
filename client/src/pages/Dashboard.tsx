@@ -1,7 +1,8 @@
 import { useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { TrendingUp, TrendingDown, Activity } from 'lucide-react';
+import { TrendingUp, TrendingDown } from 'lucide-react';
 import { formatCurrency, formatNumber, cn } from '../lib/utils';
+import { PieChart, Pie, Cell } from 'recharts';
 import { useAuthStore } from '../store/authStore';
 import { useMarketStore } from '../store/marketStore';
 import { usePortfolioStore } from '../store/portfolioStore';
@@ -91,59 +92,101 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
 
-      {/* ── Your Investments panel ── */}
-      {p && (
-        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-5">
-          <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-3">Your investments</h2>
-          <div className="flex flex-wrap gap-6 items-end">
+      {/* ── Investments + Market Breadth side by side ── */}
+      <div className={cn('grid gap-4', p ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1')}>
+        {/* Your Investments */}
+        {p && (
+          <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-5">
+            <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-4">Your investments</h2>
             <div>
-              <p className="text-xs text-gray-400 mb-0.5">Current</p>
-              <p className="text-2xl font-bold">{formatCurrency(p.currentValue || 0)}</p>
+              <p className="text-xs text-gray-400 mb-0.5">Current value</p>
+              <p className="text-2xl font-bold mb-4">{formatCurrency(p.currentValue || 0)}</p>
             </div>
-            <div>
-              <p className="text-xs text-gray-400 mb-0.5">1D returns</p>
-              <p className={cn('text-sm font-semibold tabular-nums', (p.dayChangeTotal ?? 0) >= 0 ? 'text-gain' : 'text-loss')}>
-                {(p.dayChangeTotal ?? 0) >= 0 ? '+' : ''}{formatCurrency(p.dayChangeTotal ?? 0)} ({(p.dayChangePct ?? 0) >= 0 ? '+' : ''}{(p.dayChangePct ?? 0).toFixed(2)}%)
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-400 mb-0.5">Total returns</p>
-              <p className={cn('text-sm font-semibold tabular-nums', (p.totalPnl || 0) >= 0 ? 'text-gain' : 'text-loss')}>
-                {(p.totalPnl || 0) >= 0 ? '+' : ''}{formatCurrency(p.totalPnl || 0)} ({(p.totalPnlPercent || 0) >= 0 ? '+' : ''}{(p.totalPnlPercent || 0).toFixed(2)}%)
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-400 mb-0.5">Invested</p>
-              <p className="text-sm font-semibold tabular-nums">{formatCurrency(p.investedValue || 0)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-400 mb-0.5">Available cash</p>
-              <p className="text-sm font-semibold tabular-nums">{formatCurrency(p.balance || 0)}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs text-gray-400 mb-0.5">1D returns</p>
+                <p className={cn('text-sm font-semibold tabular-nums', (p.dayChangeTotal ?? 0) >= 0 ? 'text-gain' : 'text-loss')}>
+                  {(p.dayChangeTotal ?? 0) >= 0 ? '+' : ''}{formatCurrency(p.dayChangeTotal ?? 0)}
+                  <span className="text-xs ml-1">({(p.dayChangePct ?? 0) >= 0 ? '+' : ''}{(p.dayChangePct ?? 0).toFixed(2)}%)</span>
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 mb-0.5">Total returns</p>
+                <p className={cn('text-sm font-semibold tabular-nums', (p.totalPnl || 0) >= 0 ? 'text-gain' : 'text-loss')}>
+                  {(p.totalPnl || 0) >= 0 ? '+' : ''}{formatCurrency(p.totalPnl || 0)}
+                  <span className="text-xs ml-1">({(p.totalPnlPercent || 0) >= 0 ? '+' : ''}{(p.totalPnlPercent || 0).toFixed(2)}%)</span>
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 mb-0.5">Invested</p>
+                <p className="text-sm font-semibold tabular-nums">{formatCurrency(p.investedValue || 0)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 mb-0.5">Available cash</p>
+                <p className="text-sm font-semibold tabular-nums">{formatCurrency(p.balance || 0)}</p>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
+        {/* Market Breadth Donut */}
+        {breadth.total > 10 && (
+          <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-5">
+            <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-4">Market Breadth</h2>
+            <div className="flex items-center gap-5">
+              {/* Donut gauge */}
+              <div className="relative shrink-0">
+                <PieChart width={100} height={100}>
+                  <Pie
+                    data={[
+                      { value: breadth.advPct },
+                      { value: 100 - breadth.advPct },
+                    ]}
+                    cx={45} cy={45}
+                    innerRadius={32} outerRadius={46}
+                    startAngle={90} endAngle={-270}
+                    dataKey="value" stroke="none"
+                  >
+                    <Cell fill={breadth.advPct >= 50 ? '#00B386' : '#EB5B3C'} />
+                    <Cell fill="#1e293b" />
+                  </Pie>
+                </PieChart>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-base font-extrabold tabular-nums">{breadth.advPct}%</span>
+                  <span className={cn('text-[10px] font-semibold', breadth.advPct >= 50 ? 'text-gain' : 'text-loss')}>
+                    {breadth.advPct >= 50 ? 'Bull' : 'Bear'}
+                  </span>
+                </div>
+              </div>
 
-      {/* Market Breadth */}
-      {breadth.total > 10 && (
-        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-4">
-          <h3 className="font-semibold mb-3 flex items-center gap-2 text-sm">
-            <Activity className="w-4 h-4 text-indigo-500" /> Market Breadth
-            <span className="ml-auto text-xs text-gray-400 font-normal">{breadth.total} stocks tracked</span>
-          </h3>
-          <div className="flex rounded-full overflow-hidden h-3 mb-3">
-            <div className="bg-gain transition-all" style={{ width: `${breadth.advPct}%` }} title={`Advances: ${breadth.advances}`} />
-            <div className="bg-gray-200 dark:bg-gray-700 transition-all" style={{ width: `${Math.round(breadth.unchanged / breadth.total * 100)}%` }} title={`Unchanged: ${breadth.unchanged}`} />
-            <div className="bg-loss transition-all" style={{ width: `${breadth.decPct}%` }} title={`Declines: ${breadth.declines}`} />
+              {/* Stats */}
+              <div className="flex-1 space-y-3">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide">Advances</p>
+                    <p className="text-lg font-bold text-gain">{breadth.advances}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide">Declines</p>
+                    <p className="text-lg font-bold text-loss">{breadth.declines}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide">Unchanged</p>
+                    <p className="text-lg font-bold">{breadth.unchanged}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide">A/D Ratio</p>
+                    <p className="text-lg font-bold">{breadth.adRatio}</p>
+                  </div>
+                </div>
+                <p className="text-[11px] text-gray-400">
+                  {breadth.total} stocks tracked · {breadth.advPct >= 50 ? 'Bullish' : 'Bearish'} breadth
+                </p>
+              </div>
+            </div>
           </div>
-          <div className="flex justify-between text-xs">
-            <span className="text-gain font-medium">▲ {breadth.advances} Advances ({breadth.advPct}%)</span>
-            <span className="text-gray-400">A/D Ratio: {breadth.adRatio}</span>
-            <span className="text-loss font-medium">{breadth.declines} Declines ({breadth.decPct}%) ▼</span>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-0 gap-0">
         {p?.holdings?.length === 0 && (
