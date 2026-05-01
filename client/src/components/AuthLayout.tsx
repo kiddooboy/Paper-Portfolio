@@ -149,7 +149,7 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
             Build confidence.
           </h2>
           <p className="text-gray-600 dark:text-gray-400 mb-8">
-            Trade NSE & BSE stocks risk-free with ₹1,00,000 virtual balance.
+            Trade NSE & BSE stocks risk-free with virtual balance.
             Track your portfolio in real-time.
           </p>
 
