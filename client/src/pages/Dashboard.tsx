@@ -96,90 +96,125 @@ export default function Dashboard() {
   return (
     <div className="space-y-4">
 
-      {/* ── Row 1: Investments + Market Breadth ── */}
+      {/* ── Row 1: Investments + Market Breadth — Layout 4 accent-border ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-        {/* Your Investments */}
-        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-5 flex flex-col justify-between">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Your investments</p>
+        {/* ── Your Investments ── green top accent */}
+        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
+          <div className="h-1 w-full bg-gain" />
+          <div className="p-5">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Your Investments</p>
 
-          {p ? (
-            <>
-              <div className="mb-4">
-                <p className="text-xs text-gray-400 mb-0.5">Current value</p>
-                <p className="text-3xl font-bold">{formatCurrency(p.currentValue || 0)}</p>
-              </div>
+            {p ? (
+              <>
+                {/* Current value + today badge */}
+                <div className="flex items-start justify-between mb-4">
+                  <p className="text-3xl font-bold">{formatCurrency(p.currentValue || 0)}</p>
+                  <div className="text-right">
+                    <span className={cn(
+                      'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold',
+                      (p.dayChangePct ?? 0) >= 0
+                        ? 'bg-green-100 dark:bg-green-900/30 text-gain'
+                        : 'bg-red-100 dark:bg-red-900/20 text-loss'
+                    )}>
+                      {(p.dayChangePct ?? 0) >= 0 ? '+' : ''}{(p.dayChangePct ?? 0).toFixed(2)}% today
+                    </span>
+                    <p className={cn('text-xs font-semibold mt-1 tabular-nums', (p.dayChangeTotal ?? 0) >= 0 ? 'text-gain' : 'text-loss')}>
+                      {(p.dayChangeTotal ?? 0) >= 0 ? '+' : ''}{formatCurrency(p.dayChangeTotal ?? 0)}
+                    </p>
+                  </div>
+                </div>
 
-              <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-                <Stat label="1D returns"
-                  value={`${(p.dayChangeTotal ?? 0) >= 0 ? '+' : ''}${formatCurrency(p.dayChangeTotal ?? 0)}`}
-                  sub={`${(p.dayChangePct ?? 0) >= 0 ? '+' : ''}${(p.dayChangePct ?? 0).toFixed(2)}%`}
-                  color={(p.dayChangeTotal ?? 0) >= 0 ? 'gain' : 'loss'} />
-                <Stat label="Total returns"
-                  value={`${(p.totalPnl || 0) >= 0 ? '+' : ''}${formatCurrency(p.totalPnl || 0)}`}
-                  sub={`${(p.totalPnlPercent || 0) >= 0 ? '+' : ''}${(p.totalPnlPercent || 0).toFixed(2)}%`}
-                  color={(p.totalPnl || 0) >= 0 ? 'gain' : 'loss'} />
-                <Stat label="Invested" value={formatCurrency(p.investedValue || 0)} />
-                <Stat label="Available cash" value={formatCurrency(p.balance || 0)} />
-              </div>
+                {/* Sub-cards with left accent border */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="border-l-2 border-gain pl-3 py-1">
+                    <p className="text-[10px] text-gray-400 mb-0.5">Total returns</p>
+                    <p className={cn('text-sm font-bold tabular-nums leading-tight', (p.totalPnl || 0) >= 0 ? 'text-gain' : 'text-loss')}>
+                      {(p.totalPnl || 0) >= 0 ? '+' : ''}{formatCurrency(p.totalPnl || 0)}
+                    </p>
+                    <p className={cn('text-[11px] tabular-nums', (p.totalPnl || 0) >= 0 ? 'text-gain' : 'text-loss')}>
+                      {(p.totalPnlPercent || 0) >= 0 ? '+' : ''}{(p.totalPnlPercent || 0).toFixed(2)}%
+                    </p>
+                  </div>
+                  <div className="border-l-2 border-gray-300 dark:border-gray-600 pl-3 py-1">
+                    <p className="text-[10px] text-gray-400 mb-0.5">Invested</p>
+                    <p className="text-sm font-bold tabular-nums">{formatCurrency(p.investedValue || 0)}</p>
+                  </div>
+                  <div className="border-l-2 border-blue-400 pl-3 py-1">
+                    <p className="text-[10px] text-gray-400 mb-0.5">Available cash</p>
+                    <p className="text-sm font-bold tabular-nums text-blue-500">{formatCurrency(p.balance || 0)}</p>
+                  </div>
+                </div>
 
-              {p.holdings?.length === 0 && (
-                <Link to="/market" className="mt-4 inline-flex items-center gap-1.5 text-xs text-groww-primary font-semibold hover:underline">
-                  Explore stocks to invest →
-                </Link>
-              )}
-            </>
-          ) : (
-            <div className="flex-1 flex items-center justify-center text-sm text-gray-400">
-              Sign in to see your investments
-            </div>
-          )}
+                {p.holdings?.length === 0 && (
+                  <Link to="/market" className="mt-3 inline-flex items-center gap-1 text-xs text-groww-primary font-semibold hover:underline">
+                    Explore stocks to invest →
+                  </Link>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-gray-400 py-6 text-center">Sign in to see your investments</p>
+            )}
+          </div>
         </div>
 
-        {/* Market Breadth Donut */}
-        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-5">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Market Breadth</p>
+        {/* ── Market Breadth ── red/green top accent based on sentiment */}
+        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
+          <div className={cn('h-1 w-full', isBull ? 'bg-gain' : 'bg-loss')} />
+          <div className="p-5">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Market Breadth</p>
 
-          {breadth.total > 10 ? (
-            <div className="flex items-center gap-6">
-              {/* Donut */}
-              <div className="relative shrink-0">
-                <PieChart width={110} height={110}>
-                  <Pie
-                    data={[{ value: breadth.advPct }, { value: 100 - breadth.advPct }]}
-                    cx={50} cy={50}
-                    innerRadius={35} outerRadius={50}
-                    startAngle={90} endAngle={-270}
-                    dataKey="value" stroke="none"
-                  >
-                    <Cell fill={donutColor} />
-                    <Cell fill={donutBg} />
-                  </Pie>
-                </PieChart>
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-lg font-extrabold tabular-nums leading-none">{breadth.advPct}%</span>
-                  <span className={cn('text-[11px] font-bold mt-0.5', isBull ? 'text-gain' : 'text-loss')}>
-                    {isBull ? 'Bull' : 'Bear'}
-                  </span>
-                </div>
-              </div>
+            {breadth.total > 10 ? (
+              <>
+                <div className="flex items-center gap-5 mb-4">
+                  {/* Donut */}
+                  <div className="relative shrink-0">
+                    <PieChart width={100} height={100}>
+                      <Pie
+                        data={[{ value: breadth.advPct }, { value: 100 - breadth.advPct }]}
+                        cx={46} cy={46}
+                        innerRadius={33} outerRadius={46}
+                        startAngle={90} endAngle={-270}
+                        dataKey="value" stroke="none"
+                      >
+                        <Cell fill={donutColor} />
+                        <Cell fill={donutBg} />
+                      </Pie>
+                    </PieChart>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                      <span className="text-base font-extrabold tabular-nums leading-none">{breadth.advPct}%</span>
+                      <span className={cn('text-[10px] font-bold uppercase tracking-wide mt-0.5', isBull ? 'text-gain' : 'text-loss')}>
+                        {isBull ? 'Bull' : 'Bear'}
+                      </span>
+                    </div>
+                  </div>
 
-              {/* Stats grid */}
-              <div className="flex-1">
-                <div className="grid grid-cols-2 gap-x-6 gap-y-3 mb-3">
-                  <Stat label="Advances" value={String(breadth.advances)} color="gain" />
-                  <Stat label="Declines" value={String(breadth.declines)} color="loss" />
-                  <Stat label="Unchanged" value={String(breadth.unchanged)} />
-                  <Stat label="A/D Ratio" value={String(breadth.adRatio)} />
+                  {/* Advances / Declines big numbers */}
+                  <div className="flex gap-6">
+                    <div>
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Advances</p>
+                      <p className="text-2xl font-extrabold text-gain">{breadth.advances}</p>
+                      <div className="h-0.5 w-8 bg-gain mt-1 rounded-full" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Declines</p>
+                      <p className="text-2xl font-extrabold text-loss">{breadth.declines}</p>
+                      <div className="h-0.5 w-8 bg-loss mt-1 rounded-full" />
+                    </div>
+                  </div>
                 </div>
-                <p className="text-[11px] text-gray-400">
-                  {breadth.total} stocks · {isBull ? 'Bullish' : 'Bearish'} breadth
-                </p>
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-gray-400 mt-6 text-center">Loading market data…</p>
-          )}
+
+                {/* Footer stats */}
+                <div className="flex items-center gap-4 text-[11px] text-gray-400 border-t border-gray-100 dark:border-gray-800 pt-3">
+                  <span>Unchanged: <strong className="text-gray-600 dark:text-gray-300">{breadth.unchanged}</strong></span>
+                  <span>A/D: <strong className="text-gray-600 dark:text-gray-300">{breadth.adRatio}</strong></span>
+                  <span className="ml-auto">{breadth.total} stocks</span>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-gray-400 py-6 text-center">Loading market data…</p>
+            )}
+          </div>
         </div>
       </div>
 
@@ -246,18 +281,6 @@ export default function Dashboard() {
 }
 
 /* ── Sub-components ── */
-
-function Stat({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: 'gain' | 'loss' }) {
-  return (
-    <div>
-      <p className="text-[11px] text-gray-400 mb-0.5">{label}</p>
-      <p className={cn('text-sm font-semibold tabular-nums leading-tight',
-        color === 'gain' ? 'text-gain' : color === 'loss' ? 'text-loss' : ''
-      )}>{value}</p>
-      {sub && <p className={cn('text-[11px] tabular-nums', color === 'gain' ? 'text-gain' : color === 'loss' ? 'text-loss' : 'text-gray-400')}>{sub}</p>}
-    </div>
-  );
-}
 
 function StockRow({ s, pctColor }: { s: any; pctColor: 'gain' | 'loss' }) {
   const pct = s.change_percent ?? 0;
