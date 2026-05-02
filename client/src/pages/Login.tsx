@@ -57,7 +57,7 @@ export default function Login() {
     <AuthLayout>
       <div className="space-y-6">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold">Welcome back</h1>
+          <h1 className="text-3xl font-bold">Welcome.</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">Sign in to your Paper Portfolio account</p>
         </div>
 
