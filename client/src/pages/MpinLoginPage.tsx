@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -21,6 +21,27 @@ export default function MpinLoginPage() {
     if (mpin.length < 4) setMpin(prev => prev + digit);
   };
   const handleDelete = () => setMpin(prev => prev.slice(0, -1));
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
+      if (e.key >= '0' && e.key <= '9') {
+        setMpin(prev => prev.length < 4 ? prev + e.key : prev);
+      } else if (e.key === 'Backspace') {
+        setMpin(prev => prev.slice(0, -1));
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  useEffect(() => {
+    const onEnter = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && mpin.length === 4 && email) handleSubmit();
+    };
+    window.addEventListener('keydown', onEnter);
+    return () => window.removeEventListener('keydown', onEnter);
+  }, [mpin, email]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async () => {
     if (!email || mpin.length !== 4) {

@@ -7,11 +7,12 @@ import axios from 'axios';
 import Sidebar from './Sidebar';
 import MobileNav from './MobileNav';
 import GlobalSearch from './GlobalSearch';
+import SetMpinModal from './SetMpinModal';
 import { Bell, TrendingUp, Moon, Sun, MessageSquare } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 
 export default function Layout() {
-  const { isAuthenticated, logout, isInitializing } = useAuthStore();
+  const { isAuthenticated, logout, isInitializing, user } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
   const [dark, setDark] = useState(true);
@@ -111,6 +112,7 @@ export default function Layout() {
         </main>
       </div>
 
+      {isAuthenticated && user?.has_mpin === false && <SetMpinModal />}
       <MobileNav activePath={location.pathname} />
 
       {/* Floating Chat Button */}

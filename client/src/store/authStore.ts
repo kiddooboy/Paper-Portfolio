@@ -8,6 +8,7 @@ interface User {
   email: string;
   role: string;
   balance: number;
+  has_mpin?: boolean;
 }
 
 interface AuthState {
@@ -21,6 +22,7 @@ interface AuthState {
   setUser: (user: User) => void;
   loginMpin: (email: string, mpin: string) => Promise<void>;
   setMpin: (mpin: string) => Promise<void>;
+  setHasMpin: () => void;
   setHydrated: () => void;
   setInitialized: () => void;
 }
@@ -79,6 +81,9 @@ export const useAuthStore = create<AuthState>()(
           throw new Error(err?.response?.data?.error || 'Failed to set MPIN');
         }
       },
+      setHasMpin: () => set((state) => ({
+        user: state.user ? { ...state.user, has_mpin: true } : null,
+      })),
       setHydrated: () => set({ hydrated: true }),
       setInitialized: () => set({ isInitializing: false }),
     }),

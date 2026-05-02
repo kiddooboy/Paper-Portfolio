@@ -78,7 +78,7 @@ router.post('/login', async (req, res) => {
     logActivity(user.id, 'LOGIN', { method: 'password' }, getClientIp(req));
 
     res.cookie('auth_token', token, { httpOnly: true, secure: req.secure || req.headers['x-forwarded-proto'] === 'https', sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 });
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role, balance: user.balance } });
+    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role, balance: user.balance, has_mpin: !!user.mpin_hash } });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Invalid data' });
   }
@@ -125,7 +125,7 @@ router.post('/login-mpin', async (req, res) => {
     logActivity(user.id, 'LOGIN_MPIN', { method: 'mpin' }, getClientIp(req));
 
     res.cookie('auth_token', token, { httpOnly: true, secure: req.secure || req.headers['x-forwarded-proto'] === 'https', sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 });
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role, balance: user.balance } });
+    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role, balance: user.balance, has_mpin: !!user.mpin_hash } });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Invalid data' });
   }
@@ -164,7 +164,7 @@ router.post('/firebase', async (req, res) => {
     const name = firebaseName || email.split('@')[0];
 
     let user = (await db.prepare(
-      'SELECT id, name, email, role, balance FROM users WHERE LOWER(email) = ?'
+      'SELECT id, name, email, role, balance, mpin_hash FROM users WHERE LOWER(email) = ?'
     ).get(email)) as any;
 
     const now = new Date().toISOString();
@@ -184,9 +184,14 @@ router.post('/firebase', async (req, res) => {
       logActivity(user.id, 'LOGIN', { method: 'google' }, getClientIp(req));
     }
 
-    const token = generateToken(user.id, user.email, user.role);
+    // Re-fetch to get mpin_hash for new users too
+    const fresh = (await db.prepare(
+      'SELECT id, name, email, role, balance, mpin_hash FROM users WHERE id = ?'
+    ).get(user.id)) as any;
+
+    const token = generateToken(fresh.id, fresh.email, fresh.role);
     res.cookie('auth_token', token, { httpOnly: true, secure: req.secure || req.headers['x-forwarded-proto'] === 'https', sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 });
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, balance: user.balance } });
+    res.json({ token, user: { id: fresh.id, name: fresh.name, email: fresh.email, role: fresh.role, balance: fresh.balance, has_mpin: !!fresh.mpin_hash } });
   } catch (err: any) {
     res.status(401).json({ error: err.message || 'Firebase authentication failed' });
   }
