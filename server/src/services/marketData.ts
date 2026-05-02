@@ -478,6 +478,67 @@ export async function getIndices(forceRefresh = false): Promise<IndexQuote[]> {
   return fresh;
 }
 
+// ── NSE Sector indices ──
+export const SECTOR_INDICES = [
+  { symbol: '^CNXIT',      name: 'IT',           key: 'IT' },
+  { symbol: '^CNXFMCG',    name: 'FMCG',         key: 'FMCG' },
+  { symbol: '^CNXPHARMA',  name: 'Pharma',       key: 'Pharma' },
+  { symbol: '^CNXAUTO',    name: 'Auto',         key: 'Auto' },
+  { symbol: '^CNXMETAL',   name: 'Metal',        key: 'Metal' },
+  { symbol: '^CNXREALTY',  name: 'Realty',       key: 'Realty' },
+  { symbol: '^CNXPSUBANK', name: 'PSU Bank',     key: 'PSU Bank' },
+  { symbol: '^CNXENERGY',  name: 'Energy',       key: 'Energy' },
+  { symbol: '^CNXFINANCE', name: 'Finance',      key: 'Finance' },
+  { symbol: '^CNXINFRA',   name: 'Infra',        key: 'Infra' },
+];
+
+const sectorCache = new Map<string, { at: number; data: IndexQuote }>();
+
+export async function getSectors(forceRefresh = false): Promise<IndexQuote[]> {
+  const ttl = getTTL();
+  const now = Date.now();
+  const fresh: IndexQuote[] = [];
+  const missing: typeof SECTOR_INDICES = [];
+
+  for (const idx of SECTOR_INDICES) {
+    const hit = sectorCache.get(idx.symbol);
+    const isFreshEnough = forceRefresh ? (hit && now - hit.at < ttl) : (hit && now - hit.at < STALE_GRACE_MS);
+    if (isFreshEnough && hit) fresh.push(hit.data);
+    else missing.push(idx);
+  }
+
+  if (missing.length) {
+    try {
+      const results = (await yahooFinance.quote(missing.map((i) => i.symbol))) as any;
+      const arr = Array.isArray(results) ? results : [results];
+      for (const q of arr) {
+        if (!q || typeof q.regularMarketPrice !== 'number') continue;
+        const meta = missing.find((m) => m.symbol === q.symbol);
+        if (!meta) continue;
+        const data: IndexQuote = {
+          symbol: meta.symbol,
+          name: meta.name,
+          price: q.regularMarketPrice,
+          change: q.regularMarketChange ?? 0,
+          change_percent: q.regularMarketChangePercent ?? 0,
+          previous_close: q.regularMarketPreviousClose ?? q.regularMarketPrice,
+        };
+        sectorCache.set(meta.symbol, { at: now, data });
+        fresh.push(data);
+      }
+    } catch {
+      // fall back to stale cache
+      for (const idx of missing) {
+        const stale = sectorCache.get(idx.symbol);
+        if (stale) fresh.push(stale.data);
+      }
+    }
+  }
+
+  // Preserve SECTOR_INDICES order
+  return SECTOR_INDICES.map((s) => fresh.find((f) => f.symbol === s.symbol)).filter(Boolean) as IndexQuote[];
+}
+
 // Popular Nifty50 basket for gainers/losers widgets.
 export const NIFTY50 = [
   'RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'ICICIBANK', 'HINDUNILVR', 'SBIN', 'BHARTIARTL',

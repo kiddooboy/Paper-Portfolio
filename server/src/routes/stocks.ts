@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
-import { getQuote, getCachedQuote, getCachedQuotes, getCachedIndices, getHistory, isMarketOpen, getMarketStatus } from '../services/marketData.js';
+import { getQuote, getCachedQuote, getCachedQuotes, getCachedIndices, getHistory, isMarketOpen, getMarketStatus, getSectors } from '../services/marketData.js';
 import { logActivity, getClientIp } from '../services/activityLogger.js';
 
 const router = Router();
@@ -14,6 +14,16 @@ function parseExchange(v: any): Exchange {
 // GET /api/stocks/market-status — market open/closed status + recommended poll interval
 router.get('/market-status', (_req, res) => {
   res.json(getMarketStatus());
+});
+
+// GET /api/stocks/sectors — NSE sector indices (IT, FMCG, Pharma, Auto …)
+router.get('/sectors', async (_req, res) => {
+  try {
+    const sectors = await getSectors();
+    res.json({ sectors, isOpen: isMarketOpen() });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // GET /api/stocks/indices — live NIFTY 50 / SENSEX / BANK NIFTY (public, no auth)

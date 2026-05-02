@@ -1,11 +1,12 @@
 import { Link } from 'react-router-dom';
-import { LayoutDashboard, Search, Wallet, ListOrdered, Bookmark, Trophy, ShieldCheck, TrendingUp, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, Search, Wallet, ListOrdered, Bookmark, Trophy, ShieldCheck, TrendingUp, BarChart3, PieChart } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuthStore } from '../store/authStore';
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/market', label: 'Market', icon: Search },
+  { path: '/sectors', label: 'Sectors', icon: PieChart },
   { path: '/portfolio', label: 'Portfolio', icon: TrendingUp },
   { path: '/positions', label: 'Positions', icon: BarChart3 },
   { path: '/orders', label: 'Orders', icon: ListOrdered },

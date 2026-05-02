@@ -17,6 +17,7 @@ import NotificationsPage from './pages/NotificationsPage';
 import AdminPage from './pages/AdminPage';
 import PositionsPage from './pages/PositionsPage';
 import AIChatPage from './pages/AIChatPage';
+import SectorsPage from './pages/SectorsPage';
 import WalletPage from './pages/WalletPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import { useAuthStore } from './store/authStore';
@@ -62,6 +63,7 @@ function App() {
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/ai-chat" element={<AIChatPage />} />
         <Route path="/wallet" element={<WalletPage />} />
+        <Route path="/sectors" element={<SectorsPage />} />
       </Route>
     </Routes>
   );
