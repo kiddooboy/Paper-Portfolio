@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { cn } from '../lib/utils';
+import { Link } from 'react-router-dom';
+import { ArrowLeft, ChevronRight } from 'lucide-react';
+import { cn, formatCurrency } from '../lib/utils';
 
 interface SectorQuote {
   name: string;
@@ -11,9 +13,17 @@ interface SectorQuote {
   losers: number;
   unchanged: number;
   change_percent: number;
-  indexSymbol: string | null;
-  indexPrice: number | null;
-  indexChange: number | null;
+}
+
+interface SectorStock {
+  symbol: string;
+  exchange: string;
+  name: string;
+  market_cap: number | null;
+  price: number | null;
+  change: number | null;
+  change_percent: number | null;
+  volume: number | null;
 }
 
 function heatColor(pct: number) {
@@ -25,7 +35,6 @@ function heatColor(pct: number) {
   return 'bg-red-700 dark:bg-red-800';
 }
 
-// Abbreviate long sector names for the heatmap tile
 function shortName(name: string): string {
   const map: Record<string, string> = {
     'Information Technology': 'IT',
@@ -47,7 +56,6 @@ function shortName(name: string): string {
     'Services': 'Services',
     'Textiles': 'Textiles',
     'Media Entertainment & Publication': 'Media',
-    'Diversified': 'Diversified',
   };
   return map[name] || name;
 }
@@ -55,6 +63,9 @@ function shortName(name: string): string {
 export default function SectorsPage() {
   const [sectors, setSectors] = useState<SectorQuote[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [sectorStocks, setSectorStocks] = useState<SectorStock[]>([]);
+  const [stocksLoading, setStocksLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,8 +81,138 @@ export default function SectorsPage() {
     return () => { cancelled = true; clearInterval(id); };
   }, []);
 
+  useEffect(() => {
+    if (!selected) return;
+    let cancelled = false;
+    setStocksLoading(true);
+    setSectorStocks([]);
+    axios.get(`/api/stocks/sectors/${encodeURIComponent(selected)}/stocks`)
+      .then((res) => { if (!cancelled) setSectorStocks(res.data?.stocks || []); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setStocksLoading(false); });
+    return () => { cancelled = true; };
+  }, [selected]);
+
   const sorted = [...sectors].sort((a, b) => b.change_percent - a.change_percent);
 
+  // ── Sector drill-down view ──
+  if (selected) {
+    const meta = sectors.find((s) => s.name === selected);
+    return (
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setSelected(null)}
+            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div>
+            <h1 className="text-xl font-bold">{selected}</h1>
+            {meta && (
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                {meta.totalStocks} stocks ·{' '}
+                <span className={meta.change_percent >= 0 ? 'text-gain' : 'text-loss'}>
+                  {meta.change_percent >= 0 ? '+' : ''}{meta.change_percent.toFixed(2)}% today
+                </span>
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Stats bar */}
+        {meta && (
+          <div className="flex gap-3">
+            <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 px-4 py-3 flex-1 text-center">
+              <p className="text-xs text-gray-400 mb-0.5">Gainers</p>
+              <p className="text-lg font-bold text-gain">{meta.gainers}</p>
+            </div>
+            <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 px-4 py-3 flex-1 text-center">
+              <p className="text-xs text-gray-400 mb-0.5">Losers</p>
+              <p className="text-lg font-bold text-loss">{meta.losers}</p>
+            </div>
+            <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 px-4 py-3 flex-1 text-center">
+              <p className="text-xs text-gray-400 mb-0.5">Unchanged</p>
+              <p className="text-lg font-bold text-gray-500">{meta.unchanged}</p>
+            </div>
+            <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 px-4 py-3 flex-1 text-center">
+              <p className="text-xs text-gray-400 mb-0.5">Live / Total</p>
+              <p className="text-lg font-bold">{meta.liveCount}/{meta.totalStocks}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Stock list */}
+        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+            <h2 className="text-sm font-bold">Stocks in {shortName(selected)}</h2>
+          </div>
+
+          {stocksLoading ? (
+            <div className="p-5 space-y-3">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="h-12 bg-gray-100 dark:bg-gray-800 rounded animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 dark:border-gray-800 text-[11px] text-gray-400 uppercase tracking-wide">
+                  <th className="text-left px-5 py-3 font-medium">Stock</th>
+                  <th className="text-right px-5 py-3 font-medium">Price</th>
+                  <th className="text-right px-5 py-3 font-medium">Change</th>
+                  <th className="text-right px-5 py-3 font-medium hidden md:table-cell">Volume</th>
+                  <th className="px-4 py-3 w-8 hidden md:table-cell" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+                {sectorStocks.map((stock) => (
+                  <tr key={stock.symbol} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
+                    <td className="px-5 py-3.5">
+                      <Link to={`/terminal/${stock.symbol}?exchange=${stock.exchange}`} className="hover:underline">
+                        <p className="font-semibold">{stock.symbol}</p>
+                        <p className="text-[11px] text-gray-400 truncate max-w-[160px]">{stock.name}</p>
+                      </Link>
+                    </td>
+                    <td className="px-5 py-3.5 text-right tabular-nums font-medium">
+                      {stock.price != null ? formatCurrency(stock.price) : <span className="text-gray-400">—</span>}
+                    </td>
+                    <td className="px-5 py-3.5 text-right">
+                      {stock.change_percent != null ? (
+                        <div>
+                          <span className={cn('font-semibold tabular-nums text-sm', stock.change_percent >= 0 ? 'text-gain' : 'text-loss')}>
+                            {stock.change_percent >= 0 ? '+' : ''}{stock.change_percent.toFixed(2)}%
+                          </span>
+                          {stock.change != null && (
+                            <p className={cn('text-[11px] tabular-nums', stock.change >= 0 ? 'text-gain' : 'text-loss')}>
+                              {stock.change >= 0 ? '+' : ''}{stock.change.toFixed(2)}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5 text-right tabular-nums text-xs text-gray-500 hidden md:table-cell">
+                      {stock.volume != null ? stock.volume.toLocaleString('en-IN') : '—'}
+                    </td>
+                    <td className="px-4 py-3.5 hidden md:table-cell">
+                      <Link to={`/terminal/${stock.symbol}?exchange=${stock.exchange}`}>
+                        <ChevronRight className="w-4 h-4 text-gray-400" />
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Main sectors view ──
   return (
     <div className="space-y-6">
       <div>
@@ -91,9 +232,10 @@ export default function SectorsPage() {
           <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Sector Heatmap · Today</p>
           <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-5 gap-2">
             {sorted.map((s) => (
-              <div
+              <button
                 key={s.name}
-                className={cn('rounded-xl p-4 flex flex-col justify-between cursor-pointer hover:opacity-90 transition', heatColor(s.change_percent))}
+                onClick={() => setSelected(s.name)}
+                className={cn('rounded-xl p-4 flex flex-col justify-between cursor-pointer hover:opacity-90 transition text-left', heatColor(s.change_percent))}
               >
                 <p className="text-sm font-semibold text-white/90 leading-tight">{shortName(s.name)}</p>
                 <div className="mt-3">
@@ -102,7 +244,7 @@ export default function SectorsPage() {
                   </p>
                   <p className="text-[11px] text-white/60">{s.totalStocks} stocks</p>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
           <p className="text-[11px] text-gray-400 mt-3">{sectors.length} sectors · live data from {sectors.reduce((a, s) => a + s.liveCount, 0)} stocks</p>
@@ -129,6 +271,7 @@ export default function SectorsPage() {
                 <th className="text-center px-4 py-3 font-medium hidden md:table-cell">Gainers / Losers</th>
                 <th className="text-right px-5 py-3 font-medium hidden lg:table-cell">Stocks</th>
                 <th className="text-right px-5 py-3 font-medium">1D Change</th>
+                <th className="px-4 py-3 w-8" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
@@ -136,7 +279,11 @@ export default function SectorsPage() {
                 const active = s.gainers + s.losers;
                 const gainPct = active > 0 ? (s.gainers / active) * 100 : 50;
                 return (
-                  <tr key={s.name} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
+                  <tr
+                    key={s.name}
+                    className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition cursor-pointer"
+                    onClick={() => setSelected(s.name)}
+                  >
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-3">
                         <div className={cn('w-2.5 h-2.5 rounded-full shrink-0', s.change_percent >= 0 ? 'bg-gain' : 'bg-loss')} />
@@ -167,6 +314,10 @@ export default function SectorsPage() {
                       <span className={cn('font-semibold tabular-nums', s.change_percent >= 0 ? 'text-gain' : 'text-loss')}>
                         {s.change_percent >= 0 ? '+' : ''}{s.change_percent.toFixed(2)}%
                       </span>
+                    </td>
+
+                    <td className="px-4 py-3.5">
+                      <ChevronRight className="w-4 h-4 text-gray-400" />
                     </td>
                   </tr>
                 );

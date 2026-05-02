@@ -19,11 +19,14 @@ router.get('/market-status', (_req, res) => {
 // GET /api/stocks/sectors — sector stats computed from DB stocks + live quote cache
 router.get('/sectors', async (_req, res) => {
   try {
+    const EXCLUDED_SECTORS = new Set(['Diversified']);
+
     // 1. Get all stocks with their sector from DB
     const dbStocks = db.prepare(
       `SELECT symbol, exchange, sector, market_cap FROM stocks
        WHERE sector IS NOT NULL AND sector != '' ORDER BY symbol`
     ).all() as { symbol: string; exchange: string; sector: string; market_cap: number | null }[];
+    const filteredStocks = dbStocks.filter((s) => !EXCLUDED_SECTORS.has(s.sector));
 
     // 2. Get all cached live quotes
     const liveQuotes = getAllCachedQuotes();
@@ -69,7 +72,7 @@ router.get('/sectors', async (_req, res) => {
       weightedChangeSum: number;
     }>();
 
-    for (const stock of dbStocks) {
+    for (const stock of filteredStocks) {
       const key = `${stock.symbol}:${stock.exchange || 'NSE'}`;
       const altKey = `${stock.symbol}:NSE`;
       const quote = liveQuotes.get(key) || liveQuotes.get(altKey);
@@ -118,6 +121,37 @@ router.get('/sectors', async (_req, res) => {
       .sort((a, b) => b.change_percent - a.change_percent);
 
     res.json({ sectors, isOpen: isMarketOpen() });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/stocks/sectors/:sector/stocks — all stocks in a sector with live quote data
+router.get('/sectors/:sector/stocks', async (req, res) => {
+  try {
+    const sectorName = decodeURIComponent(req.params.sector);
+    const rows = db.prepare(
+      `SELECT symbol, exchange, name, market_cap FROM stocks
+       WHERE sector = ? ORDER BY market_cap DESC NULLS LAST`
+    ).all(sectorName) as { symbol: string; exchange: string; name: string; market_cap: number | null }[];
+
+    const liveQuotes = getAllCachedQuotes();
+    const stocks = rows.map((row) => {
+      const key = `${row.symbol}:${row.exchange || 'NSE'}`;
+      const q = liveQuotes.get(key) || liveQuotes.get(`${row.symbol}:NSE`);
+      return {
+        symbol: row.symbol,
+        exchange: row.exchange || 'NSE',
+        name: row.name || row.symbol,
+        market_cap: row.market_cap,
+        price: q?.price ?? null,
+        change: q?.change ?? null,
+        change_percent: q?.change_percent ?? null,
+        volume: q?.volume ?? null,
+      };
+    });
+
+    res.json({ sector: sectorName, stocks });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
