@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { cn, formatCurrency } from '../lib/utils';
 import { useMarketStore } from '../store/marketStore';
@@ -65,7 +64,6 @@ export default function SectorsPage() {
       if (q.change_percent > 0) gainers++;
       else if (q.change_percent < 0) losers++;
     }
-    const total = gainers + losers || 1;
     return { ...s, gainers, losers, total: gainers + losers };
   });
 
