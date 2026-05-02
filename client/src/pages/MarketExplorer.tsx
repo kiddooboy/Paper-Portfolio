@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
-import { Search, Filter } from 'lucide-react';
+import { Search, Filter, Bookmark } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 import StockLogo from '../components/StockLogo';
+import { useWatchlistStore } from '../store/watchlistStore';
+import toast from 'react-hot-toast';
 
 type Tab = 'gainers' | 'losers';
 
@@ -13,6 +15,12 @@ export default function MarketExplorer() {
   const [exchange, setExchange] = useState<'NSE' | 'BSE' | ''>('');
   const [activeTab, setActiveTab] = useState<Tab>('gainers');
   const [loading, setLoading] = useState(true);
+  const isInWatchlist = useWatchlistStore((s) => s.isInWatchlist);
+  const fetchWatchlist = useWatchlistStore((s) => s.fetch);
+
+  useEffect(() => {
+    fetchWatchlist();
+  }, [fetchWatchlist]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -31,27 +39,30 @@ export default function MarketExplorer() {
           url = '/api/stocks/gainers';
         }
         const res = await axios.get(url, { params, signal: controller.signal });
-        if (url === '/api/stocks') {
-          setStocks(res.data?.stocks || []);
-        } else {
-          setStocks(res.data || []);
-        }
+        setStocks(url === '/api/stocks' ? (res.data?.stocks || []) : (res.data || []));
       } catch {}
       setLoading(false);
     }, query ? 300 : 0);
-    return () => {
-      clearTimeout(handle);
-      controller.abort();
-    };
+    return () => { clearTimeout(handle); controller.abort(); };
   }, [activeTab, query, exchange]);
 
-  const tabs: { key: Tab; label: string }[] = useMemo(
-    () => [
-      { key: 'gainers', label: 'Gainers' },
-      { key: 'losers', label: 'Losers' },
-    ],
-    []
-  );
+  const tabs: { key: Tab; label: string }[] = useMemo(() => [
+    { key: 'gainers', label: 'Gainers' },
+    { key: 'losers', label: 'Losers' },
+  ], []);
+
+  const toggleWatchlist = useCallback(async (e: React.MouseEvent, symbol: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await axios.post('/api/watchlists/toggle', { symbol });
+      await fetchWatchlist(true);
+      const nowIn = useWatchlistStore.getState().isInWatchlist(symbol);
+      toast.success(nowIn ? `${symbol} added to watchlist` : `${symbol} removed from watchlist`);
+    } catch {
+      toast.error('Failed to update watchlist');
+    }
+  }, [fetchWatchlist]);
 
   return (
     <div className="space-y-4">
@@ -122,19 +133,34 @@ export default function MarketExplorer() {
             const change: number = stock.change ?? 0;
             const price: number = stock.price ?? 0;
             const isGain = cp >= 0;
+            const bookmarked = isInWatchlist(stock.symbol);
             return (
               <Link
                 key={`${stock.symbol}:${ex}`}
                 to={`/terminal/${stock.symbol}?exchange=${ex}`}
-                className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-4 flex flex-col gap-3 hover:shadow-md hover:-translate-y-0.5 transition-all duration-150"
+                className="group relative bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-4 flex flex-col gap-3 hover:shadow-md hover:-translate-y-0.5 transition-all duration-150"
               >
+                {/* Bookmark button — visible on hover or if bookmarked */}
+                <button
+                  onClick={(e) => toggleWatchlist(e, stock.symbol)}
+                  className={cn(
+                    'absolute top-3 right-3 p-1 rounded-lg transition-all duration-150',
+                    bookmarked
+                      ? 'opacity-100 text-groww-primary'
+                      : 'opacity-0 group-hover:opacity-100 text-gray-400 hover:text-groww-primary'
+                  )}
+                  title={bookmarked ? 'Remove from watchlist' : 'Add to watchlist'}
+                >
+                  <Bookmark className={cn('w-4 h-4', bookmarked && 'fill-groww-primary')} />
+                </button>
+
                 {/* Logo */}
                 <div className="w-12 h-12 rounded-xl overflow-hidden bg-gray-50 dark:bg-gray-800 flex items-center justify-center shrink-0">
                   <StockLogo symbol={stock.symbol} size={48} />
                 </div>
 
                 {/* Name */}
-                <div className="flex-1 min-w-0">
+                <div className="min-w-0 pr-4">
                   <p className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate leading-tight">
                     {stock.name || stock.symbol}
                   </p>
