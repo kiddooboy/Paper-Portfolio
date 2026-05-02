@@ -17,19 +17,11 @@ export default function MpinLoginPage() {
   const navigate = useNavigate();
   const login = useAuthStore((s) => s.login);
 
-  const handleDigitClick = (digit: string) => {
-    if (mpin.length < 4) setMpin(prev => prev + digit);
-  };
-  const handleDelete = () => setMpin(prev => prev.slice(0, -1));
-
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
-      if (e.key >= '0' && e.key <= '9') {
-        setMpin(prev => prev.length < 4 ? prev + e.key : prev);
-      } else if (e.key === 'Backspace') {
-        setMpin(prev => prev.slice(0, -1));
-      }
+      if (e.key >= '0' && e.key <= '9') setMpin(prev => prev.length < 4 ? prev + e.key : prev);
+      else if (e.key === 'Backspace') setMpin(prev => prev.slice(0, -1));
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -98,52 +90,20 @@ export default function MpinLoginPage() {
               {showMpin ? 'Hide' : 'Show'}
             </button>
           </div>
-          <div className="flex justify-center gap-2">
+
+          {/* Dot indicators */}
+          <div className="flex justify-center gap-3">
             {[0, 1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className={cn(
-                  'w-12 h-12 rounded-lg border-2 flex items-center justify-center text-xl font-bold transition-all',
-                  mpin[i]
-                    ? 'border-groww-primary bg-groww-primary/10 text-groww-primary'
-                    : 'border-gray-300 dark:border-gray-700'
-                )}
-              >
-                {showMpin ? mpin[i] : mpin[i] ? '●' : ''}
+              <div key={i} className={cn(
+                'w-14 h-14 rounded-xl border-2 flex items-center justify-center text-xl font-bold transition-all duration-150',
+                mpin[i] ? 'border-groww-primary bg-groww-primary/10 text-groww-primary scale-105' : 'border-gray-300 dark:border-gray-700'
+              )}>
+                {mpin[i] ? (showMpin ? mpin[i] : '●') : ''}
               </div>
             ))}
           </div>
-        </div>
 
-        {/* Numpad */}
-        <div className="grid grid-cols-3 gap-2">
-          {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
-            <button
-              key={digit}
-              onClick={() => handleDigitClick(digit)}
-              className="py-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-lg font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition"
-            >
-              {digit}
-            </button>
-          ))}
-          <button
-            onClick={handleDelete}
-            className="py-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 font-semibold text-sm hover:bg-red-100 transition"
-          >
-            DEL
-          </button>
-          <button
-            onClick={() => handleDigitClick('0')}
-            className="py-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-lg font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition"
-          >
-            0
-          </button>
-          <button
-            onClick={() => setMpin('')}
-            className="py-3 rounded-lg bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 font-semibold text-sm hover:bg-gray-100 transition"
-          >
-            CLR
-          </button>
+          <p className="text-xs text-center text-gray-400">Use number keys · Backspace to delete · Enter to sign in</p>
         </div>
 
         <button

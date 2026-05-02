@@ -11,20 +11,15 @@ export default function SetMpinModal() {
   const [showMpin, setShowMpin] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleDigitClick = (digit: string) => {
-    if (mpin.length < 4) setMpin(prev => prev + digit);
-  };
-  const handleDelete = () => setMpin(prev => prev.slice(0, -1));
-
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
       if (e.key >= '0' && e.key <= '9') setMpin(prev => prev.length < 4 ? prev + e.key : prev);
       else if (e.key === 'Backspace') setMpin(prev => prev.slice(0, -1));
+      else if (e.key === 'Enter') handleSubmit();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [mpin]);
 
   const handleSubmit = async () => {
     if (mpin.length !== 4) return;
@@ -42,8 +37,7 @@ export default function SetMpinModal() {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-white dark:bg-groww-card rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 w-full max-w-sm mx-4 p-6 space-y-5">
-        {/* Header */}
+      <div className="bg-white dark:bg-groww-card rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 w-full max-w-sm mx-4 p-8 space-y-6">
         <div className="text-center">
           <div className="mx-auto w-14 h-14 bg-groww-primary/10 rounded-full flex items-center justify-center mb-3">
             <Lock className="w-7 h-7 text-groww-primary" />
@@ -54,63 +48,23 @@ export default function SetMpinModal() {
           </p>
         </div>
 
-        {/* Show/hide toggle */}
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={() => setShowMpin(!showMpin)}
-            className="flex items-center gap-1 text-xs text-gray-500 hover:text-groww-primary"
-          >
-            {showMpin ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-            {showMpin ? 'Hide' : 'Show'}
-          </button>
-        </div>
-
         {/* Dot indicators */}
-        <div className="flex justify-center gap-3">
+        <div className="flex justify-center gap-4">
           {[0, 1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className={cn(
-                'w-13 h-13 w-12 h-12 rounded-lg border-2 flex items-center justify-center text-xl font-bold transition-all',
-                mpin[i]
-                  ? 'border-groww-primary bg-groww-primary/10 text-groww-primary'
-                  : 'border-gray-300 dark:border-gray-700'
-              )}
-            >
-              {showMpin ? mpin[i] : mpin[i] ? '●' : ''}
+            <div key={i} className={cn(
+              'w-14 h-14 rounded-xl border-2 flex items-center justify-center text-2xl font-bold transition-all duration-150',
+              mpin[i] ? 'border-groww-primary bg-groww-primary/10 text-groww-primary scale-105' : 'border-gray-300 dark:border-gray-700'
+            )}>
+              {mpin[i] ? (showMpin ? mpin[i] : '●') : ''}
             </div>
           ))}
         </div>
 
-        {/* Numpad */}
-        <div className="grid grid-cols-3 gap-2">
-          {['1','2','3','4','5','6','7','8','9'].map((d) => (
-            <button
-              key={d}
-              onClick={() => handleDigitClick(d)}
-              className="py-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-lg font-semibold hover:bg-gray-100 dark:hover:bg-gray-700 transition"
-            >
-              {d}
-            </button>
-          ))}
-          <button
-            onClick={handleDelete}
-            className="py-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 font-semibold text-sm hover:bg-red-100 transition"
-          >
-            DEL
-          </button>
-          <button
-            onClick={() => handleDigitClick('0')}
-            className="py-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-lg font-semibold hover:bg-gray-100 dark:hover:bg-gray-700 transition"
-          >
-            0
-          </button>
-          <button
-            onClick={() => setMpin('')}
-            className="py-3 rounded-lg bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 font-semibold text-sm hover:bg-gray-100 transition"
-          >
-            CLR
+        <div className="flex items-center justify-between text-xs text-gray-400">
+          <span>Use number keys · Backspace to delete</span>
+          <button type="button" onClick={() => setShowMpin(!showMpin)} className="flex items-center gap-1 hover:text-groww-primary transition">
+            {showMpin ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            {showMpin ? 'Hide' : 'Show'}
           </button>
         </div>
 
