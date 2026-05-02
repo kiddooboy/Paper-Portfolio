@@ -1,18 +1,18 @@
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useMarketStore } from '../store/marketStore';
 import { useNotificationsStore } from '../store/notificationsStore';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import Sidebar from './Sidebar';
 import MobileNav from './MobileNav';
 import GlobalSearch from './GlobalSearch';
 import SetMpinModal from './SetMpinModal';
-import { Bell, TrendingUp, Moon, Sun, MessageSquare } from 'lucide-react';
+import { Bell, TrendingUp, Moon, Sun, MessageSquare, Settings, ListOrdered, Wallet, BarChart3, LogOut, ChevronRight, User } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 
 export default function Layout() {
-  const { isAuthenticated, logout, isInitializing, user } = useAuthStore();
+  const { isAuthenticated, isInitializing, user } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
   const [dark, setDark] = useState(true);
@@ -83,9 +83,6 @@ export default function Layout() {
             <span className="font-mono">{currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</span>
             <span className="text-[10px] uppercase tracking-wide">IST</span>
           </div>
-          <button onClick={() => setDark(!dark)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800">
-            {dark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </button>
           <button onClick={() => navigate('/notifications')} className="relative p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800">
             <Bell className="w-5 h-5" />
             {unreadCount > 0 && (
@@ -94,9 +91,7 @@ export default function Layout() {
               </span>
             )}
           </button>
-          <button onClick={() => { logout(); navigate('/login'); }} className="text-sm px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700">
-            Logout
-          </button>
+          <ProfileMenu dark={dark} onToggleDark={() => setDark(!dark)} />
         </div>
       </header>
 
@@ -180,6 +175,105 @@ function IndexTicker() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function ProfileMenu({ dark, onToggleDark }: { dark: boolean; onToggleDark: () => void }) {
+  const { user, logout } = useAuthStore();
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const initials = user?.name
+    ? user.name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2)
+    : '?';
+
+  const menuItems = [
+    { icon: <ListOrdered className="w-4 h-4" />, label: 'Orders', path: '/orders' },
+    { icon: <Wallet className="w-4 h-4" />, label: 'Wallet', path: '/wallet' },
+    { icon: <BarChart3 className="w-4 h-4" />, label: 'Positions', path: '/positions' },
+  ];
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-9 h-9 rounded-full bg-groww-primary flex items-center justify-center text-white font-bold text-sm hover:opacity-90 transition"
+      >
+        {initials}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-12 w-72 bg-white dark:bg-groww-card rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden z-50">
+          {/* Header */}
+          <div className="px-5 py-4 flex items-center justify-between border-b border-gray-100 dark:border-gray-800">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-full bg-groww-primary flex items-center justify-center text-white font-bold text-sm shrink-0">
+                {initials}
+              </div>
+              <div className="min-w-0">
+                <p className="font-semibold text-sm truncate">{user?.name}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user?.email}</p>
+              </div>
+            </div>
+            <User className="w-4 h-4 text-gray-400 shrink-0" />
+          </div>
+
+          {/* Balance */}
+          <div className="px-5 py-3.5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
+            onClick={() => { navigate('/wallet'); setOpen(false); }}>
+            <div>
+              <p className="text-base font-bold">{formatCurrency(user?.balance ?? 0)}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Available balance</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-gray-400" />
+          </div>
+
+          {/* Nav items */}
+          <div className="py-1">
+            {menuItems.map((item) => (
+              <button
+                key={item.path}
+                onClick={() => { navigate(item.path); setOpen(false); }}
+                className="w-full flex items-center justify-between px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition text-sm"
+              >
+                <div className="flex items-center gap-3 text-gray-700 dark:text-gray-300">
+                  {item.icon}
+                  {item.label}
+                </div>
+                <ChevronRight className="w-4 h-4 text-gray-400" />
+              </button>
+            ))}
+          </div>
+
+          {/* Theme + Logout */}
+          <div className="border-t border-gray-100 dark:border-gray-800 px-5 py-3 flex items-center justify-between">
+            <button
+              onClick={onToggleDark}
+              className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition"
+            >
+              {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              {dark ? 'Light mode' : 'Dark mode'}
+            </button>
+            <button
+              onClick={() => { logout(); navigate('/login'); }}
+              className="flex items-center gap-1.5 text-sm font-semibold text-groww-loss hover:opacity-80 transition"
+            >
+              <LogOut className="w-4 h-4" />
+              Log out
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
