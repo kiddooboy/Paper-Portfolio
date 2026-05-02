@@ -1,4 +1,4 @@
-import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useMarketStore } from '../store/marketStore';
 import { useNotificationsStore } from '../store/notificationsStore';
@@ -8,7 +8,7 @@ import Sidebar from './Sidebar';
 import MobileNav from './MobileNav';
 import GlobalSearch from './GlobalSearch';
 import SetMpinModal from './SetMpinModal';
-import { Bell, TrendingUp, Moon, Sun, MessageSquare, Settings, ListOrdered, Wallet, BarChart3, LogOut, ChevronRight, User } from 'lucide-react';
+import { Bell, TrendingUp, Moon, Sun, MessageSquare, ListOrdered, Wallet, BarChart3, LogOut, ChevronRight, User } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 
 export default function Layout() {
