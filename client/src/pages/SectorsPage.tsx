@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { cn, formatCurrency } from '../lib/utils';
+import { cn } from '../lib/utils';
 
 interface SectorQuote {
   name: string;
