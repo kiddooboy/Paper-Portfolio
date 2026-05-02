@@ -27,7 +27,7 @@ export default function Register() {
       login(res.data.user);
       await bootstrap();
       toast.success('Account created! You got â‚¹1,00,000 virtual balance.');
-      navigate('/');
+      navigate('/dashboard');
     } catch (err: any) {
       toast.error(err?.response?.data?.error || 'Google sign-in failed');
     } finally {
@@ -157,4 +157,5 @@ export default function Register() {
     </AuthLayout>
   );
 }
+
 

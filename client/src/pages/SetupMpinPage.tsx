@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -30,7 +30,7 @@ export default function SetupMpinPage() {
     try {
       await axios.post('/api/auth/set-mpin', { mpin });
       toast.success('MPIN set successfully');
-      navigate('/');
+      navigate('/dashboard');
     } catch (err: any) {
       toast.error(err?.response?.data?.error || 'Failed to set MPIN');
     } finally {
@@ -66,13 +66,13 @@ export default function SetupMpinPage() {
                 'w-16 h-16 rounded-xl border-2 flex items-center justify-center text-2xl font-bold transition-all duration-150',
                 mpin[i] ? 'border-groww-primary bg-groww-primary/10 text-groww-primary scale-105' : 'border-gray-300 dark:border-gray-700'
               )}>
-                {mpin[i] ? (showMpin ? mpin[i] : '●') : ''}
+                {mpin[i] ? (showMpin ? mpin[i] : 'â—') : ''}
               </div>
             ))}
           </div>
 
           <div className="flex items-center justify-between text-xs text-gray-400">
-            <span>Use number keys · Backspace to delete</span>
+            <span>Use number keys Â· Backspace to delete</span>
             <button type="button" onClick={() => setShowMpin(!showMpin)} className="flex items-center gap-1 hover:text-groww-primary transition">
               {showMpin ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
               {showMpin ? 'Hide' : 'Show'}
@@ -88,7 +88,7 @@ export default function SetupMpinPage() {
               {loading ? 'Setting MPIN...' : 'Set MPIN'}
             </button>
             <button
-              onClick={() => navigate('/')}
+              onClick={() => navigate('/dashboard')}
               className="w-full py-3 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition"
             >
               Skip for Now

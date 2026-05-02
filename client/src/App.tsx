@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router-dom';
 import { useEffect } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
+import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import SetupMpinPage from './pages/SetupMpinPage';
@@ -44,13 +45,14 @@ function App() {
 
   return (
     <Routes>
+      <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/mpin-login" element={<MpinLoginPage />} />
       <Route path="/setup-mpin" element={<SetupMpinPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route element={<Layout />}>
-        <Route path="/" element={<Dashboard />} />
+        <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/market" element={<MarketExplorer />} />
         <Route path="/terminal/:symbol" element={<TerminalPage />} />
         <Route path="/stock/:symbol" element={<StockDetail />} />

@@ -1,4 +1,4 @@
-import { useEffect, useState, Fragment } from 'react';
+﻿import { useEffect, useState, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
@@ -33,7 +33,7 @@ export default function AdminPage() {
   // Guard: only admin can view
   useEffect(() => {
     if (user && user.role !== 'admin') {
-      navigate('/');
+      navigate('/dashboard');
     }
   }, [user, navigate]);
 
@@ -48,7 +48,7 @@ export default function AdminPage() {
     } catch (err: any) {
       if (err?.response?.status === 403) {
         toast.error('Admin access denied');
-        navigate('/');
+        navigate('/dashboard');
       }
     }
     setLoading(false);
@@ -80,13 +80,13 @@ export default function AdminPage() {
   }, [filterAction]);
 
   const handleResetBalance = async (userId: number, currentBalance: number) => {
-    const input = prompt(`Reset balance for user #${userId}\nCurrent: ₹${currentBalance.toLocaleString()}\n\nEnter new balance:`, '100000');
+    const input = prompt(`Reset balance for user #${userId}\nCurrent: â‚¹${currentBalance.toLocaleString()}\n\nEnter new balance:`, '100000');
     if (!input) return;
     const newBal = parseFloat(input);
     if (isNaN(newBal) || newBal < 0) { toast.error('Invalid amount'); return; }
     try {
       await axios.post(`/api/admin/users/${userId}/reset-balance`, { balance: newBal });
-      toast.success(`Balance reset to ₹${newBal.toLocaleString()}`);
+      toast.success(`Balance reset to â‚¹${newBal.toLocaleString()}`);
       fetchData();
     } catch { toast.error('Failed to reset balance'); }
   };
@@ -229,7 +229,7 @@ export default function AdminPage() {
                         {u.last_login ? new Date(u.last_login).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Never'}
                       </td>
                       <td className="px-3 py-3 text-[11px] text-gray-500">
-                        {u.created_at ? new Date(u.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' }) : '—'}
+                        {u.created_at ? new Date(u.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' }) : 'â€”'}
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-1">
@@ -336,11 +336,11 @@ export default function AdminPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="text-[12px] font-mono text-gray-600 dark:text-gray-400 break-words max-w-md">
-                          {act.details ? JSON.stringify(act.details) : '—'}
+                          {act.details ? JSON.stringify(act.details) : 'â€”'}
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right text-[11px] text-gray-500 font-mono">
-                        {act.ip_address || '—'}
+                        {act.ip_address || 'â€”'}
                       </td>
                     </tr>
                   ))
@@ -423,7 +423,7 @@ function UserDetailPanel({ data }: { data: any }) {
                     t.type === 'BUY' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
                   )}>{t.type}</span>
                   <span className="font-medium">{t.symbol}</span>
-                  <span className="text-gray-500">{t.quantity} × {formatCurrency(t.price)}</span>
+                  <span className="text-gray-500">{t.quantity} Ã— {formatCurrency(t.price)}</span>
                 </span>
                 <span className="tabular-nums">{formatCurrency(t.total_amount)}</span>
               </div>
@@ -438,3 +438,4 @@ function UserDetailPanel({ data }: { data: any }) {
     </div>
   );
 }
+

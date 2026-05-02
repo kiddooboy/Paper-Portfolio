@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -46,7 +46,7 @@ export default function MpinLoginPage() {
       login(res.data.user);
       await bootstrap();
       toast.success('Welcome back!');
-      navigate('/');
+      navigate('/dashboard');
     } catch (err: any) {
       toast.error(err?.response?.data?.error || 'Invalid MPIN');
     } finally {
@@ -98,12 +98,12 @@ export default function MpinLoginPage() {
                 'w-14 h-14 rounded-xl border-2 flex items-center justify-center text-xl font-bold transition-all duration-150',
                 mpin[i] ? 'border-groww-primary bg-groww-primary/10 text-groww-primary scale-105' : 'border-gray-300 dark:border-gray-700'
               )}>
-                {mpin[i] ? (showMpin ? mpin[i] : '●') : ''}
+                {mpin[i] ? (showMpin ? mpin[i] : 'â—') : ''}
               </div>
             ))}
           </div>
 
-          <p className="text-xs text-center text-gray-400">Use number keys · Backspace to delete · Enter to sign in</p>
+          <p className="text-xs text-center text-gray-400">Use number keys Â· Backspace to delete Â· Enter to sign in</p>
         </div>
 
         <button

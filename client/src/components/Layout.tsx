@@ -21,7 +21,7 @@ export default function Layout() {
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
-    if (!isInitializing && !isAuthenticated) navigate('/login');
+    if (!isInitializing && !isAuthenticated) navigate('/');
   }, [isInitializing, isAuthenticated, navigate]);
 
   useEffect(() => {

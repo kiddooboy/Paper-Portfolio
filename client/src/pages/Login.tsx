@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { signInWithPopup } from 'firebase/auth';
@@ -29,7 +29,7 @@ export default function Login() {
       login(res.data.user);
       await bootstrap();
       toast.success('Welcome back!');
-      navigate('/');
+      navigate('/dashboard');
     } catch (err: any) {
       toast.error(err?.response?.data?.error || 'Google sign-in failed');
     } finally {
@@ -45,7 +45,7 @@ export default function Login() {
       login(res.data.user);
       await bootstrap();
       toast.success('Welcome back!');
-      navigate('/');
+      navigate('/dashboard');
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Login failed');
     } finally {
@@ -166,3 +166,4 @@ export default function Login() {
     </AuthLayout>
   );
 }
+

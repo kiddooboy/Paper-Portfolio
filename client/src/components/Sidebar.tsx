@@ -4,7 +4,7 @@ import { cn } from '../lib/utils';
 import { useAuthStore } from '../store/authStore';
 
 const navItems = [
-  { path: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/market', label: 'Market', icon: Search },
   { path: '/sectors', label: 'Sectors', icon: PieChart },
   { path: '/portfolio', label: 'Portfolio', icon: TrendingUp },
@@ -22,7 +22,7 @@ export default function Sidebar({ activePath }: { activePath: string }) {
   return (
     <nav className="p-4 space-y-1">
       {navItems.map((item) => {
-        const active = activePath === item.path || (item.path !== '/' && activePath.startsWith(item.path));
+        const active = activePath === item.path || (item.path !== '/dashboard' && activePath.startsWith(item.path));
         return (
           <Link
             key={item.path}
