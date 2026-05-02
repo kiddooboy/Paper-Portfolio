@@ -16,6 +16,11 @@ build/
 .env.local
 .env.production
 .env.*.local
+.env.docker
+
+# Firebase service account (never commit)
+firebase-service-account.json
+*-firebase-adminsdk-*.json
 
 # Database
 *.db

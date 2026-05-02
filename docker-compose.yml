@@ -8,8 +8,11 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=5000
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/firebase-service-account.json
     volumes:
       # This line is the magic that makes sure data is NEVER erased!
       # It maps the container's database directory to your local hard drive.
       - ./server/data:/app/dist/data
+      # Firebase service account — place file on host, never commit to git
+      - ./firebase-service-account.json:/app/firebase-service-account.json:ro
     restart: unless-stopped
