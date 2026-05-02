@@ -47,7 +47,7 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
   const nifty = indices.find((i) => i.symbol === '^NSEI');
   const others = indices.filter((i) => i.symbol !== '^NSEI' && i.symbol !== '^NSEMDCP50');
   return (
-    <div className="dark min-h-screen flex bg-groww-dark">
+    <div className="dark min-h-screen flex bg-groww-dark text-groww-text">
       {/* LEFT: Brand panel */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-groww-primary/20 via-gray-900 to-groww-dark">
         {/* Logo top-left */}

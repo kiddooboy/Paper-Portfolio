@@ -102,7 +102,7 @@ export default function ForgotPasswordPage() {
               {loading ? 'Resettingâ€¦' : 'Reset Password'}
             </button>
             <button type="button" onClick={() => setPhase('email')}
-              className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 transition">
+              className="w-full py-2 text-sm text-gray-400 hover:text-gray-200 transition">
               â† Back / resend OTP
             </button>
           </form>
