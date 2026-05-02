@@ -165,7 +165,7 @@ function IndexTicker() {
   return (
     <div className="w-full bg-white dark:bg-groww-dark border-b border-gray-200 dark:border-gray-800">
       <div className="grid divide-x divide-gray-200 dark:divide-gray-800" style={{ gridTemplateColumns: `repeat(${items.length}, 1fr)` }}>
-        {items.map(({ label, price, change, pct }) => (
+        {items.map(({ label, price, pct }) => (
           <div key={label} className="flex flex-col items-center justify-center px-2 py-1.5 min-w-0">
             <div className="flex items-center gap-1 min-w-0">
               <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide truncate">{label}</span>
