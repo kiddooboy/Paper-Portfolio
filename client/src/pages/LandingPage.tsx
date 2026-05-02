@@ -327,10 +327,6 @@ export default function LandingPage() {
       <div className="lp-root">
         {/* TICKER */}
         <div className="lp-ticker">
-          <div className="lp-ticker-badge">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><polyline points="1,9 4,5 7,7 11,2" stroke="#000" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>
-            LIVE
-          </div>
           <div className="lp-ticker-scroll">
             <div className="lp-ticker-track">
               {arr.map((s, i) => (
