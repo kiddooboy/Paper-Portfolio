@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { signInWithPopup } from 'firebase/auth';
@@ -26,7 +26,7 @@ export default function Register() {
       const res = await axios.post('/api/auth/firebase', { idToken });
       login(res.data.user);
       await bootstrap();
-      toast.success('Account created! You got ₹1,00,000 virtual balance.');
+      toast.success('Account created! You got â‚¹1,00,000 virtual balance.');
       navigate('/');
     } catch (err: any) {
       toast.error(err?.response?.data?.error || 'Google sign-in failed');
@@ -42,7 +42,7 @@ export default function Register() {
       const res = await axios.post('/api/auth/register', { name, email, password });
       login(res.data.user);
       await bootstrap();
-      toast.success('Account created! You got ₹1,00,000 virtual balance.');
+      toast.success('Account created! You got â‚¹1,00,000 virtual balance.');
       navigate(`/setup-mpin?email=${encodeURIComponent(email)}`);
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Registration failed');
@@ -57,7 +57,7 @@ export default function Register() {
         <div className="space-y-1">
           <h1 className="text-3xl font-bold">Create your account</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Start paper trading with ₹1,00,000 virtual balance
+            Start paper trading with â‚¹1,00,000 virtual balance
           </p>
         </div>
 
@@ -72,7 +72,7 @@ export default function Register() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
-              className="w-full px-3 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/50"
+              className="w-full px-3 py-2.5 rounded-lg border border-gray-700 bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/50"
               placeholder="John Doe"
             />
           </div>
@@ -86,7 +86,7 @@ export default function Register() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-3 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/50"
+              className="w-full px-3 py-2.5 rounded-lg border border-gray-700 bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/50"
               placeholder="john@example.com"
             />
           </div>
@@ -102,7 +102,7 @@ export default function Register() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={6}
-                className="w-full px-3 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/50 pr-10"
+                className="w-full px-3 py-2.5 rounded-lg border border-gray-700 bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/50 pr-10"
                 placeholder="Min 6 characters"
               />
               <button
@@ -125,10 +125,10 @@ export default function Register() {
 
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-200 dark:border-gray-700" />
+            <div className="w-full border-t border-gray-700" />
           </div>
           <div className="relative flex justify-center text-xs">
-            <span className="bg-white dark:bg-groww-dark px-2 text-gray-500 dark:text-gray-400">or</span>
+            <span className="bg-groww-dark px-2 text-gray-400">or</span>
           </div>
         </div>
 
@@ -136,7 +136,7 @@ export default function Register() {
           type="button"
           onClick={handleGoogleSignIn}
           disabled={loading}
-          className="w-full flex items-center justify-center gap-3 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition disabled:opacity-50"
+          className="w-full flex items-center justify-center gap-3 py-2.5 rounded-lg border border-gray-700 bg-gray-900 font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition disabled:opacity-50"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -157,3 +157,4 @@ export default function Register() {
     </AuthLayout>
   );
 }
+

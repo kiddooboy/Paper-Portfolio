@@ -47,25 +47,25 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
   const nifty = indices.find((i) => i.symbol === '^NSEI');
   const others = indices.filter((i) => i.symbol !== '^NSEI' && i.symbol !== '^NSEMDCP50');
   return (
-    <div className="min-h-screen flex bg-white dark:bg-groww-dark">
+    <div className="dark min-h-screen flex bg-groww-dark">
       {/* LEFT: Brand panel */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-groww-primary/10 via-emerald-50 to-white dark:from-groww-primary/20 dark:via-gray-900 dark:to-groww-dark">
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-groww-primary/20 via-gray-900 to-groww-dark">
         {/* Logo top-left */}
         <Link to="/" className="absolute top-6 left-6 flex items-center gap-2 z-10">
           <div className="w-9 h-9 rounded-xl bg-groww-primary flex items-center justify-center shadow-md">
             <TrendingUp className="w-5 h-5 text-white" />
           </div>
-          <span className="text-lg font-bold text-gray-900 dark:text-white">Paper Portfolio</span>
+          <span className="text-lg font-bold text-white">Paper Portfolio</span>
         </Link>
 
         {/* Decorative content */}
         <div className="m-auto px-12 py-20 max-w-lg w-full">
           {/* Live NIFTY card */}
-          <div className="rounded-2xl bg-white dark:bg-gray-900 shadow-2xl p-6 border border-gray-100 dark:border-gray-800 mb-4">
+          <div className="rounded-2xl bg-gray-900 shadow-2xl p-6 border border-gray-800 mb-4">
             <div className="flex justify-between items-start mb-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                  <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
                     {nifty?.name || 'NIFTY 50'}
                   </div>
                   <span className="flex items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500">
@@ -73,7 +73,7 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
                     LIVE
                   </span>
                 </div>
-                <div className="text-3xl font-bold text-gray-900 dark:text-white mt-1">
+                <div className="text-3xl font-bold text-white mt-1">
                   {nifty ? formatINR(nifty.price) : loading ? '—' : '25,000.00'}
                 </div>
                 {nifty && (
@@ -87,7 +87,7 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
                   className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold ${
                     nifty.change_percent >= 0
                       ? 'bg-groww-primary/10 text-groww-primary'
-                      : 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'
+                      : 'bg-red-900/20 text-red-400'
                   }`}
                 >
                   {nifty.change_percent >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
@@ -124,12 +124,12 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
               {others.map((idx) => (
                 <div
                   key={idx.symbol}
-                  className="rounded-xl bg-white/80 dark:bg-gray-900/60 border border-gray-100 dark:border-gray-800 p-3 backdrop-blur-sm"
+                  className="rounded-xl bg-gray-900/60 border border-gray-800 p-3 backdrop-blur-sm"
                 >
-                  <div className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                  <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
                     {idx.name}
                   </div>
-                  <div className="text-base font-bold text-gray-900 dark:text-white">
+                  <div className="text-base font-bold text-white">
                     {formatINR(idx.price)}
                   </div>
                   <div
@@ -144,11 +144,11 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
             </div>
           )}
 
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white leading-tight mb-3">
+          <h2 className="text-3xl font-bold text-white leading-tight mb-3">
             Practice trading.<br />
             Build confidence.
           </h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-8">
+          <p className="text-gray-400 mb-8">
             Trade NSE & BSE stocks risk-free with virtual balance.
             Track your portfolio in real-time.
           </p>
@@ -186,11 +186,11 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
 
 function FeaturePill({ icon, text }: { icon: ReactNode; text: string }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/80 dark:bg-gray-900/60 border border-gray-100 dark:border-gray-800 backdrop-blur-sm">
+    <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-gray-900/60 border border-gray-800 backdrop-blur-sm">
       <div className="w-8 h-8 rounded-lg bg-groww-primary/10 flex items-center justify-center text-groww-primary">
         {icon}
       </div>
-      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{text}</span>
+      <span className="text-sm font-medium text-gray-300">{text}</span>
     </div>
   );
 }

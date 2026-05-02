@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -61,13 +61,13 @@ export default function ForgotPasswordPage() {
                 required
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/50"
+                className="w-full px-3 py-2.5 rounded-lg border border-gray-700 bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/50"
                 placeholder="you@example.com"
               />
             </div>
             <button type="submit" disabled={loading}
               className="w-full py-2.5 rounded-lg bg-groww-primary text-white font-semibold hover:bg-green-600 transition disabled:opacity-50">
-              {loading ? 'Sending…' : 'Send OTP'}
+              {loading ? 'Sendingâ€¦' : 'Send OTP'}
             </button>
           </form>
         ) : (
@@ -81,7 +81,7 @@ export default function ForgotPasswordPage() {
                 required
                 value={otp}
                 onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
-                className="w-full px-3 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/50 tracking-widest text-center text-lg font-bold"
+                className="w-full px-3 py-2.5 rounded-lg border border-gray-700 bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/50 tracking-widest text-center text-lg font-bold"
                 placeholder="123456"
               />
             </div>
@@ -93,17 +93,17 @@ export default function ForgotPasswordPage() {
                 minLength={6}
                 value={newPassword}
                 onChange={e => setNewPassword(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/50"
+                className="w-full px-3 py-2.5 rounded-lg border border-gray-700 bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/50"
                 placeholder="At least 6 characters"
               />
             </div>
             <button type="submit" disabled={loading}
               className="w-full py-2.5 rounded-lg bg-groww-primary text-white font-semibold hover:bg-green-600 transition disabled:opacity-50">
-              {loading ? 'Resetting…' : 'Reset Password'}
+              {loading ? 'Resettingâ€¦' : 'Reset Password'}
             </button>
             <button type="button" onClick={() => setPhase('email')}
               className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 transition">
-              ← Back / resend OTP
+              â† Back / resend OTP
             </button>
           </form>
         )}
