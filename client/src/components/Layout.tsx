@@ -163,19 +163,19 @@ function IndexTicker() {
   });
 
   return (
-    <div className="w-full bg-white dark:bg-groww-dark border-b border-gray-200 dark:border-gray-800 overflow-x-auto">
-      <div className="flex items-center divide-x divide-gray-200 dark:divide-gray-800 min-w-max">
+    <div className="w-full bg-white dark:bg-groww-dark border-b border-gray-200 dark:border-gray-800">
+      <div className="grid divide-x divide-gray-200 dark:divide-gray-800" style={{ gridTemplateColumns: `repeat(${items.length}, 1fr)` }}>
         {items.map(({ label, price, change, pct }) => (
-          <div key={label} className="flex items-center gap-2 px-4 py-1.5 shrink-0">
-            <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap">{label}</span>
-            <span className="text-[12px] font-semibold tabular-nums whitespace-nowrap">{price > 0 ? formatCurrency(price) : '—'}</span>
+          <div key={label} className="flex flex-col items-center justify-center px-2 py-1.5 min-w-0">
+            <div className="flex items-center gap-1 min-w-0">
+              <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide truncate">{label}</span>
+              {isOpen && price > 0 && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shrink-0" title="Live" />}
+            </div>
+            <span className="text-[11px] font-semibold tabular-nums">{price > 0 ? formatCurrency(price) : '—'}</span>
             {price > 0 && (
-              <span className={cn('text-[11px] font-medium tabular-nums whitespace-nowrap', pct >= 0 ? 'text-gain' : 'text-loss')}>
-                {pct >= 0 ? '+' : ''}{change.toFixed(2)} ({pct >= 0 ? '+' : ''}{pct.toFixed(2)}%)
+              <span className={cn('text-[10px] font-medium tabular-nums', pct >= 0 ? 'text-gain' : 'text-loss')}>
+                {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
               </span>
-            )}
-            {isOpen && price > 0 && (
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shrink-0" title="Live" />
             )}
           </div>
         ))}
