@@ -57,9 +57,7 @@ export default function MarketExplorer() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Market Explorer</h1>
-        <span className="text-xs text-gray-500">
-          Live prices · Yahoo Finance
-        </span>
+        <span className="text-xs text-gray-500">Live prices · Yahoo Finance</span>
       </div>
 
       <div className="flex gap-2">
@@ -107,9 +105,9 @@ export default function MarketExplorer() {
       )}
 
       {loading ? (
-        <div className="space-y-2 animate-pulse">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-16 bg-gray-200 dark:bg-gray-800 rounded-lg" />
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <div key={i} className="h-44 bg-gray-200 dark:bg-gray-800 rounded-2xl animate-pulse" />
           ))}
         </div>
       ) : stocks.length === 0 ? (
@@ -117,46 +115,40 @@ export default function MarketExplorer() {
           {query ? `No stocks found for "${query}"` : 'No stocks available'}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
           {stocks.map((stock) => {
             const ex = stock.exchange || 'NSE';
             const cp: number = stock.change_percent ?? 0;
+            const change: number = stock.change ?? 0;
             const price: number = stock.price ?? 0;
+            const isGain = cp >= 0;
             return (
               <Link
                 key={`${stock.symbol}:${ex}`}
                 to={`/terminal/${stock.symbol}?exchange=${ex}`}
-                className="bg-white dark:bg-groww-card rounded-xl p-4 border border-gray-100 dark:border-gray-800 hover:shadow-md transition"
+                className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-4 flex flex-col gap-3 hover:shadow-md hover:-translate-y-0.5 transition-all duration-150"
               >
-                <div className="flex justify-between items-start mb-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <StockLogo symbol={stock.symbol} size={44} />
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <h3 className="font-semibold text-sm truncate">{stock.name}</h3>
-                        <span className="text-[9px] px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500">
-                          {stock.symbol}
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-500 truncate max-w-[160px]">
-                        {ex}
-                      </p>
-                    </div>
-                  </div>
-                  <span
-                    className={cn(
-                      'text-sm font-medium tabular-nums',
-                      cp >= 0 ? 'text-gain' : 'text-loss'
-                    )}
-                  >
-                    {cp >= 0 ? '+' : ''}
-                    {cp.toFixed(2)}%
-                  </span>
+                {/* Logo */}
+                <div className="w-12 h-12 rounded-xl overflow-hidden bg-gray-50 dark:bg-gray-800 flex items-center justify-center shrink-0">
+                  <StockLogo symbol={stock.symbol} size={48} />
                 </div>
-                <div className="flex justify-between items-end">
-                  <span className="text-lg font-bold tabular-nums">
+
+                {/* Name */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate leading-tight">
+                    {stock.name || stock.symbol}
+                  </p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">{stock.symbol}</p>
+                </div>
+
+                {/* Price + change */}
+                <div>
+                  <p className="text-base font-bold tabular-nums text-gray-900 dark:text-white">
                     {formatCurrency(price)}
-                  </span>
+                  </p>
+                  <p className={cn('text-sm font-medium tabular-nums mt-0.5', isGain ? 'text-gain' : 'text-loss')}>
+                    {isGain ? '+' : ''}{change.toFixed(2)} ({isGain ? '+' : ''}{cp.toFixed(2)}%)
+                  </p>
                 </div>
               </Link>
             );
