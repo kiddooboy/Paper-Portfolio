@@ -183,6 +183,14 @@ export function getCachedQuotes(items: { symbol: string; exchange?: 'NSE' | 'BSE
   return items.map((it) => getCachedQuote(it.symbol, it.exchange ?? 'NSE'));
 }
 
+export function getAllCachedQuotes(): Map<string, Quote> {
+  const out = new Map<string, Quote>();
+  for (const [key, entry] of cache.entries()) {
+    out.set(key, entry.data);
+  }
+  return out;
+}
+
 export function getCachedIndices(): IndexQuote[] {
   const out: IndexQuote[] = [];
   for (const idx of INDICES) {

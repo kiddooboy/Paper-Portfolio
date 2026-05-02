@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
-import { getQuote, getCachedQuote, getCachedQuotes, getCachedIndices, getHistory, isMarketOpen, getMarketStatus, getSectors } from '../services/marketData.js';
+import { getQuote, getCachedQuote, getCachedQuotes, getCachedIndices, getHistory, isMarketOpen, getMarketStatus, getSectors, getAllCachedQuotes } from '../services/marketData.js';
 import { logActivity, getClientIp } from '../services/activityLogger.js';
 
 const router = Router();
@@ -16,10 +16,107 @@ router.get('/market-status', (_req, res) => {
   res.json(getMarketStatus());
 });
 
-// GET /api/stocks/sectors — NSE sector indices (IT, FMCG, Pharma, Auto …)
+// GET /api/stocks/sectors — sector stats computed from DB stocks + live quote cache
 router.get('/sectors', async (_req, res) => {
   try {
-    const sectors = await getSectors();
+    // 1. Get all stocks with their sector from DB
+    const dbStocks = db.prepare(
+      `SELECT symbol, exchange, sector, market_cap FROM stocks
+       WHERE sector IS NOT NULL AND sector != '' ORDER BY symbol`
+    ).all() as { symbol: string; exchange: string; sector: string; market_cap: number | null }[];
+
+    // 2. Get all cached live quotes
+    const liveQuotes = getAllCachedQuotes();
+
+    // 3. Sector index prices from Yahoo (for reference price)
+    const sectorIndices = await getSectors();
+    const indexByName: Record<string, typeof sectorIndices[0]> = {};
+    for (const si of sectorIndices) indexByName[si.name] = si;
+
+    // Map DB sector names → NSE index names
+    const SECTOR_INDEX_MAP: Record<string, string> = {
+      'Information Technology':           'IT',
+      'Fast Moving Consumer Goods':       'FMCG',
+      'Healthcare':                       'Pharma',
+      'Automobile and Auto Components':   'Auto',
+      'Metals & Mining':                  'Metal',
+      'Realty':                           'Realty',
+      'Financial Services':               'Finance',
+      'Oil Gas & Consumable Fuels':       'Energy',
+      'Capital Goods':                    'Infra',
+      'Power':                            'Energy',
+      'Consumer Durables':                'FMCG',
+      'Consumer Services':                'FMCG',
+      'Chemicals':                        'IT',
+      'Construction':                     'Infra',
+      'Construction Materials':           'Infra',
+      'Telecommunication':                'IT',
+      'Services':                         'Finance',
+      'Textiles':                         'FMCG',
+      'Media Entertainment & Publication':'IT',
+      'Diversified':                      'Finance',
+    };
+
+    // 4. Group stocks by sector, compute stats
+    const sectorMap = new Map<string, {
+      totalStocks: number;
+      liveCount: number;
+      gainers: number;
+      losers: number;
+      unchanged: number;
+      sumChange: number;
+      sumMcap: number;
+      weightedChangeSum: number;
+    }>();
+
+    for (const stock of dbStocks) {
+      const key = `${stock.symbol}:${stock.exchange || 'NSE'}`;
+      const altKey = `${stock.symbol}:NSE`;
+      const quote = liveQuotes.get(key) || liveQuotes.get(altKey);
+
+      if (!sectorMap.has(stock.sector)) {
+        sectorMap.set(stock.sector, { totalStocks: 0, liveCount: 0, gainers: 0, losers: 0, unchanged: 0, sumChange: 0, sumMcap: 0, weightedChangeSum: 0 });
+      }
+      const s = sectorMap.get(stock.sector)!;
+      s.totalStocks++;
+
+      if (quote && quote.price > 0) {
+        s.liveCount++;
+        s.sumChange += quote.change_percent;
+        const mcap = stock.market_cap || 1;
+        s.sumMcap += mcap;
+        s.weightedChangeSum += quote.change_percent * mcap;
+        if (quote.change_percent > 0.01) s.gainers++;
+        else if (quote.change_percent < -0.01) s.losers++;
+        else s.unchanged++;
+      }
+    }
+
+    // 5. Build response sorted by avg change desc
+    const sectors = Array.from(sectorMap.entries())
+      .map(([name, stats]) => {
+        const avgChange = stats.liveCount > 0 ? stats.sumChange / stats.liveCount : 0;
+        // Weighted avg (by market cap) when data available
+        const weightedAvg = stats.sumMcap > 0 ? stats.weightedChangeSum / stats.sumMcap : avgChange;
+        const indexName = SECTOR_INDEX_MAP[name];
+        const idx = indexName ? indexByName[indexName] : undefined;
+        return {
+          name,
+          displayName: name,
+          totalStocks: stats.totalStocks,
+          liveCount: stats.liveCount,
+          gainers: stats.gainers,
+          losers: stats.losers,
+          unchanged: stats.unchanged,
+          change_percent: +weightedAvg.toFixed(2),
+          // Index reference (optional context)
+          indexSymbol: idx?.symbol || null,
+          indexPrice: idx?.price || null,
+          indexChange: idx?.change_percent || null,
+        };
+      })
+      .sort((a, b) => b.change_percent - a.change_percent);
+
     res.json({ sectors, isOpen: isMarketOpen() });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

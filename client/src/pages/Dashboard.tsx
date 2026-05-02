@@ -9,10 +9,12 @@ import StockLogo from '../components/StockLogo';
 import axios from 'axios';
 
 interface SectorQuote {
-  symbol: string;
   name: string;
-  price: number;
-  change: number;
+  displayName: string;
+  totalStocks: number;
+  liveCount: number;
+  gainers: number;
+  losers: number;
   change_percent: number;
 }
 
@@ -184,7 +186,7 @@ export default function Dashboard() {
                 <div className="grid grid-cols-4 gap-1.5 mb-3">
                   {sectors.slice(0, 8).map((s) => (
                     <Link
-                      key={s.symbol}
+                      key={s.name}
                       to="/sectors"
                       className={cn('rounded-lg p-2.5 flex flex-col hover:opacity-90 transition', heatColor(s.change_percent))}
                     >
