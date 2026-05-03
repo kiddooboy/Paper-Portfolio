@@ -69,7 +69,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
       grid: { vertLines: { color: gridColor }, horzLines: { color: gridColor } },
       crosshair: { mode: CrosshairMode.Normal },
       rightPriceScale: { borderColor },
-      timeScale: { borderColor, timeVisible: true, secondsVisible: false, fixLeftEdge: true, fixRightEdge: true },
+      timeScale: { borderColor, timeVisible: true, secondsVisible: false, fixLeftEdge: true, fixRightEdge: true, rightOffset: 0, barSpacing: 8 },
       width: containerRef.current.clientWidth,
       height: 360,
     });
