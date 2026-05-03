@@ -17,7 +17,7 @@ export default function StockDetail() {
   const [stock, setStock] = useState<any>(null);
   const [tab, setTab] = useState<'buy' | 'sell'>('buy');
   const [orderType, setOrderType] = useState<'MARKET' | 'LIMIT'>('MARKET');
-  const [qty, setQty] = useState(1);
+  const [qty, setQty] = useState('1');
   const [limitPrice, setLimitPrice] = useState('');
   const [alertPrice, setAlertPrice] = useState('');
   const [alertCond, setAlertCond] = useState<'above' | 'below'>('above');
@@ -39,7 +39,7 @@ export default function StockDetail() {
         symbol,
         type: orderType,
         transactionType: tab,
-        quantity: Number(qty),
+        quantity: qtyNum,
         limitPrice: orderType === 'LIMIT' ? Number(limitPrice) : undefined,
       });
       if (res.data.queued) {
@@ -74,7 +74,8 @@ export default function StockDetail() {
   }
 
   const isGain = stock.change_percent >= 0;
-  const total = stock.price * qty;
+  const qtyNum = Math.max(1, parseInt(qty) || 1);
+  const total = stock.price * qtyNum;
   const mcapCr = stock.market_cap ? (stock.market_cap / 1e7).toFixed(0) : null;
 
   return (
@@ -163,7 +164,7 @@ export default function StockDetail() {
             </div>
             <div>
               <label className="text-xs font-medium text-gray-500 dark:text-gray-400">Quantity</label>
-              <input type="number" min={1} value={qty} onChange={(e) => setQty(Number(e.target.value))}
+              <input type="number" min={1} value={qty} onChange={(e) => setQty(e.target.value)} onBlur={() => setQty(String(Math.max(1, parseInt(qty) || 1)))}
                 className="w-full mt-1 px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm font-medium" />
             </div>
             {orderType === 'LIMIT' && (
@@ -183,7 +184,7 @@ export default function StockDetail() {
             </div>
             <button onClick={handleOrder}
               className={cn('w-full py-3 rounded-xl text-white font-bold text-sm transition', tab === 'buy' ? 'bg-groww-primary hover:bg-green-600' : 'bg-groww-loss hover:bg-red-600')}>
-              {isMarketClosed ? `🕐 Queue ${tab === 'buy' ? 'Buy' : 'Sell'}` : tab === 'buy' ? `Buy ${symbol}` : `Sell ${symbol}`}
+              {isMarketClosed ? `🕐 Queue ${tab === 'buy' ? 'Buy' : 'Sell'} ${qtyNum}` : tab === 'buy' ? `Buy ${qtyNum} ${symbol}` : `Sell ${qtyNum} ${symbol}`}
             </button>
           </div>
         </div>

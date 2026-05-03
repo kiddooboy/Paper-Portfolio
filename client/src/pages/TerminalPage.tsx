@@ -23,7 +23,7 @@ export default function TerminalPage() {
   const [tab, setTab] = useState<'buy' | 'sell'>('buy');
   const [orderType, setOrderType] = useState<'MARKET' | 'LIMIT' | 'SL' | 'SL-M'>('MARKET');
   const [productType, setProductType] = useState<'CNC' | 'MIS'>('CNC');
-  const [qty, setQty] = useState(1);
+  const [qty, setQty] = useState('1');
   const [limitPrice, setLimitPrice] = useState('');
   const [triggerPrice, setTriggerPrice] = useState('');
   const [placing, setPlacing] = useState(false);
@@ -116,7 +116,8 @@ export default function TerminalPage() {
     if (orderType === 'SL') return Number.isFinite(lp) && lp > 0 ? lp : (Number.isFinite(tp) && tp > 0 ? tp : quote?.price ?? 0);
     return Number.isFinite(lp) && lp > 0 ? lp : quote?.price ?? 0;
   }, [orderType, limitPrice, triggerPrice, quote]);
-  const totalValue = executionPrice * qty;
+  const qtyNum = Math.max(1, parseInt(qty) || 1);
+  const totalValue = executionPrice * qtyNum;
 
   // Market status from the global store
   const marketStatus = useMarketStore((s) => s.status);
@@ -133,7 +134,7 @@ export default function TerminalPage() {
         exchange,
         type: orderType,
         transactionType: tab.toUpperCase(),
-        quantity: qty,
+        quantity: qtyNum,
         limitPrice: (orderType === 'LIMIT' || orderType === 'SL') && limitPrice ? parseFloat(limitPrice) : undefined,
         triggerPrice: (orderType === 'SL' || orderType === 'SL-M') && triggerPrice ? parseFloat(triggerPrice) : undefined,
         productType,
@@ -364,7 +365,8 @@ export default function TerminalPage() {
             <div>
               <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Quantity</label>
               <input type="number" min={1} value={qty}
-                onChange={(e) => setQty(Math.max(1, parseInt(e.target.value) || 1))}
+                onChange={(e) => setQty(e.target.value)}
+                onBlur={() => setQty(String(Math.max(1, parseInt(qty) || 1)))}
                 className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm tabular-nums" />
             </div>
 
@@ -389,7 +391,7 @@ export default function TerminalPage() {
             <div className="space-y-1.5 text-sm pt-2 border-t border-gray-100 dark:border-gray-800">
               <Row label="LTP" value={formatCurrency(price)} />
               <Row label="Execution Price" value={formatCurrency(executionPrice)} />
-              <Row label="Quantity" value={String(qty)} />
+              <Row label="Quantity" value={String(qtyNum)} />
               <Row
                 label={tab === 'buy' ? 'Amount Required' : 'Expected Proceeds'}
                 value={formatCurrency(totalValue)}
@@ -416,8 +418,8 @@ export default function TerminalPage() {
               {placing
                 ? 'Placing…'
                 : isMarketClosed
-                  ? `🕐 Queue ${tab === 'buy' ? 'BUY' : 'SELL'} ${qty} ${symbol}`
-                  : `${tab === 'buy' ? 'BUY' : 'SELL'} ${qty} ${symbol}`}
+                  ? `🕐 Queue ${tab === 'buy' ? 'BUY' : 'SELL'} ${qtyNum} ${symbol}`
+                  : `${tab === 'buy' ? 'BUY' : 'SELL'} ${qtyNum} ${symbol}`}
             </button>
             <Link
               to={`/orders`}
