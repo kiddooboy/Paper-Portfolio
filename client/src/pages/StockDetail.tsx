@@ -164,7 +164,7 @@ export default function StockDetail() {
             </div>
             <div>
               <label className="text-xs font-medium text-gray-500 dark:text-gray-400">Quantity</label>
-              <input type="number" min={1} value={qty} onChange={(e) => setQty(e.target.value)} onBlur={() => setQty(String(Math.max(1, parseInt(qty) || 1)))}
+              <input type="number" value={qty} onChange={(e) => setQty(e.target.value)} onBlur={(e) => setQty(String(Math.max(1, parseInt(e.target.value) || 1)))}
                 className="w-full mt-1 px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm font-medium" />
             </div>
             {orderType === 'LIMIT' && (
