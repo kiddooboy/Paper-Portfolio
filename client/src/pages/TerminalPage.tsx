@@ -7,7 +7,7 @@ import { formatCurrency, cn } from '../lib/utils';
 import { useAuthStore } from '../store/authStore';
 import { useMarketStore } from '../store/marketStore';
 import StockLogo from '../components/StockLogo';
-import TradingViewWidget from '../components/TradingViewWidget';
+import StockChart from '../components/StockChart';
 
 type Exchange = 'NSE' | 'BSE';
 
@@ -265,8 +265,8 @@ export default function TerminalPage() {
       <div className="flex-1 flex flex-col lg:flex-row min-h-0">
         {/* Chart area */}
         <div className="flex-1 flex flex-col min-h-[600px] lg:min-h-0">
-          <div className="flex-1 bg-white dark:bg-groww-card border-b lg:border-b-0 lg:border-r border-gray-100 dark:border-gray-800" style={{ minHeight: '600px' }}>
-            <TradingViewWidget symbol={symbol.toUpperCase()} exchange={exchange} height={800} />
+          <div className="flex-1 bg-white dark:bg-groww-card border-b lg:border-b-0 lg:border-r border-gray-100 dark:border-gray-800 p-3">
+            <StockChart symbol={symbol.toUpperCase()} exchange={exchange} />
           </div>
           {/* Key stats strip */}
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 p-3 bg-white dark:bg-groww-card border-t border-gray-100 dark:border-gray-800 text-xs">
