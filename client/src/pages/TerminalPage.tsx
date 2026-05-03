@@ -366,6 +366,7 @@ export default function TerminalPage() {
               <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Quantity</label>
               <input type="number" value={qty}
                 onChange={(e) => setQty(e.target.value)}
+                onFocus={(e) => e.target.select()}
                 onBlur={(e) => setQty(String(Math.max(1, parseInt(e.target.value) || 1)))}
                 className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm tabular-nums" />
             </div>
