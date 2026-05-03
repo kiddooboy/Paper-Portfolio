@@ -4,12 +4,14 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Lock, Eye, EyeOff } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useAuthStore } from '../store/authStore';
 
 export default function SetupMpinPage() {
   const [mpin, setMpin] = useState('');
   const [showMpin, setShowMpin] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const setHasMpin = useAuthStore((s) => s.setHasMpin);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -29,6 +31,7 @@ export default function SetupMpinPage() {
     setLoading(true);
     try {
       await axios.post('/api/auth/set-mpin', { mpin });
+      setHasMpin();
       toast.success('MPIN set successfully');
       navigate('/dashboard');
     } catch (err: any) {
