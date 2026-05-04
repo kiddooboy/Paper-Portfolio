@@ -153,8 +153,10 @@ async function main() {
     checkPriceAlerts().catch(err => console.error('[cron] checkPriceAlerts error:', err));
   });
 
-  // Hourly portfolio snapshot.
+  // Hourly portfolio snapshot — only during market hours (9:15–15:30 IST).
+  // Off-hours snapshots are stale (prices frozen), so we skip them.
   cron.schedule('0 * * * *', () => {
+    if (!isMarketOpen()) return;
     recordPortfolioHistory().catch(err => console.error('[cron] recordPortfolioHistory error:', err));
   });
 

@@ -6,17 +6,21 @@ import { cn } from '../lib/utils';
 interface Bar { date: string; open: number; high: number; low: number; close: number; volume: number }
 
 const RANGES = [
-  { label: '1D', range: '1d',  interval: '1h'  },
+  { label: '1D', range: '1d',  interval: '5m'  },
   { label: '1W', range: '5d',  interval: '1h'  },
   { label: '1M', range: '1mo', interval: '1d'  },
   { label: '3M', range: '3mo', interval: '1d'  },
   { label: '1Y', range: '1y',  interval: '1wk' },
 ] as const;
 
-function toUtcTimestamp(dateStr: string): number {
-  // Returns seconds since epoch, interpreted as UTC date
-  const d = new Date(dateStr);
-  return Math.floor(d.getTime() / 1000);
+const IST_OFFSET_S = 5.5 * 3600; // 19800 seconds
+
+function toTimestamp(dateStr: string): number {
+  const epochS = Math.floor(new Date(dateStr).getTime() / 1000);
+  // Intraday dates include a time component — shift by IST offset so
+  // lightweight-charts (which displays in UTC) shows correct IST times.
+  const hasTime = dateStr.includes('T') || dateStr.includes(' ');
+  return hasTime ? epochS + IST_OFFSET_S : epochS;
 }
 
 interface Props {
@@ -88,7 +92,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
         wickDownColor: '#ef4444',
       });
       series.setData(sorted.map((b) => ({
-        time: toUtcTimestamp(b.date) as any,
+        time: toTimestamp(b.date) as any,
         open: b.open, high: b.high, low: b.low, close: b.close,
       })));
 
@@ -96,7 +100,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
       chart.subscribeCrosshairMove((param) => {
         if (param.time) {
           const ts = Number(param.time);
-          const bar = sorted.find((b) => toUtcTimestamp(b.date) === ts);
+          const bar = sorted.find((b) => toTimestamp(b.date) === ts);
           setCrosshairData(bar ?? null);
         } else {
           setCrosshairData(null);
@@ -112,7 +116,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
         lastValueVisible: true,
         priceLineVisible: true,
       });
-      series.setData(sorted.map((b) => ({ time: toUtcTimestamp(b.date) as any, value: b.close })));
+      series.setData(sorted.map((b) => ({ time: toTimestamp(b.date) as any, value: b.close })));
     }
 
     // Volume histogram on a separate pane
@@ -123,7 +127,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
     });
     chart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
     volSeries.setData(sorted.map((b) => ({
-      time: toUtcTimestamp(b.date) as any,
+      time: toTimestamp(b.date) as any,
       value: b.volume,
       color: b.close >= b.open ? '#00c08740' : '#ef444440',
     })));
