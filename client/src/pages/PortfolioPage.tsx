@@ -6,7 +6,7 @@ import { useMarketStore } from '../store/marketStore';
 import { usePortfolioStore } from '../store/portfolioStore';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
-  LineChart, Line, XAxis, YAxis, CartesianGrid,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, ReferenceLine,
 } from 'recharts';
 import StockLogo from '../components/StockLogo';
 import {
@@ -37,6 +37,15 @@ export default function PortfolioPage() {
   useEffect(() => {
     axios.get('/api/portfolio/history').then(r => setHistoryData(r.data || [])).catch(() => {});
   }, []);
+
+  // Daily portfolio P&L = change in total_value between consecutive snapshots
+  const dailyPnl = useMemo(() => {
+    if (historyData.length < 2) return [];
+    return historyData.slice(1).map((d: any, i: number) => ({
+      date: d.recorded_at,
+      change: d.total_value - historyData[i].total_value,
+    }));
+  }, [historyData]);
 
   useEffect(() => {
     if (tab === 'pnl' && !tradePnl) {
@@ -135,28 +144,52 @@ export default function PortfolioPage() {
         </div>
       </div>
 
-      {/* ═══════════ PORTFOLIO HISTORY CHART ═══════════ */}
-      {historyData.length > 1 ? (
+      {/* ═══════════ DAILY P&L CHART ═══════════ */}
+      {dailyPnl.length > 0 ? (
         <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-4">
-          <h3 className="font-semibold mb-3 flex items-center gap-2 text-sm">
-            <TrendingUp className="w-4 h-4 text-gain" /> Portfolio Value History
-          </h3>
-          <div className="h-40">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold flex items-center gap-2 text-sm">
+              <Activity className="w-4 h-4 text-indigo-500" /> Daily Portfolio P&amp;L
+            </h3>
+            <span className="text-[11px] text-gray-400">Gain / loss per day</span>
+          </div>
+          <div className="h-44">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={historyData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="recorded_at" tickFormatter={v => new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} tick={{ fontSize: 10 }} />
-                <YAxis tickFormatter={v => `₹${(v/1000).toFixed(0)}k`} tick={{ fontSize: 10 }} width={48} />
-                <Tooltip formatter={(v: any) => [formatCurrency(v), 'Portfolio Value']} labelFormatter={v => new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })} />
-                <Line type="monotone" dataKey="total_value" stroke="#00B386" strokeWidth={2} dot={false} />
-              </LineChart>
+              <BarChart data={dailyPnl} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={v => new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                  tick={{ fontSize: 10 }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  tickFormatter={v => `${v >= 0 ? '+' : ''}₹${(v / 1000).toFixed(1)}k`}
+                  tick={{ fontSize: 10 }}
+                  width={56}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <ReferenceLine y={0} stroke="#d1d5db" strokeWidth={1} />
+                <Tooltip
+                  formatter={(v: any) => [`${v >= 0 ? '+' : ''}${formatCurrency(v)}`, 'Day P&L']}
+                  labelFormatter={v => new Date(v).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
+                  cursor={{ fill: 'rgba(0,0,0,0.04)' }}
+                />
+                <Bar dataKey="change" radius={[3, 3, 0, 0]}>
+                  {dailyPnl.map((entry, i) => (
+                    <Cell key={i} fill={entry.change >= 0 ? '#00B386' : '#EB5B3C'} fillOpacity={0.85} />
+                  ))}
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
       ) : (
         <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-4 text-center text-sm text-gray-400">
           <TrendingDown className="w-6 h-6 mx-auto mb-1 text-gray-300" />
-          Portfolio history will appear after the first market close (3:31 PM IST)
+          Daily P&amp;L chart will appear after two market close snapshots (3:31 PM IST)
         </div>
       )}
 
