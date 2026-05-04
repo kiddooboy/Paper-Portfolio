@@ -47,6 +47,12 @@ export default function PortfolioPage() {
     }));
   }, [historyData]);
 
+  // Today's snapshots only — for the intraday trend chart
+  const todayHistory = useMemo(() => {
+    const todayStr = new Date().toDateString();
+    return historyData.filter((d: any) => new Date(d.recorded_at).toDateString() === todayStr);
+  }, [historyData]);
+
   useEffect(() => {
     if (tab === 'pnl' && !tradePnl) {
       axios.get('/api/portfolio/trade-pnl').then(r => setTradePnl(r.data)).catch(() => {});
@@ -191,17 +197,18 @@ export default function PortfolioPage() {
               <h3 className="font-semibold flex items-center gap-2 text-sm mb-3">
                 <TrendingUp className="w-4 h-4 text-gain" /> Portfolio Value Trend
               </h3>
-              {historyData.length > 1 ? (
+              {todayHistory.length > 1 ? (
                 <div className="flex-1 min-h-[120px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={historyData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                    <LineChart data={todayHistory} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                       <XAxis
                         dataKey="recorded_at"
-                        tickFormatter={v => new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                        tickFormatter={v => new Date(v).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                         tick={{ fontSize: 10 }}
                         axisLine={false}
                         tickLine={false}
+                        interval="preserveStartEnd"
                       />
                       <YAxis
                         tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`}
@@ -211,18 +218,18 @@ export default function PortfolioPage() {
                         tickLine={false}
                         domain={['auto', 'auto']}
                       />
-                      <ReferenceLine y={historyData[0]?.total_value} stroke="#d1d5db" strokeDasharray="4 2" strokeWidth={1} />
+                      <ReferenceLine y={todayHistory[0]?.total_value} stroke="#d1d5db" strokeDasharray="4 2" strokeWidth={1} />
                       <Tooltip
                         formatter={(v: any) => [formatCurrency(v), 'Portfolio Value']}
-                        labelFormatter={v => new Date(v).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
+                        labelFormatter={v => new Date(v).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
                       />
-                      <Line type="monotone" dataKey="total_value" stroke="#00B386" strokeWidth={2} dot={{ r: 3, fill: '#00B386' }} activeDot={{ r: 5 }} />
+                      <Line type="monotone" dataKey="total_value" stroke="#00B386" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
               ) : (
                 <div className="flex-1 flex items-center justify-center text-sm text-gray-400">
-                  <p>Trend appears after the first market close</p>
+                  <p>Today's trend appears as snapshots are recorded</p>
                 </div>
               )}
             </div>
