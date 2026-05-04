@@ -1,6 +1,5 @@
 import { ReactNode, useEffect, useState } from 'react';
-import { ShieldCheck, BarChart3, Wallet, ArrowUpRight, ArrowDownRight } from 'lucide-react';
-import PaperPortfolioLogo from './PaperPortfolioLogo';
+import { TrendingUp, ShieldCheck, BarChart3, Wallet, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 
@@ -53,7 +52,9 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-groww-primary/20 via-gray-900 to-groww-dark">
         {/* Logo top-left */}
         <Link to="/" className="absolute top-6 left-6 flex items-center gap-2 z-10">
-          <PaperPortfolioLogo size={36} />
+          <div className="w-9 h-9 rounded-xl bg-groww-primary flex items-center justify-center shadow-md">
+            <TrendingUp className="w-5 h-5 text-white" />
+          </div>
           <span className="text-lg font-bold text-white">Paper Portfolio</span>
         </Link>
 
@@ -169,7 +170,9 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
       <div className="flex-1 flex flex-col">
         {/* Mobile-only header (logo) */}
         <div className="lg:hidden flex items-center gap-2 p-6">
-          <PaperPortfolioLogo size={36} />
+          <div className="w-9 h-9 rounded-xl bg-groww-primary flex items-center justify-center shadow-md">
+            <TrendingUp className="w-5 h-5 text-white" />
+          </div>
           <span className="text-lg font-bold">Paper Portfolio</span>
         </div>
 

@@ -8,8 +8,7 @@ import Sidebar from './Sidebar';
 import MobileNav from './MobileNav';
 import GlobalSearch from './GlobalSearch';
 import SetMpinModal from './SetMpinModal';
-import { Bell, Moon, Sun, MessageSquare, ListOrdered, Wallet, BarChart3, LogOut, ChevronRight, User, Check, ShoppingBag, TrendingDown, Info } from 'lucide-react';
-import PaperPortfolioLogo from './PaperPortfolioLogo';
+import { Bell, TrendingUp, Moon, Sun, MessageSquare, ListOrdered, Wallet, BarChart3, LogOut, ChevronRight, User, Check, ShoppingBag, TrendingDown, Info } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 
 export default function Layout() {
@@ -61,7 +60,7 @@ export default function Layout() {
     <div className={cn('min-h-screen bg-gray-50 dark:bg-groww-dark text-gray-900 dark:text-groww-text transition-colors', dark ? 'dark' : '')}>
       <header className="sticky top-0 z-50 bg-white/80 dark:bg-groww-dark/80 backdrop-blur border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center gap-4">
         <div className="flex items-center gap-2 shrink-0">
-          <PaperPortfolioLogo size={28} />
+          <TrendingUp className="w-6 h-6 text-groww-primary" />
           <span className="font-bold text-lg tracking-tight hidden sm:inline">Paper Portfolio</span>
         </div>
         <MarketBadge />
