@@ -23,7 +23,7 @@ export default function TerminalPage() {
   const [tab, setTab] = useState<'buy' | 'sell'>('buy');
   const [orderType, setOrderType] = useState<'MARKET' | 'LIMIT' | 'SL' | 'SL-M'>('MARKET');
   const [productType, setProductType] = useState<'CNC' | 'MIS'>('CNC');
-  const [qty, setQty] = useState('1');
+  const [qty, setQty] = useState('');
   const [limitPrice, setLimitPrice] = useState('');
   const [triggerPrice, setTriggerPrice] = useState('');
   const [placing, setPlacing] = useState(false);
@@ -116,7 +116,7 @@ export default function TerminalPage() {
     if (orderType === 'SL') return Number.isFinite(lp) && lp > 0 ? lp : (Number.isFinite(tp) && tp > 0 ? tp : quote?.price ?? 0);
     return Number.isFinite(lp) && lp > 0 ? lp : quote?.price ?? 0;
   }, [orderType, limitPrice, triggerPrice, quote]);
-  const qtyNum = Math.max(1, parseInt(qty) || 1);
+  const qtyNum = parseInt(qty) || 0;
   const totalValue = executionPrice * qtyNum;
 
   // Market status from the global store
@@ -125,6 +125,7 @@ export default function TerminalPage() {
 
   const placeOrder = async () => {
     if (!quote) return;
+    if (!qty || qtyNum < 1) { toast.error('Enter a valid quantity'); return; }
     if (orderType === 'LIMIT' && !limitPrice) { toast.error('Enter a limit price'); return; }
     if ((orderType === 'SL' || orderType === 'SL-M') && !triggerPrice) { toast.error('Enter a trigger price'); return; }
     setPlacing(true);
@@ -366,8 +367,7 @@ export default function TerminalPage() {
               <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Quantity</label>
               <input type="number" value={qty}
                 onChange={(e) => setQty(e.target.value)}
-                onFocus={(e) => e.target.select()}
-                onBlur={(e) => setQty(String(Math.max(1, parseInt(e.target.value) || 1)))}
+                onBlur={(e) => { if (e.target.value && parseInt(e.target.value) < 1) setQty('1'); }}
                 className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm tabular-nums" />
             </div>
 

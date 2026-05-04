@@ -17,7 +17,7 @@ export default function StockDetail() {
   const [stock, setStock] = useState<any>(null);
   const [tab, setTab] = useState<'buy' | 'sell'>('buy');
   const [orderType, setOrderType] = useState<'MARKET' | 'LIMIT'>('MARKET');
-  const [qty, setQty] = useState('1');
+  const [qty, setQty] = useState('');
   const [limitPrice, setLimitPrice] = useState('');
   const [alertPrice, setAlertPrice] = useState('');
   const [alertCond, setAlertCond] = useState<'above' | 'below'>('above');
@@ -34,6 +34,7 @@ export default function StockDetail() {
   }, [symbol, exchange]);
 
   const handleOrder = async () => {
+    if (!qty || qtyNum < 1) { toast.error('Enter a valid quantity'); return; }
     try {
       const res = await axios.post('/api/orders', {
         symbol,
@@ -74,7 +75,7 @@ export default function StockDetail() {
   }
 
   const isGain = stock.change_percent >= 0;
-  const qtyNum = Math.max(1, parseInt(qty) || 1);
+  const qtyNum = parseInt(qty) || 0;
   const total = stock.price * qtyNum;
   const mcapCr = stock.market_cap ? (stock.market_cap / 1e7).toFixed(0) : null;
 
@@ -164,7 +165,7 @@ export default function StockDetail() {
             </div>
             <div>
               <label className="text-xs font-medium text-gray-500 dark:text-gray-400">Quantity</label>
-              <input type="number" value={qty} onChange={(e) => setQty(e.target.value)} onFocus={(e) => e.target.select()} onBlur={(e) => setQty(String(Math.max(1, parseInt(e.target.value) || 1)))}
+              <input type="number" value={qty} onChange={(e) => setQty(e.target.value)} onBlur={(e) => { if (e.target.value && parseInt(e.target.value) < 1) setQty('1'); }}
                 className="w-full mt-1 px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm font-medium" />
             </div>
             {orderType === 'LIMIT' && (
