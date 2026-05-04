@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import PaperPortfolioLogo from '../components/PaperPortfolioLogo';
 
 const STOCKS = [
   { n: 'NIFTY 50', p: '23,997.55', c: '-0.74%', u: false },
@@ -343,9 +344,7 @@ export default function LandingPage() {
         {/* NAV */}
         <nav className="lp-nav">
           <div className="lp-logo">
-            <div className="lp-logo-icon">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><polyline points="1,12 5,7 9,9 15,2" stroke="#000" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </div>
+            <PaperPortfolioLogo size={28} />
             Paper Portfolio
           </div>
           <div className="lp-nav-right">
@@ -493,9 +492,7 @@ export default function LandingPage() {
         <footer className="lp-footer">
           <div>
             <div className="lp-logo">
-              <div className="lp-logo-icon" style={{ width: 26, height: 26 }}>
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><polyline points="1,9 4,5 7,7 11,2" stroke="#000" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>
-              </div>
+              <PaperPortfolioLogo size={24} />
               Paper Portfolio
             </div>
             <p className="lp-fc">© 2025 paperportfolio.in — All rights reserved.</p>
