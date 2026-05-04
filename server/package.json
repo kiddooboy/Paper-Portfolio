@@ -11,6 +11,7 @@
     "reset-db": "tsx src/scripts/seed.ts --reset"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.92.0",
     "@types/nodemailer": "^8.0.0",
     "axios": "^1.15.2",
     "bcryptjs": "^2.4.3",
