@@ -6,7 +6,7 @@ import { useMarketStore } from '../store/marketStore';
 import { usePortfolioStore } from '../store/portfolioStore';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, ReferenceLine,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, ReferenceLine,
 } from 'recharts';
 import StockLogo from '../components/StockLogo';
 import {
@@ -155,7 +155,7 @@ export default function PortfolioPage() {
           </div>
           <div className="h-44">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dailyPnl} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <LineChart data={dailyPnl} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                 <XAxis
                   dataKey="date"
@@ -175,14 +175,9 @@ export default function PortfolioPage() {
                 <Tooltip
                   formatter={(v: any) => [`${v >= 0 ? '+' : ''}${formatCurrency(v)}`, 'Day P&L']}
                   labelFormatter={v => new Date(v).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
-                  cursor={{ fill: 'rgba(0,0,0,0.04)' }}
                 />
-                <Bar dataKey="change" radius={[3, 3, 0, 0]}>
-                  {dailyPnl.map((entry, i) => (
-                    <Cell key={i} fill={entry.change >= 0 ? '#00B386' : '#EB5B3C'} fillOpacity={0.85} />
-                  ))}
-                </Bar>
-              </BarChart>
+                <Line type="monotone" dataKey="change" stroke="#00B386" strokeWidth={2} dot={{ r: 3, fill: '#00B386' }} activeDot={{ r: 5 }} />
+              </LineChart>
             </ResponsiveContainer>
           </div>
         </div>
