@@ -8,7 +8,7 @@ import Sidebar from './Sidebar';
 import MobileNav from './MobileNav';
 import GlobalSearch from './GlobalSearch';
 import SetMpinModal from './SetMpinModal';
-import { Bell, TrendingUp, Moon, Sun, MessageSquare, ListOrdered, Wallet, BarChart3, LogOut, ChevronRight, User } from 'lucide-react';
+import { Bell, TrendingUp, Moon, Sun, MessageSquare, ListOrdered, Wallet, BarChart3, LogOut, ChevronRight, User, Check, ShoppingBag, TrendingDown, Info } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 
 export default function Layout() {
@@ -39,23 +39,13 @@ export default function Layout() {
     return () => clearInterval(interval);
   }, []);
 
-  // Refresh notifications periodically (more frequent on /notifications page)
+  // Refresh notifications periodically
   useEffect(() => {
     if (!isAuthenticated) return;
     fetchNotifications(true);
-    const interval = setInterval(
-      () => fetchNotifications(true),
-      location.pathname === '/notifications' ? 5_000 : 60_000,
-    );
+    const interval = setInterval(() => fetchNotifications(true), 30_000);
     return () => clearInterval(interval);
-  }, [isAuthenticated, location.pathname, fetchNotifications]);
-
-  // Listen for notification read events to refresh count immediately
-  useEffect(() => {
-    const handleNotificationRead = () => fetchNotifications(true);
-    window.addEventListener('notification:read', handleNotificationRead);
-    return () => window.removeEventListener('notification:read', handleNotificationRead);
-  }, [fetchNotifications]);
+  }, [isAuthenticated, fetchNotifications]);
 
   if (isInitializing && !isAuthenticated) {
     return (
@@ -83,14 +73,7 @@ export default function Layout() {
             <span className="font-mono">{currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</span>
             <span className="text-[10px] uppercase tracking-wide">IST</span>
           </div>
-          <button onClick={() => navigate('/notifications')} className="relative p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800">
-            <Bell className="w-5 h-5" />
-            {unreadCount > 0 && (
-              <span className="absolute top-0 right-0 w-4 h-4 bg-groww-loss text-white text-[10px] rounded-full flex items-center justify-center">
-                {unreadCount}
-              </span>
-            )}
-          </button>
+          <NotificationDropdown />
           <ProfileMenu dark={dark} onToggleDark={() => setDark(!dark)} />
         </div>
       </header>
@@ -297,6 +280,126 @@ function MarketBadge() {
         <span className={cn('relative inline-flex rounded-full h-2 w-2', dotColor)} />
       </span>
       {status.label}
+    </div>
+  );
+}
+
+function NotificationDropdown() {
+  const { items, unreadCount, fetch, markRead } = useNotificationsStore();
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Fetch fresh when opened
+  useEffect(() => {
+    if (open) fetch(true);
+  }, [open, fetch]);
+
+  const recent = items.slice(0, 8);
+
+  const iconFor = (type: string, title: string) => {
+    if (type === 'price_alert') return <TrendingDown className="w-4 h-4 text-amber-400" />;
+    if (title.toLowerCase().includes('sell')) return <TrendingDown className="w-4 h-4 text-red-400" />;
+    if (title.toLowerCase().includes('buy')) return <ShoppingBag className="w-4 h-4 text-groww-primary" />;
+    return <Info className="w-4 h-4 text-blue-400" />;
+  };
+
+  const timeAgo = (dateStr: string) => {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="relative p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+      >
+        <Bell className="w-5 h-5" />
+        {unreadCount > 0 && (
+          <span className="absolute top-0 right-0 w-4 h-4 bg-groww-loss text-white text-[10px] rounded-full flex items-center justify-center font-bold">
+            {unreadCount > 9 ? '9+' : unreadCount}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-12 w-80 bg-white dark:bg-groww-card rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 z-50 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-sm">Notifications</span>
+              {unreadCount > 0 && (
+                <span className="text-[10px] font-bold bg-groww-loss text-white px-1.5 py-0.5 rounded-full">{unreadCount}</span>
+              )}
+            </div>
+            {unreadCount > 0 && (
+              <button
+                onClick={async () => {
+                  for (const n of items.filter((n) => !n.read)) await markRead(n.id);
+                }}
+                className="text-[11px] text-groww-primary hover:underline font-medium"
+              >
+                Mark all read
+              </button>
+            )}
+          </div>
+
+          {/* List */}
+          <div className="max-h-[420px] overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
+            {recent.length === 0 ? (
+              <div className="px-4 py-8 text-center text-sm text-gray-400">No notifications yet</div>
+            ) : (
+              recent.map((n) => (
+                <div
+                  key={n.id}
+                  onClick={() => { if (!n.read) markRead(n.id); }}
+                  className={cn(
+                    'flex items-start gap-3 px-4 py-3 cursor-pointer transition hover:bg-gray-50 dark:hover:bg-gray-800/60',
+                    !n.read && 'bg-groww-primary/5 dark:bg-groww-primary/10'
+                  )}
+                >
+                  <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0 mt-0.5">
+                    {iconFor(n.type, n.title)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={cn('text-xs font-semibold leading-snug', !n.read ? 'text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-300')}>
+                      {n.title}
+                    </p>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-snug line-clamp-2">{n.message}</p>
+                    <p className="text-[10px] text-gray-400 mt-1">{timeAgo(n.created_at)}</p>
+                  </div>
+                  {!n.read && <span className="w-2 h-2 rounded-full bg-groww-primary shrink-0 mt-1.5" />}
+                  {n.read && <Check className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600 shrink-0 mt-1" />}
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="border-t border-gray-100 dark:border-gray-800 px-4 py-2.5">
+            <button
+              onClick={() => { setOpen(false); navigate('/notifications'); }}
+              className="w-full text-center text-xs font-semibold text-groww-primary hover:underline py-1"
+            >
+              View all notifications
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
