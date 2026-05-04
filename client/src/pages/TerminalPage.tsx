@@ -8,6 +8,7 @@ import { useAuthStore } from '../store/authStore';
 import { useMarketStore } from '../store/marketStore';
 import StockLogo from '../components/StockLogo';
 import StockChart from '../components/StockChart';
+import SellConfirmModal from '../components/SellConfirmModal';
 
 type Exchange = 'NSE' | 'BSE';
 
@@ -27,6 +28,7 @@ export default function TerminalPage() {
   const [limitPrice, setLimitPrice] = useState('');
   const [triggerPrice, setTriggerPrice] = useState('');
   const [placing, setPlacing] = useState(false);
+  const [showSellConfirm, setShowSellConfirm] = useState(false);
 
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertPrice, setAlertPrice] = useState('');
@@ -123,11 +125,21 @@ export default function TerminalPage() {
   const marketStatus = useMarketStore((s) => s.status);
   const isMarketClosed = marketStatus ? !marketStatus.isOpen : false;
 
+  const validateOrder = () => {
+    if (!quote) return false;
+    if (!qty || qtyNum < 1) { toast.error('Enter a valid quantity'); return false; }
+    if (orderType === 'LIMIT' && !limitPrice) { toast.error('Enter a limit price'); return false; }
+    if ((orderType === 'SL' || orderType === 'SL-M') && !triggerPrice) { toast.error('Enter a trigger price'); return false; }
+    return true;
+  };
+
+  const handleOrderClick = () => {
+    if (!validateOrder()) return;
+    if (tab === 'sell') { setShowSellConfirm(true); return; }
+    placeOrder();
+  };
+
   const placeOrder = async () => {
-    if (!quote) return;
-    if (!qty || qtyNum < 1) { toast.error('Enter a valid quantity'); return; }
-    if (orderType === 'LIMIT' && !limitPrice) { toast.error('Enter a limit price'); return; }
-    if ((orderType === 'SL' || orderType === 'SL-M') && !triggerPrice) { toast.error('Enter a trigger price'); return; }
     setPlacing(true);
     try {
       const res = await axios.post('/api/orders', {
@@ -408,7 +420,7 @@ export default function TerminalPage() {
 
           <div className="p-4 border-t border-gray-100 dark:border-gray-800">
             <button
-              onClick={placeOrder}
+              onClick={handleOrderClick}
               disabled={placing || (tab === 'buy' && !affordable)}
               className={cn(
                 'w-full py-3 rounded-lg font-semibold text-white transition',
@@ -484,6 +496,18 @@ export default function TerminalPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showSellConfirm && (
+        <SellConfirmModal
+          symbol={symbol.toUpperCase()}
+          companyName={meta?.name}
+          quantity={qtyNum}
+          price={executionPrice}
+          orderType={orderType}
+          onConfirm={() => { setShowSellConfirm(false); placeOrder(); }}
+          onCancel={() => setShowSellConfirm(false)}
+        />
       )}
     </div>
   );

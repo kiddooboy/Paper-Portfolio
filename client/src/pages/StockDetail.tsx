@@ -7,6 +7,7 @@ import { formatCurrency, cn } from '../lib/utils';
 import { useAuthStore } from '../store/authStore';
 import StockLogo from '../components/StockLogo';
 import StockChart from '../components/StockChart';
+import SellConfirmModal from '../components/SellConfirmModal';
 import { useMarketStore } from '../store/marketStore';
 
 export default function StockDetail() {
@@ -20,6 +21,7 @@ export default function StockDetail() {
   const [qty, setQty] = useState('');
   const [limitPrice, setLimitPrice] = useState('');
   const [alertPrice, setAlertPrice] = useState('');
+  const [showSellConfirm, setShowSellConfirm] = useState(false);
   const [alertCond, setAlertCond] = useState<'above' | 'below'>('above');
   const balance = useAuthStore((s) => s.user?.balance || 0);
   const marketStatus = useMarketStore((s) => s.status);
@@ -33,8 +35,13 @@ export default function StockDetail() {
     return () => clearInterval(id);
   }, [symbol, exchange]);
 
-  const handleOrder = async () => {
+  const handleOrderClick = () => {
     if (!qty || qtyNum < 1) { toast.error('Enter a valid quantity'); return; }
+    if (tab === 'sell') { setShowSellConfirm(true); return; }
+    handleOrder();
+  };
+
+  const handleOrder = async () => {
     try {
       const res = await axios.post('/api/orders', {
         symbol,
@@ -183,7 +190,7 @@ export default function StockDetail() {
               <span>Available balance</span>
               <span className="font-semibold text-gray-600 dark:text-gray-300">{formatCurrency(balance)}</span>
             </div>
-            <button onClick={handleOrder}
+            <button onClick={handleOrderClick}
               className={cn('w-full py-3 rounded-xl text-white font-bold text-sm transition', tab === 'buy' ? 'bg-groww-primary hover:bg-green-600' : 'bg-groww-loss hover:bg-red-600')}>
               {isMarketClosed ? `🕐 Queue ${tab === 'buy' ? 'Buy' : 'Sell'} ${qtyNum}` : tab === 'buy' ? `Buy ${qtyNum} ${symbol}` : `Sell ${qtyNum} ${symbol}`}
             </button>
@@ -221,6 +228,18 @@ export default function StockDetail() {
           <h3 className="font-bold text-sm mb-2">About {stock.name}</h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">{stock.about}</p>
         </div>
+      )}
+
+      {showSellConfirm && (
+        <SellConfirmModal
+          symbol={stock.symbol}
+          companyName={stock.name}
+          quantity={qtyNum}
+          price={stock.price}
+          orderType={orderType}
+          onConfirm={() => { setShowSellConfirm(false); handleOrder(); }}
+          onCancel={() => setShowSellConfirm(false)}
+        />
       )}
     </div>
   );
