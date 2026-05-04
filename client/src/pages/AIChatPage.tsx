@@ -6,6 +6,49 @@ import remarkGfm from 'remark-gfm';
 import axios from 'axios';
 import { cn } from '../lib/utils';
 
+// Custom markdown components — conversational, not document-style
+const MdComponents: React.ComponentProps<typeof ReactMarkdown>['components'] = {
+  p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
+  h1: ({ children }) => <p className="font-bold mb-1.5 mt-4 first:mt-0">{children}</p>,
+  h2: ({ children }) => <p className="font-semibold mb-1 mt-3 first:mt-0">{children}</p>,
+  h3: ({ children }) => <p className="font-medium mb-0.5 mt-2 first:mt-0 opacity-90">{children}</p>,
+  ul: ({ children }) => <ul className="mb-2 mt-1 pl-5 list-disc space-y-0.5">{children}</ul>,
+  ol: ({ children }) => <ol className="mb-2 mt-1 pl-5 list-decimal space-y-0.5">{children}</ol>,
+  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+  strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+  em: ({ children }) => <em className="italic opacity-80">{children}</em>,
+  code: ({ children, className }) => {
+    const isBlock = !!className?.startsWith('language-');
+    if (isBlock) return (
+      <pre className="my-2.5 rounded-xl bg-gray-900 dark:bg-black p-3.5 overflow-x-auto text-[11px] text-gray-100 font-mono leading-relaxed">
+        <code>{children}</code>
+      </pre>
+    );
+    return <code className="bg-gray-100 dark:bg-gray-800 text-groww-primary text-[11px] font-mono px-1.5 py-0.5 rounded">{children}</code>;
+  },
+  pre: ({ children }) => <>{children}</>,
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-2 border-groww-primary/40 pl-3 my-2 italic text-gray-500 dark:text-gray-400 text-sm">
+      {children}
+    </blockquote>
+  ),
+  hr: () => <hr className="border-gray-200 dark:border-gray-700 my-3" />,
+  table: ({ children }) => (
+    <div className="overflow-x-auto my-2.5 rounded-xl border border-gray-200 dark:border-gray-700">
+      <table className="w-full text-xs">{children}</table>
+    </div>
+  ),
+  th: ({ children }) => (
+    <th className="text-left font-semibold bg-gray-50 dark:bg-gray-800/80 px-3 py-2 text-gray-600 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">{children}</th>
+  ),
+  td: ({ children }) => (
+    <td className="px-3 py-2 border-t border-gray-100 dark:border-gray-800/60">{children}</td>
+  ),
+  a: ({ href, children }) => (
+    <a href={href} className="text-groww-primary hover:underline" target="_blank" rel="noreferrer">{children}</a>
+  ),
+};
+
 interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -162,29 +205,18 @@ export default function AIChatPage() {
               'max-w-[85%] rounded-2xl px-4 py-3',
               msg.role === 'user'
                 ? 'bg-groww-primary text-white rounded-tr-sm'
-                : 'bg-white dark:bg-groww-card border border-gray-100 dark:border-gray-800 rounded-tl-sm'
+                : 'bg-white dark:bg-groww-card border border-gray-100/80 dark:border-gray-800/60 rounded-tl-sm shadow-sm'
             )}>
               {msg.role === 'assistant' ? (
-                <div className="prose prose-sm dark:prose-invert max-w-none text-gray-900 dark:text-gray-100
-                  prose-headings:text-gray-900 dark:prose-headings:text-white
-                  prose-headings:font-bold prose-headings:mt-3 prose-headings:mb-1
-                  prose-h2:text-sm prose-h3:text-sm
-                  prose-p:my-1 prose-p:leading-relaxed
-                  prose-ul:my-1 prose-ul:pl-4 prose-li:my-0.5
-                  prose-ol:my-1 prose-ol:pl-4
-                  prose-strong:text-gray-900 dark:prose-strong:text-white
-                  prose-code:bg-gray-100 dark:prose-code:bg-gray-800 prose-code:px-1 prose-code:rounded prose-code:text-xs prose-code:text-groww-primary
-                  prose-table:text-xs prose-th:py-1 prose-td:py-1
-                  prose-a:text-groww-primary prose-a:no-underline hover:prose-a:underline
-                  [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                <div className="text-sm text-gray-800 dark:text-gray-100 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={MdComponents}>
                     {msg.content}
                   </ReactMarkdown>
                 </div>
               ) : (
                 <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
               )}
-              <p className={cn('text-[10px] mt-1.5', msg.role === 'user' ? 'text-white/60 text-right' : 'text-gray-400')}>
+              <p className={cn('text-[10px] mt-2', msg.role === 'user' ? 'text-white/60 text-right' : 'text-gray-400')}>
                 {msg.timestamp.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
               </p>
             </div>
