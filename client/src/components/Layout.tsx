@@ -381,8 +381,7 @@ function NotificationDropdown() {
                     <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-snug line-clamp-2">{n.message}</p>
                     <p className="text-[10px] text-gray-400 mt-1">{timeAgo(n.created_at)}</p>
                   </div>
-                  {!n.read && <span className="w-2 h-2 rounded-full bg-groww-primary shrink-0 mt-1.5" />}
-                  {n.read && <Check className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600 shrink-0 mt-1" />}
+                  {n.read ? <Check className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600 shrink-0 mt-1" /> : <span className="w-2 h-2 rounded-full bg-groww-primary shrink-0 mt-1.5" />}
                 </div>
               ))
             )}
