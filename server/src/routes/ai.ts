@@ -85,7 +85,7 @@ function getMarketContext(): string {
     if (!status.isOpen && status.nextOpen) ctx += `Next open: ${status.nextOpen}\n`;
     ctx += `\n### Index Levels\n`;
     for (const idx of indices) {
-      if (idx.price > 0) ctx += `- ${idx.label}: ${fmt(idx.price)} (${pct(idx.change_percent ?? 0)})\n`;
+      if (idx.price > 0) ctx += `- ${idx.name}: ${fmt(idx.price)} (${pct(idx.change_percent ?? 0)})\n`;
     }
     return ctx;
   } catch { return ''; }
