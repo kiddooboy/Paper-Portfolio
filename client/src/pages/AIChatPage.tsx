@@ -76,6 +76,8 @@ I can help you with:
 
 What would you like to know?`;
 
+const AI_LIMIT = 10;
+
 export default function AIChatPage() {
   const navigate = useNavigate();
   const [messages, setMessages] = useState<Message[]>([
@@ -86,6 +88,12 @@ export default function AIChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [showChips, setShowChips] = useState(true);
+  const [creditsUsed, setCreditsUsed] = useState<number | null>(null);
+
+  // Fetch current credit count on mount
+  useEffect(() => {
+    axios.get('/api/ai/credits').then((r) => setCreditsUsed(r.data.used)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -99,8 +107,10 @@ export default function AIChatPage() {
     }
   }, [input]);
 
+  const exhausted = creditsUsed !== null && creditsUsed >= AI_LIMIT;
+
   const sendMessage = async (text: string) => {
-    if (!text.trim() || isLoading) return;
+    if (!text.trim() || isLoading || exhausted) return;
     setShowChips(false);
 
     const userMsg: Message = {
@@ -118,6 +128,7 @@ export default function AIChatPage() {
         message: userMsg.content,
         history: messages.slice(-20).map((m) => ({ role: m.role, content: m.content })),
       });
+      if (res.data.creditsUsed != null) setCreditsUsed(res.data.creditsUsed);
       setMessages((prev) => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -125,11 +136,15 @@ export default function AIChatPage() {
         timestamp: new Date(),
       }]);
     } catch (err: any) {
+      if (err.response?.data?.error === 'credits_exhausted') {
+        setCreditsUsed(AI_LIMIT);
+        return; // exhausted banner will show, no need to add error message
+      }
       const errMsg = err.response?.data?.error || 'Something went wrong. Please try again.';
       setMessages((prev) => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `❌ ${errMsg}`,
+        content: `Sorry, something went wrong — ${errMsg}`,
         timestamp: new Date(),
       }]);
     } finally {
@@ -165,7 +180,21 @@ export default function AIChatPage() {
             <p className="text-xs text-gray-500 dark:text-gray-400">Portfolio-aware · Live market data · Indian equity expert</p>
           </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
+          {/* Credit counter badge */}
+          {creditsUsed !== null && (
+            <div className={cn(
+              'flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold',
+              exhausted
+                ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                : creditsUsed >= 7
+                ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'
+                : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
+            )}>
+              <Sparkles className="w-3 h-3" />
+              {exhausted ? 'No credits left' : `${AI_LIMIT - creditsUsed} credits left`}
+            </div>
+          )}
           {!onlyWelcome && (
             <button
               onClick={clearChat}
@@ -261,36 +290,57 @@ export default function AIChatPage() {
         </div>
       )}
 
-      {/* Input */}
-      <div className="shrink-0 bg-white dark:bg-groww-card border-t border-gray-200 dark:border-gray-800 px-4 py-3">
-        <div className="flex gap-2 items-end max-w-4xl mx-auto">
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask about your portfolio, stocks, markets, strategies..."
-            rows={1}
-            className="flex-1 resize-none rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-groww-primary focus:border-transparent dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition"
-            style={{ minHeight: '42px', maxHeight: '120px' }}
-          />
-          <button
-            onClick={() => sendMessage(input)}
-            disabled={!input.trim() || isLoading}
-            className={cn(
-              'p-2.5 rounded-xl transition shrink-0',
-              input.trim() && !isLoading
-                ? 'bg-groww-primary text-white hover:bg-green-600 shadow-sm'
-                : 'bg-gray-100 dark:bg-gray-800 text-gray-400 cursor-not-allowed'
-            )}
-          >
-            <Send className="w-4 h-4" />
-          </button>
+      {/* Input / Exhausted state */}
+      {exhausted ? (
+        <div className="shrink-0 bg-white dark:bg-groww-card border-t border-gray-200 dark:border-gray-800 px-4 py-5">
+          <div className="max-w-md mx-auto text-center space-y-2">
+            <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto">
+              <Sparkles className="w-5 h-5 text-red-500" />
+            </div>
+            <p className="font-semibold text-sm text-gray-800 dark:text-gray-100">You've used all 10 free questions</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+              Your free AI credit allowance has been exhausted. Upgrade your plan to keep asking questions about your portfolio, markets, and strategies.
+            </p>
+            <div className="pt-1">
+              <span className="inline-block px-4 py-1.5 rounded-full bg-red-50 dark:bg-red-900/20 text-red-500 text-xs font-medium border border-red-200 dark:border-red-800">
+                0 / 10 credits remaining
+              </span>
+            </div>
+          </div>
         </div>
-        <p className="text-[10px] text-gray-400 text-center mt-1.5">
-          For educational use on a paper trading platform · Not real financial advice · Shift+Enter for new line
-        </p>
-      </div>
+      ) : (
+        <div className="shrink-0 bg-white dark:bg-groww-card border-t border-gray-200 dark:border-gray-800 px-4 py-3">
+          <div className="flex gap-2 items-end max-w-4xl mx-auto">
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask about your portfolio, stocks, markets, strategies..."
+              rows={1}
+              className="flex-1 resize-none rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-groww-primary focus:border-transparent dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition"
+              style={{ minHeight: '42px', maxHeight: '120px' }}
+            />
+            <button
+              onClick={() => sendMessage(input)}
+              disabled={!input.trim() || isLoading}
+              className={cn(
+                'p-2.5 rounded-xl transition shrink-0',
+                input.trim() && !isLoading
+                  ? 'bg-groww-primary text-white hover:bg-green-600 shadow-sm'
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-400 cursor-not-allowed'
+              )}
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
+          <p className="text-[10px] text-gray-400 text-center mt-1.5">
+            {creditsUsed !== null
+              ? `${AI_LIMIT - creditsUsed} of ${AI_LIMIT} free questions remaining · Shift+Enter for new line`
+              : 'For educational use on a paper trading platform · Not real financial advice · Shift+Enter for new line'}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

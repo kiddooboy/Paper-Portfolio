@@ -209,7 +209,15 @@ ${userCtx}
 Current time: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST`;
 }
 
-// ─── Route ─────────────────────────────────────────────────────────────────
+// ─── Routes ────────────────────────────────────────────────────────────────
+
+const AI_CREDIT_LIMIT = 10;
+
+router.get('/credits', authMiddleware, (req: AuthRequest, res) => {
+  const row = db.prepare('SELECT ai_credits_used FROM users WHERE id = ?').get(req.user!.id) as any;
+  const used = Number(row?.ai_credits_used ?? 0);
+  res.json({ used, limit: AI_CREDIT_LIMIT, remaining: Math.max(0, AI_CREDIT_LIMIT - used) });
+});
 
 router.post('/chat', authMiddleware, async (req: AuthRequest, res) => {
   try {
@@ -222,6 +230,17 @@ router.post('/chat', authMiddleware, async (req: AuthRequest, res) => {
 
     if (!process.env.ANTHROPIC_API_KEY) {
       return res.status(503).json({ error: 'AI service not configured. Add ANTHROPIC_API_KEY to server environment.' });
+    }
+
+    // Credit check
+    const userRow = db.prepare('SELECT ai_credits_used FROM users WHERE id = ?').get(userId) as any;
+    const creditsUsed = Number(userRow?.ai_credits_used ?? 0);
+    if (creditsUsed >= AI_CREDIT_LIMIT) {
+      return res.status(402).json({
+        error: 'credits_exhausted',
+        used: creditsUsed,
+        limit: AI_CREDIT_LIMIT,
+      });
     }
 
     const [userCtx, marketCtx] = await Promise.all([
@@ -247,7 +266,12 @@ router.post('/chat', authMiddleware, async (req: AuthRequest, res) => {
     });
 
     const text = aiRes.content[0].type === 'text' ? aiRes.content[0].text : '';
-    res.json({ response: text });
+
+    // Increment only on success
+    db.prepare('UPDATE users SET ai_credits_used = ai_credits_used + 1 WHERE id = ?').run(userId);
+    const newUsed = creditsUsed + 1;
+
+    res.json({ response: text, creditsUsed: newUsed, creditsLimit: AI_CREDIT_LIMIT });
   } catch (error: any) {
     console.error('[AI Chat] Error:', error?.message || error);
     if (error?.status === 401) return res.status(500).json({ error: 'Invalid AI API key.' });

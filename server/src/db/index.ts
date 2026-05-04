@@ -348,6 +348,7 @@ export async function initSchema() {
   // ── Phase 2b: Migrations (add columns to existing tables) ──
   safeExec(`ALTER TABLE users ADD COLUMN last_login TEXT`, 'migration: users.last_login');
   safeExec(`ALTER TABLE users ADD COLUMN firebase_uid TEXT`, 'migration: users.firebase_uid');
+  safeExec(`ALTER TABLE users ADD COLUMN ai_credits_used INTEGER NOT NULL DEFAULT 0`, 'migration: users.ai_credits_used');
   safeExec(`ALTER TABLE users MODIFY COLUMN password TEXT`, 'migration: users.password nullable');
   safeExec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_firebase_uid ON users(firebase_uid) WHERE firebase_uid IS NOT NULL`, 'index: users.firebase_uid');
 
