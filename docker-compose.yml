@@ -9,6 +9,7 @@ services:
       - NODE_ENV=production
       - PORT=5000
       - GOOGLE_APPLICATION_CREDENTIALS=/app/firebase-service-account.json
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     volumes:
       # This line is the magic that makes sure data is NEVER erased!
       # It maps the container's database directory to your local hard drive.
