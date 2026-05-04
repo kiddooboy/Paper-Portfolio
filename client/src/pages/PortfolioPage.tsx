@@ -6,7 +6,6 @@ import { useMarketStore } from '../store/marketStore';
 import { usePortfolioStore } from '../store/portfolioStore';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
-  LineChart, Line, XAxis, YAxis, CartesianGrid, ReferenceLine,
 } from 'recharts';
 import StockLogo from '../components/StockLogo';
 import {
@@ -144,49 +143,45 @@ export default function PortfolioPage() {
         </div>
       </div>
 
-      {/* ═══════════ DAILY P&L CHART ═══════════ */}
-      {dailyPnl.length > 0 ? (
-        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold flex items-center gap-2 text-sm">
-              <Activity className="w-4 h-4 text-indigo-500" /> Daily Portfolio P&amp;L
-            </h3>
-            <span className="text-[11px] text-gray-400">Gain / loss per day</span>
+      {/* ═══════════ TODAY'S P&L ═══════════ */}
+      {(() => {
+        const today = dailyPnl[dailyPnl.length - 1];
+        const todayDate = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        const gain = today && today.change >= 0;
+        return (
+          <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold flex items-center gap-2 text-sm">
+                <Activity className="w-4 h-4 text-indigo-500" /> Today's Portfolio Change
+              </h3>
+              <span className="text-[11px] text-gray-400">{todayDate}</span>
+            </div>
+            {today ? (
+              <div className="flex items-center gap-4">
+                <div className={cn(
+                  'w-14 h-14 rounded-2xl flex items-center justify-center shrink-0',
+                  gain ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
+                )}>
+                  {gain
+                    ? <TrendingUp className="w-7 h-7 text-green-600 dark:text-green-400" />
+                    : <TrendingDown className="w-7 h-7 text-red-500" />}
+                </div>
+                <div>
+                  <p className={cn('text-3xl font-extrabold tabular-nums', gain ? 'text-gain' : 'text-loss')}>
+                    {gain ? '+' : ''}{formatCurrency(today.change)}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">vs previous market close</p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 text-gray-400">
+                <TrendingDown className="w-6 h-6 text-gray-300" />
+                <p className="text-sm">Data available after market close (3:31 PM IST)</p>
+              </div>
+            )}
           </div>
-          <div className="h-44">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={dailyPnl} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                <XAxis
-                  dataKey="date"
-                  tickFormatter={v => new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                  tick={{ fontSize: 10 }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  tickFormatter={v => `${v >= 0 ? '+' : ''}₹${(v / 1000).toFixed(1)}k`}
-                  tick={{ fontSize: 10 }}
-                  width={56}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <ReferenceLine y={0} stroke="#d1d5db" strokeWidth={1} />
-                <Tooltip
-                  formatter={(v: any) => [`${v >= 0 ? '+' : ''}${formatCurrency(v)}`, 'Day P&L']}
-                  labelFormatter={v => new Date(v).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
-                />
-                <Line type="monotone" dataKey="change" stroke="#00B386" strokeWidth={2} dot={{ r: 3, fill: '#00B386' }} activeDot={{ r: 5 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      ) : (
-        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-4 text-center text-sm text-gray-400">
-          <TrendingDown className="w-6 h-6 mx-auto mb-1 text-gray-300" />
-          Daily P&amp;L chart will appear after two market close snapshots (3:31 PM IST)
-        </div>
-      )}
+        );
+      })()}
 
       {isEmpty ? (
         <div className="text-center py-20 bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800">
