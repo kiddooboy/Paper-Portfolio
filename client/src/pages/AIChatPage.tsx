@@ -172,8 +172,21 @@ export default function AIChatPage() {
       {/* Header */}
       <div className="shrink-0 bg-white dark:bg-groww-card border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-groww-primary rounded-xl flex items-center justify-center shadow-sm">
-            <Sparkles className="w-5 h-5 text-white" />
+          <div className="w-9 h-9 rounded-xl shadow-sm flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #6366f1 0%, #00B386 100%)', padding: '7px' }}>
+            <svg width="22" height="22" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="4" y="7" width="18" height="14" rx="4" fill="white" fillOpacity="0.95"/>
+              <line x1="13" y1="7" x2="13" y2="3" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+              <circle cx="13" cy="2.5" r="1.5" fill="white"/>
+              <circle cx="9.5" cy="13" r="2" fill="#6366f1"/>
+              <circle cx="16.5" cy="13" r="2" fill="#6366f1"/>
+              <circle cx="10.2" cy="12.3" r="0.6" fill="white"/>
+              <circle cx="17.2" cy="12.3" r="0.6" fill="white"/>
+              <rect x="9" y="17" width="2" height="2" rx="0.5" fill="#00B386"/>
+              <rect x="12" y="16" width="2" height="3" rx="0.5" fill="#6366f1"/>
+              <rect x="15" y="15" width="2" height="4" rx="0.5" fill="#00B386"/>
+              <rect x="1.5" y="11" width="2.5" height="5" rx="1.25" fill="white" fillOpacity="0.8"/>
+              <rect x="22" y="11" width="2.5" height="5" rx="1.25" fill="white" fillOpacity="0.8"/>
+            </svg>
           </div>
           <div>
             <h1 className="font-bold text-base leading-tight">AI Market Assistant</h1>
