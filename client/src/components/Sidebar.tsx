@@ -61,7 +61,7 @@ export default function Sidebar({ activePath }: { activePath: string }) {
         );
       })}
 
-      {/* AI Chat — special gradient item */}
+      {/* AI Chat */}
       <Link
         to="/ai-chat"
         className={cn(

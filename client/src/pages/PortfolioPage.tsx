@@ -7,21 +7,29 @@ import { usePortfolioStore } from '../store/portfolioStore';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
   XAxis, YAxis, CartesianGrid, ReferenceLine,
-  Area, AreaChart,
+  LineChart, Line, Legend,
 } from 'recharts';
 import StockLogo from '../components/StockLogo';
 import {
   ArrowUpRight, TrendingUp,
   Shield, Target, Award, AlertTriangle, Activity,
-  BarChart3, PiggyBank, Repeat,
+  BarChart3, PiggyBank, Repeat, Play, RefreshCw,
 } from 'lucide-react';
 
-type HistoryRange = '1d' | '1w' | '1m';
-const HISTORY_RANGES: { label: string; value: HistoryRange }[] = [
-  { label: '1D', value: '1d' },
-  { label: '1W', value: '1w' },
-  { label: '1M', value: '1m' },
-];
+interface MCResult {
+  current_value: number;
+  scenarios: {
+    optimistic: { monthly_values: number[]; final_value: number; total_return_pct: number };
+    expected:   { monthly_values: number[]; final_value: number; total_return_pct: number };
+    pessimistic:{ monthly_values: number[]; final_value: number; total_return_pct: number };
+  };
+  probability_scores: {
+    probability_of_profit: number;
+    var_95?: number;
+    var_5?: number;
+    [key: string]: any;
+  };
+}
 
 const COLORS = ['#00B386', '#6366F1', '#F59E0B', '#EB5B3C', '#10B981', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316'];
 
@@ -36,23 +44,26 @@ export default function PortfolioPage() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [tab, setTab] = useState<'holdings' | 'transactions' | 'pnl'>('holdings');
   const [tradePnl, setTradePnl] = useState<{ trades: any[]; totalRealized: number } | null>(null);
-  const [historyData, setHistoryData] = useState<any[]>([]);
-  const [historyRange, setHistoryRange] = useState<HistoryRange>('1d');
-  const [historyLoading, setHistoryLoading] = useState(false);
+  const [mcResult, setMcResult] = useState<MCResult | null>(null);
+  const [mcLoading, setMcLoading] = useState(false);
+  const [mcError, setMcError] = useState<string | null>(null);
   const allQuotes = useMarketStore((s) => s.quotes);
   const loading = (portfolioLoading && !rawData);
 
   useEffect(() => { fetchPortfolio(); }, [fetchPortfolio]);
 
-  const fetchHistory = useCallback((range: HistoryRange) => {
-    setHistoryLoading(true);
-    axios.get('/api/portfolio/history', { params: { range } })
-      .then(r => setHistoryData(r.data || []))
-      .catch(() => {})
-      .finally(() => setHistoryLoading(false));
+  const runSimulation = useCallback(async () => {
+    setMcLoading(true);
+    setMcError(null);
+    try {
+      const r = await axios.post('/api/monte-carlo');
+      setMcResult(r.data);
+    } catch (e: any) {
+      setMcError(e?.response?.data?.error || 'Simulation failed. Please try again.');
+    } finally {
+      setMcLoading(false);
+    }
   }, []);
-
-  useEffect(() => { fetchHistory(historyRange); }, [historyRange, fetchHistory]);
 
   useEffect(() => {
     if (tab === 'pnl' && !tradePnl) {
@@ -151,150 +162,15 @@ export default function PortfolioPage() {
         </div>
       </div>
 
-      {/* ═══════════ PORTFOLIO VALUE CHART ═══════════ */}
-      {(() => {
-        const first = historyData[0];
-        const last = historyData[historyData.length - 1];
-        const investedNow = data?.investedValue ?? 0;
-        const pnlFromFirst = first && last ? last.total_value - first.total_value : 0;
-        const pnlPctFromFirst = first && first.total_value > 0 ? (pnlFromFirst / first.total_value) * 100 : 0;
-        const chartGain = pnlFromFirst >= 0;
-        const lineColor = chartGain ? '#00B386' : '#ef4444';
-
-        // Format X-axis labels per range
-        const xFormatter = (v: string) => {
-          const d = new Date(v);
-          if (historyRange === '1d') return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
-          if (historyRange === '1w') return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric' });
-          return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-        };
-
-        // Format Y-axis labels
-        const yFormatter = (v: number) => {
-          if (v >= 100000) return `₹${(v / 100000).toFixed(1)}L`;
-          if (v >= 1000) return `₹${(v / 1000).toFixed(0)}K`;
-          return `₹${v}`;
-        };
-
-        const tooltipLabelFormatter = (v: string) => {
-          const d = new Date(v);
-          if (historyRange === '1d') return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-          return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
-        };
-
-        return (
-          <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-5">
-            {/* Header row */}
-            <div className="flex items-start justify-between gap-4 mb-4">
-              <div>
-                <div className="flex items-center gap-3 mb-1">
-                  <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                    <span className="w-3 h-0.5 rounded" style={{ background: lineColor }} />
-                    Current
-                  </div>
-                  <div className="flex items-center gap-1.5 text-xs text-gray-400">
-                    <span className="w-3 h-px border-t-2 border-dashed border-gray-400" />
-                    Invested
-                  </div>
-                </div>
-                <p className="text-2xl font-extrabold tabular-nums">{formatCurrency(last?.total_value ?? data?.currentValue ?? 0)}</p>
-                {historyData.length > 1 && (
-                  <p className={cn('text-sm font-semibold mt-0.5', chartGain ? 'text-gain' : 'text-loss')}>
-                    {chartGain ? '+' : ''}{formatCurrency(pnlFromFirst)} ({chartGain ? '+' : ''}{pnlPctFromFirst.toFixed(2)}%)
-                    <span className="ml-1.5 text-[11px] font-normal text-gray-400 uppercase">{historyRange}</span>
-                  </p>
-                )}
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-gray-400 mb-0.5">Invested</p>
-                <p className="text-xl font-bold tabular-nums">{formatCurrency(investedNow)}</p>
-              </div>
-            </div>
-
-            {/* Range toggles */}
-            <div className="flex gap-1 mb-4">
-              {HISTORY_RANGES.map((r) => (
-                <button
-                  key={r.value}
-                  onClick={() => setHistoryRange(r.value)}
-                  className={cn(
-                    'px-3 py-1 rounded-full text-xs font-semibold transition',
-                    historyRange === r.value
-                      ? 'bg-groww-primary text-white'
-                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                  )}
-                >
-                  {r.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Chart */}
-            <div className="relative h-52">
-              {historyLoading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-white/60 dark:bg-groww-card/60 z-10 rounded-xl">
-                  <div className="w-5 h-5 border-2 border-groww-primary border-t-transparent rounded-full animate-spin" />
-                </div>
-              )}
-              {historyData.length > 1 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={historyData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="portfolioGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={lineColor} stopOpacity={0.15} />
-                        <stop offset="100%" stopColor={lineColor} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #f0f0f0)" vertical={false} />
-                    <XAxis
-                      dataKey="recorded_at"
-                      tickFormatter={xFormatter}
-                      tick={{ fontSize: 10, fill: '#9ca3af' }}
-                      axisLine={false}
-                      tickLine={false}
-                      interval="preserveStartEnd"
-                      minTickGap={40}
-                    />
-                    <YAxis
-                      tickFormatter={yFormatter}
-                      tick={{ fontSize: 10, fill: '#9ca3af' }}
-                      width={52}
-                      axisLine={false}
-                      tickLine={false}
-                      domain={['auto', 'auto']}
-                    />
-                    <ReferenceLine
-                      y={investedNow}
-                      stroke="#9ca3af"
-                      strokeDasharray="5 3"
-                      strokeWidth={1.5}
-                    />
-                    <Tooltip
-                      formatter={(v: any) => [formatCurrency(v), 'Portfolio Value']}
-                      labelFormatter={tooltipLabelFormatter}
-                      contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="total_value"
-                      stroke={lineColor}
-                      strokeWidth={2}
-                      fill="url(#portfolioGrad)"
-                      dot={false}
-                      activeDot={{ r: 4, fill: lineColor }}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center text-sm text-gray-400 gap-2">
-                  <Activity className="w-8 h-8 text-gray-300" />
-                  <p>Snapshots accumulate as you use the app — check back shortly</p>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })()}
+      {/* ═══════════ MONTE CARLO FORECAST ═══════════ */}
+      <MonteCarloPanel
+        mcResult={mcResult}
+        mcLoading={mcLoading}
+        mcError={mcError}
+        onRun={runSimulation}
+        currentValue={data?.currentValue ?? 0}
+        isEmpty={isEmpty}
+      />
 
       {isEmpty ? (
         <div className="text-center py-20 bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800">
@@ -561,6 +437,196 @@ export default function PortfolioPage() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/* ── Monte Carlo Panel ── */
+
+function MonteCarloPanel({
+  mcResult, mcLoading, mcError, onRun, currentValue, isEmpty,
+}: {
+  mcResult: MCResult | null;
+  mcLoading: boolean;
+  mcError: string | null;
+  onRun: () => void;
+  currentValue: number;
+  isEmpty: boolean;
+}) {
+  const fmtVal = (v: number) => {
+    if (v >= 10000000) return `₹${(v / 10000000).toFixed(2)}Cr`;
+    if (v >= 100000)   return `₹${(v / 100000).toFixed(2)}L`;
+    if (v >= 1000)     return `₹${(v / 1000).toFixed(1)}K`;
+    return formatCurrency(v);
+  };
+
+  const yFmt = (v: number) => {
+    if (v >= 10000000) return `₹${(v / 10000000).toFixed(1)}Cr`;
+    if (v >= 100000)   return `₹${(v / 100000).toFixed(1)}L`;
+    if (v >= 1000)     return `₹${(v / 1000).toFixed(0)}K`;
+    return `₹${v}`;
+  };
+
+  const chartData = mcResult
+    ? Array.from({ length: 61 }, (_, i) => ({
+        month: i,
+        label: i === 0 ? 'Now' : i % 12 === 0 ? `${i / 12}Y` : '',
+        optimistic:  mcResult.scenarios.optimistic.monthly_values[i],
+        expected:    mcResult.scenarios.expected.monthly_values[i],
+        pessimistic: mcResult.scenarios.pessimistic.monthly_values[i],
+      }))
+    : [];
+
+  const prob = mcResult?.probability_scores?.probability_of_profit;
+  const varValue = mcResult?.probability_scores?.var_95 ?? mcResult?.probability_scores?.var_5;
+
+  return (
+    <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-gray-100 dark:border-gray-800">
+        <div>
+          <h3 className="font-bold text-base flex items-center gap-2">
+            <span className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center">
+              <Activity className="w-4 h-4 text-indigo-500" />
+            </span>
+            5-Year Portfolio Forecast
+          </h3>
+          <p className="text-xs text-gray-400 mt-0.5 ml-9">Monte Carlo simulation · 1,000 runs · based on NSE historical data</p>
+        </div>
+        <button
+          onClick={onRun}
+          disabled={mcLoading || isEmpty}
+          className={cn(
+            'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition',
+            mcResult
+              ? 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+              : 'bg-indigo-600 text-white hover:bg-indigo-700',
+            'disabled:opacity-40 disabled:cursor-not-allowed'
+          )}
+        >
+          {mcLoading
+            ? <><div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> Running…</>
+            : mcResult
+            ? <><RefreshCw className="w-3.5 h-3.5" /> Re-run</>
+            : <><Play className="w-3.5 h-3.5 fill-current" /> Run Simulation</>
+          }
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="p-5">
+        {mcError && (
+          <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg px-4 py-3 mb-4">
+            <AlertTriangle className="w-4 h-4 shrink-0" /> {mcError}
+          </div>
+        )}
+
+        {!mcResult && !mcLoading && !mcError && (
+          <div className="flex flex-col items-center justify-center py-10 text-center gap-3">
+            <div className="w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center">
+              <BarChart3 className="w-8 h-8 text-indigo-400" />
+            </div>
+            <div>
+              <p className="font-semibold text-gray-700 dark:text-gray-200">See where your portfolio could go</p>
+              <p className="text-sm text-gray-400 mt-1 max-w-xs">
+                Run a Monte Carlo simulation across 1,000 scenarios to forecast your 5-year portfolio range based on real NSE market data.
+              </p>
+            </div>
+            {isEmpty && <p className="text-xs text-orange-500">Add holdings to your portfolio to run a simulation.</p>}
+          </div>
+        )}
+
+        {mcLoading && (
+          <div className="flex flex-col items-center justify-center py-10 gap-3 text-gray-400">
+            <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+            <p className="text-sm">Running 1,000 simulations…</p>
+            <p className="text-xs text-gray-300">This usually takes 2–4 seconds</p>
+          </div>
+        )}
+
+        {mcResult && !mcLoading && (
+          <div className="space-y-5">
+            {/* 3 scenario cards */}
+            <div className="grid grid-cols-3 gap-3">
+              {([
+                { key: 'optimistic',  label: 'Optimistic',  color: 'text-gain',    bg: 'bg-green-50 dark:bg-green-900/20',  border: 'border-green-200 dark:border-green-800', pct: '85th %ile' },
+                { key: 'expected',    label: 'Expected',    color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-900/20', border: 'border-indigo-200 dark:border-indigo-800', pct: '50th %ile' },
+                { key: 'pessimistic', label: 'Pessimistic', color: 'text-loss',    bg: 'bg-red-50 dark:bg-red-900/20',      border: 'border-red-200 dark:border-red-800',   pct: '15th %ile' },
+              ] as const).map(({ key, label, color, bg, border, pct }) => {
+                const s = mcResult.scenarios[key];
+                const gain = s.total_return_pct >= 0;
+                return (
+                  <div key={key} className={cn('rounded-xl border p-3', bg, border)}>
+                    <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{label}</p>
+                    <p className="text-[10px] text-gray-400 mb-1">{pct}</p>
+                    <p className="font-bold text-sm tabular-nums text-gray-800 dark:text-gray-100">{fmtVal(s.final_value)}</p>
+                    <p className={cn('text-xs font-semibold tabular-nums', color)}>
+                      {gain ? '+' : ''}{s.total_return_pct.toFixed(1)}%
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Fan chart */}
+            <div className="h-60">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fontSize: 10, fill: '#9ca3af' }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval={0}
+                  />
+                  <YAxis
+                    tickFormatter={yFmt}
+                    tick={{ fontSize: 10, fill: '#9ca3af' }}
+                    width={56}
+                    axisLine={false}
+                    tickLine={false}
+                    domain={['auto', 'auto']}
+                  />
+                  <ReferenceLine y={currentValue} stroke="#9ca3af" strokeDasharray="4 3" strokeWidth={1} label={{ value: 'Today', position: 'insideTopLeft', fontSize: 9, fill: '#9ca3af' }} />
+                  <Tooltip
+                    formatter={(v: any, name: string) => [fmtVal(Number(v)), name.charAt(0).toUpperCase() + name.slice(1)]}
+                    labelFormatter={(label) => label ? `Month ${chartData.findIndex(d => d.label === label) || label}` : ''}
+                    contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e5e7eb' }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+                  <Line type="monotone" dataKey="optimistic"  stroke="#00B386" strokeWidth={1.5} strokeDasharray="5 3" dot={false} activeDot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="expected"    stroke="#6366f1" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+                  <Line type="monotone" dataKey="pessimistic" stroke="#ef4444" strokeWidth={1.5} strokeDasharray="5 3" dot={false} activeDot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Probability + VaR */}
+            <div className="grid grid-cols-2 gap-3">
+              {prob !== undefined && (
+                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4">
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Probability of Profit</p>
+                  <p className={cn('text-2xl font-extrabold tabular-nums', prob >= 0.5 ? 'text-gain' : 'text-loss')}>
+                    {(prob * 100).toFixed(1)}%
+                  </p>
+                  <div className="mt-2 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <div className="h-full bg-groww-primary rounded-full" style={{ width: `${(prob * 100).toFixed(0)}%` }} />
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-1">chance of positive return in 5Y</p>
+                </div>
+              )}
+              {varValue !== undefined && (
+                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4">
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Value at Risk (95%)</p>
+                  <p className="text-2xl font-extrabold tabular-nums text-loss">{fmtVal(Math.abs(varValue))}</p>
+                  <p className="text-[10px] text-gray-400 mt-1">max expected loss in worst 5% scenarios</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
