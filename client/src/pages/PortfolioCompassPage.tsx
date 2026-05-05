@@ -64,8 +64,13 @@ export default function PortfolioCompassPage() {
   const runSimulation = useCallback(async () => {
     setMcLoading(true);
     setMcError(null);
+    setMcResult(null);
     try {
       const r = await axios.post('/api/monte-carlo');
+      if (!r.data?.scenarios?.optimistic) {
+        setMcError('Unexpected response from simulation service. Please try again.');
+        return;
+      }
       setMcResult(r.data);
     } catch (e: any) {
       setMcError(e?.response?.data?.error || 'Simulation failed. Please try again.');
@@ -178,11 +183,11 @@ export default function PortfolioCompassPage() {
                   </div>
                   <p className="text-2xl font-extrabold tabular-nums text-gray-800 dark:text-gray-100">{fmtVal(s.terminal_value)}</p>
                   <p className={cn('text-sm font-bold tabular-nums mt-0.5', color)}>
-                    {gain ? '+' : ''}{s.percentage_return.toFixed(1)}% total
+                    {gain ? '+' : ''}{(s.percentage_return ?? 0).toFixed(1)}% total
                   </p>
                   <div className="mt-3 pt-3 border-t border-black/5 dark:border-white/5 flex justify-between text-[11px] text-gray-400">
-                    <span>CAGR <strong className={cn('font-semibold', color)}>{s.cagr_pct.toFixed(1)}%</strong></span>
-                    <span>5Y gain <strong className="text-gray-600 dark:text-gray-300">{fmtVal(Math.abs(s.absolute_return))}</strong></span>
+                    <span>CAGR <strong className={cn('font-semibold', color)}>{(s.cagr_pct ?? 0).toFixed(1)}%</strong></span>
+                    <span>5Y gain <strong className="text-gray-600 dark:text-gray-300">{fmtVal(Math.abs(s.absolute_return ?? 0))}</strong></span>
                   </div>
                 </div>
               );
@@ -221,29 +226,29 @@ export default function PortfolioCompassPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-4">
                 <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Prob. of Profit</p>
-                <p className={cn('text-2xl font-extrabold tabular-nums', ps.probability_of_profit >= 50 ? 'text-gain' : 'text-loss')}>
-                  {ps.probability_of_profit.toFixed(1)}%
+                <p className={cn('text-2xl font-extrabold tabular-nums', (ps.probability_of_profit ?? 0) >= 50 ? 'text-gain' : 'text-loss')}>
+                  {(ps.probability_of_profit ?? 0).toFixed(1)}%
                 </p>
                 <div className="mt-2 h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                  <div className="h-full bg-groww-primary rounded-full" style={{ width: `${ps.probability_of_profit}%` }} />
+                  <div className="h-full bg-groww-primary rounded-full" style={{ width: `${ps.probability_of_profit ?? 0}%` }} />
                 </div>
                 <p className="text-[10px] text-gray-400 mt-1.5">chance of positive return</p>
               </div>
               <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-4">
                 <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Prob. of 2×</p>
                 <p className="text-2xl font-extrabold tabular-nums text-indigo-600 dark:text-indigo-400">
-                  {ps.probability_of_doubling.toFixed(1)}%
+                  {(ps.probability_of_doubling ?? 0).toFixed(1)}%
                 </p>
                 <p className="text-[10px] text-gray-400 mt-4">chance of doubling in 5Y</p>
               </div>
               <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-4">
                 <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Value at Risk (5%)</p>
-                <p className="text-2xl font-extrabold tabular-nums text-loss">{fmtVal(ps.value_at_risk_5pct)}</p>
+                <p className="text-2xl font-extrabold tabular-nums text-loss">{fmtVal(ps.value_at_risk_5pct ?? 0)}</p>
                 <p className="text-[10px] text-gray-400 mt-4">floor in worst 5% scenarios</p>
               </div>
               <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-4">
                 <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Max Drawdown Risk</p>
-                <p className="text-2xl font-extrabold tabular-nums text-loss">{ps.var_drawdown_pct.toFixed(1)}%</p>
+                <p className="text-2xl font-extrabold tabular-nums text-loss">{(ps.var_drawdown_pct ?? 0).toFixed(1)}%</p>
                 <p className="text-[10px] text-gray-400 mt-4">downside from today</p>
               </div>
             </div>
@@ -258,11 +263,11 @@ export default function PortfolioCompassPage() {
                   <div key={h.symbol} className="flex items-center justify-between text-xs px-3 py-2.5 bg-gray-50 dark:bg-gray-800/40 rounded-xl">
                     <span className="font-semibold text-gray-700 dark:text-gray-200 w-28 truncate">{h.symbol.replace('.NS', '')}</span>
                     <span className="text-gray-400">{h.weight_pct.toFixed(1)}% weight</span>
-                    <span className={cn('font-medium tabular-nums', h.return_1y_pct >= 0 ? 'text-gain' : 'text-loss')}>
-                      1Y: {h.return_1y_pct >= 0 ? '+' : ''}{h.return_1y_pct.toFixed(1)}%
+                    <span className={cn('font-medium tabular-nums', (h.return_1y_pct ?? 0) >= 0 ? 'text-gain' : 'text-loss')}>
+                      1Y: {(h.return_1y_pct ?? 0) >= 0 ? '+' : ''}{(h.return_1y_pct ?? 0).toFixed(1)}%
                     </span>
-                    <span className={cn('font-medium tabular-nums', h.cagr_3y_pct >= 0 ? 'text-gain' : 'text-loss')}>
-                      3Y CAGR: {h.cagr_3y_pct >= 0 ? '+' : ''}{h.cagr_3y_pct.toFixed(1)}%
+                    <span className={cn('font-medium tabular-nums', (h.cagr_3y_pct ?? 0) >= 0 ? 'text-gain' : 'text-loss')}>
+                      3Y CAGR: {(h.cagr_3y_pct ?? 0) >= 0 ? '+' : ''}{(h.cagr_3y_pct ?? 0).toFixed(1)}%
                     </span>
                   </div>
                 ))}
