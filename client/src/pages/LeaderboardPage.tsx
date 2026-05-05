@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
-import { Trophy, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Info } from 'lucide-react';
+import { Trophy, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Info, RefreshCw } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
+
+const POLL_INTERVAL_MS = 10_000; // refresh every 10 s
 
 interface LeaderEntry {
   rank: number;
@@ -65,9 +67,33 @@ export default function LeaderboardPage() {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [holdings, setHoldings] = useState<Record<number, Holding[]>>({});
   const [loadingId, setLoadingId] = useState<number | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const expandedRef = useRef<number | null>(null);
+
+  expandedRef.current = expanded;
+
+  async function fetchLeaderboard(silent = false) {
+    if (!silent) setRefreshing(true);
+    try {
+      const r = await axios.get('/api/leaderboard');
+      setData(r.data);
+      setLastUpdated(new Date());
+      // If a user is currently expanded, refresh their holdings silently too
+      if (expandedRef.current !== null) {
+        const r2 = await axios.get(`/api/leaderboard/${expandedRef.current}/holdings`);
+        setHoldings(prev => ({ ...prev, [expandedRef.current!]: r2.data }));
+      }
+    } finally {
+      if (!silent) setRefreshing(false);
+    }
+  }
 
   useEffect(() => {
-    axios.get('/api/leaderboard').then(r => setData(r.data));
+    fetchLeaderboard(true);
+    const interval = window.setInterval(() => fetchLeaderboard(true), POLL_INTERVAL_MS);
+    return () => window.clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function toggleUser(userId: number) {
@@ -89,9 +115,24 @@ export default function LeaderboardPage() {
         <h1 className="text-xl font-bold flex items-center gap-2">
           <Trophy className="w-5 h-5 text-yellow-500" /> Top Traders
         </h1>
-        <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
-          <Info className="w-3.5 h-3.5" />
-          Ranked by % return on ₹1,00,000 starting capital
+        <div className="flex items-center gap-3">
+          {lastUpdated && (
+            <span className="hidden sm:block text-[10px] text-gray-400">
+              Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </span>
+          )}
+          <button
+            onClick={() => fetchLeaderboard(false)}
+            disabled={refreshing}
+            title="Refresh now"
+            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition disabled:opacity-40"
+          >
+            <RefreshCw className={cn('w-3.5 h-3.5 text-gray-400', refreshing && 'animate-spin')} />
+          </button>
+          <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+            <Info className="w-3.5 h-3.5" />
+            Ranked by % return on ₹1,00,000 starting capital
+          </div>
         </div>
       </div>
 
@@ -106,7 +147,7 @@ export default function LeaderboardPage() {
           const isLoading = loadingId === entry.userId;
 
           return (
-            <div key={entry.rank} className="border-b border-gray-100 dark:border-gray-800 last:border-0">
+            <div key={entry.userId} className="border-b border-gray-100 dark:border-gray-800 last:border-0">
               {/* Main row */}
               <button
                 onClick={() => toggleUser(entry.userId)}

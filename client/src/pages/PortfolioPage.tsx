@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import { formatCurrency, formatPercent, cn } from '../lib/utils';
@@ -6,14 +6,22 @@ import { useMarketStore } from '../store/marketStore';
 import { usePortfolioStore } from '../store/portfolioStore';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
-  LineChart, Line, XAxis, YAxis, CartesianGrid, ReferenceLine,
+  XAxis, YAxis, CartesianGrid, ReferenceLine,
+  Area, AreaChart,
 } from 'recharts';
 import StockLogo from '../components/StockLogo';
 import {
   ArrowUpRight, TrendingUp,
   Shield, Target, Award, AlertTriangle, Activity,
-  BarChart3, PiggyBank, Repeat, TrendingDown,
+  BarChart3, PiggyBank, Repeat,
 } from 'lucide-react';
+
+type HistoryRange = '1d' | '1w' | '1m';
+const HISTORY_RANGES: { label: string; value: HistoryRange }[] = [
+  { label: '1D', value: '1d' },
+  { label: '1W', value: '1w' },
+  { label: '1M', value: '1m' },
+];
 
 const COLORS = ['#00B386', '#6366F1', '#F59E0B', '#EB5B3C', '#10B981', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316'];
 
@@ -29,29 +37,22 @@ export default function PortfolioPage() {
   const [tab, setTab] = useState<'holdings' | 'transactions' | 'pnl'>('holdings');
   const [tradePnl, setTradePnl] = useState<{ trades: any[]; totalRealized: number } | null>(null);
   const [historyData, setHistoryData] = useState<any[]>([]);
+  const [historyRange, setHistoryRange] = useState<HistoryRange>('1d');
+  const [historyLoading, setHistoryLoading] = useState(false);
   const allQuotes = useMarketStore((s) => s.quotes);
   const loading = (portfolioLoading && !rawData);
 
   useEffect(() => { fetchPortfolio(); }, [fetchPortfolio]);
 
-  useEffect(() => {
-    axios.get('/api/portfolio/history').then(r => setHistoryData(r.data || [])).catch(() => {});
+  const fetchHistory = useCallback((range: HistoryRange) => {
+    setHistoryLoading(true);
+    axios.get('/api/portfolio/history', { params: { range } })
+      .then(r => setHistoryData(r.data || []))
+      .catch(() => {})
+      .finally(() => setHistoryLoading(false));
   }, []);
 
-  // Daily portfolio P&L = change in total_value between consecutive snapshots
-  const dailyPnl = useMemo(() => {
-    if (historyData.length < 2) return [];
-    return historyData.slice(1).map((d: any, i: number) => ({
-      date: d.recorded_at,
-      change: d.total_value - historyData[i].total_value,
-    }));
-  }, [historyData]);
-
-  // Today's snapshots only — for the intraday trend chart
-  const todayHistory = useMemo(() => {
-    const todayStr = new Date().toDateString();
-    return historyData.filter((d: any) => new Date(d.recorded_at).toDateString() === todayStr);
-  }, [historyData]);
+  useEffect(() => { fetchHistory(historyRange); }, [historyRange, fetchHistory]);
 
   useEffect(() => {
     if (tab === 'pnl' && !tradePnl) {
@@ -150,86 +151,144 @@ export default function PortfolioPage() {
         </div>
       </div>
 
-      {/* ═══════════ TODAY'S P&L + TREND CHART ═══════════ */}
+      {/* ═══════════ PORTFOLIO VALUE CHART ═══════════ */}
       {(() => {
-        const today = dailyPnl[dailyPnl.length - 1];
-        const todayDate = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-        const gain = today && today.change >= 0;
+        const first = historyData[0];
+        const last = historyData[historyData.length - 1];
+        const investedNow = data?.investedValue ?? 0;
+        const pnlFromFirst = first && last ? last.total_value - first.total_value : 0;
+        const pnlPctFromFirst = first && first.total_value > 0 ? (pnlFromFirst / first.total_value) * 100 : 0;
+        const chartGain = pnlFromFirst >= 0;
+        const lineColor = chartGain ? '#00B386' : '#ef4444';
+
+        // Format X-axis labels per range
+        const xFormatter = (v: string) => {
+          const d = new Date(v);
+          if (historyRange === '1d') return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+          if (historyRange === '1w') return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric' });
+          return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+        };
+
+        // Format Y-axis labels
+        const yFormatter = (v: number) => {
+          if (v >= 100000) return `₹${(v / 100000).toFixed(1)}L`;
+          if (v >= 1000) return `₹${(v / 1000).toFixed(0)}K`;
+          return `₹${v}`;
+        };
+
+        const tooltipLabelFormatter = (v: string) => {
+          const d = new Date(v);
+          if (historyRange === '1d') return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+          return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+        };
+
         return (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Left: Today's change metric */}
-            <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-5 flex flex-col justify-between">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold flex items-center gap-2 text-sm">
-                  <Activity className="w-4 h-4 text-indigo-500" /> Today's Portfolio Change
-                </h3>
-              </div>
+          <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-5">
+            {/* Header row */}
+            <div className="flex items-start justify-between gap-4 mb-4">
               <div>
-                {today ? (
-                  <div className="flex items-center gap-4">
-                    <div className={cn(
-                      'w-14 h-14 rounded-2xl flex items-center justify-center shrink-0',
-                      gain ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
-                    )}>
-                      {gain
-                        ? <TrendingUp className="w-7 h-7 text-green-600 dark:text-green-400" />
-                        : <TrendingDown className="w-7 h-7 text-red-500" />}
-                    </div>
-                    <div>
-                      <p className={cn('text-3xl font-extrabold tabular-nums', gain ? 'text-gain' : 'text-loss')}>
-                        {gain ? '+' : ''}{formatCurrency(today.change)}
-                      </p>
-                      <p className="text-xs text-gray-400 mt-0.5">vs previous market close</p>
-                    </div>
+                <div className="flex items-center gap-3 mb-1">
+                  <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                    <span className="w-3 h-0.5 rounded" style={{ background: lineColor }} />
+                    Current
                   </div>
-                ) : (
-                  <div className="flex items-center gap-3 text-gray-400">
-                    <TrendingDown className="w-6 h-6 text-gray-300" />
-                    <p className="text-sm">Data available after market close (3:31 PM IST)</p>
+                  <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                    <span className="w-3 h-px border-t-2 border-dashed border-gray-400" />
+                    Invested
                   </div>
+                </div>
+                <p className="text-2xl font-extrabold tabular-nums">{formatCurrency(last?.total_value ?? data?.currentValue ?? 0)}</p>
+                {historyData.length > 1 && (
+                  <p className={cn('text-sm font-semibold mt-0.5', chartGain ? 'text-gain' : 'text-loss')}>
+                    {chartGain ? '+' : ''}{formatCurrency(pnlFromFirst)} ({chartGain ? '+' : ''}{pnlPctFromFirst.toFixed(2)}%)
+                    <span className="ml-1.5 text-[11px] font-normal text-gray-400 uppercase">{historyRange}</span>
+                  </p>
                 )}
-                <p className="text-[11px] text-gray-400 mt-4">{todayDate}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-gray-400 mb-0.5">Invested</p>
+                <p className="text-xl font-bold tabular-nums">{formatCurrency(investedNow)}</p>
               </div>
             </div>
 
-            {/* Right: Portfolio value trend line chart */}
-            <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-4 flex flex-col">
-              <h3 className="font-semibold flex items-center gap-2 text-sm mb-3">
-                <TrendingUp className="w-4 h-4 text-gain" /> Portfolio Value Trend
-              </h3>
-              {todayHistory.length > 1 ? (
-                <div className="flex-1 min-h-[120px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={todayHistory} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                      <XAxis
-                        dataKey="recorded_at"
-                        tickFormatter={v => new Date(v).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                        tick={{ fontSize: 10 }}
-                        axisLine={false}
-                        tickLine={false}
-                        interval="preserveStartEnd"
-                      />
-                      <YAxis
-                        tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`}
-                        tick={{ fontSize: 10 }}
-                        width={44}
-                        axisLine={false}
-                        tickLine={false}
-                        domain={['auto', 'auto']}
-                      />
-                      <ReferenceLine y={todayHistory[0]?.total_value} stroke="#d1d5db" strokeDasharray="4 2" strokeWidth={1} />
-                      <Tooltip
-                        formatter={(v: any) => [formatCurrency(v), 'Portfolio Value']}
-                        labelFormatter={v => new Date(v).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
-                      />
-                      <Line type="monotone" dataKey="total_value" stroke="#00B386" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
+            {/* Range toggles */}
+            <div className="flex gap-1 mb-4">
+              {HISTORY_RANGES.map((r) => (
+                <button
+                  key={r.value}
+                  onClick={() => setHistoryRange(r.value)}
+                  className={cn(
+                    'px-3 py-1 rounded-full text-xs font-semibold transition',
+                    historyRange === r.value
+                      ? 'bg-groww-primary text-white'
+                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                  )}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Chart */}
+            <div className="relative h-52">
+              {historyLoading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-white/60 dark:bg-groww-card/60 z-10 rounded-xl">
+                  <div className="w-5 h-5 border-2 border-groww-primary border-t-transparent rounded-full animate-spin" />
                 </div>
+              )}
+              {historyData.length > 1 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={historyData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="portfolioGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={lineColor} stopOpacity={0.15} />
+                        <stop offset="100%" stopColor={lineColor} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #f0f0f0)" vertical={false} />
+                    <XAxis
+                      dataKey="recorded_at"
+                      tickFormatter={xFormatter}
+                      tick={{ fontSize: 10, fill: '#9ca3af' }}
+                      axisLine={false}
+                      tickLine={false}
+                      interval="preserveStartEnd"
+                      minTickGap={40}
+                    />
+                    <YAxis
+                      tickFormatter={yFormatter}
+                      tick={{ fontSize: 10, fill: '#9ca3af' }}
+                      width={52}
+                      axisLine={false}
+                      tickLine={false}
+                      domain={['auto', 'auto']}
+                    />
+                    <ReferenceLine
+                      y={investedNow}
+                      stroke="#9ca3af"
+                      strokeDasharray="5 3"
+                      strokeWidth={1.5}
+                    />
+                    <Tooltip
+                      formatter={(v: any) => [formatCurrency(v), 'Portfolio Value']}
+                      labelFormatter={tooltipLabelFormatter}
+                      contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="total_value"
+                      stroke={lineColor}
+                      strokeWidth={2}
+                      fill="url(#portfolioGrad)"
+                      dot={false}
+                      activeDot={{ r: 4, fill: lineColor }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
               ) : (
-                <div className="flex-1 flex items-center justify-center text-sm text-gray-400">
-                  <p>Today's trend appears as snapshots are recorded</p>
+                <div className="h-full flex flex-col items-center justify-center text-sm text-gray-400 gap-2">
+                  <Activity className="w-8 h-8 text-gray-300" />
+                  <p>Snapshots accumulate as you use the app — check back shortly</p>
                 </div>
               )}
             </div>

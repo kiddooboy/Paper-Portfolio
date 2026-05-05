@@ -178,10 +178,22 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
 
 // ---------------------------------------------------------------------------
 // GET /api/portfolio/history — value snapshots
+// ?range=1d|1w|1m  (default: 1m)
 // ---------------------------------------------------------------------------
 router.get('/history', authMiddleware, async (req: AuthRequest, res) => {
+  const range = (req.query.range as string) || '1m';
+  const cutoffMap: Record<string, string> = {
+    '1d': "datetime('now', '-1 day')",
+    '1w': "datetime('now', '-7 days')",
+    '1m': "datetime('now', '-30 days')",
+  };
+  const cutoff = cutoffMap[range] ?? cutoffMap['1m'];
+
   const history = db.prepare(`
-    SELECT * FROM portfolio_history WHERE user_id = ? ORDER BY recorded_at ASC LIMIT 90
+    SELECT * FROM portfolio_history
+    WHERE user_id = ? AND recorded_at >= ${cutoff}
+    ORDER BY recorded_at ASC
+    LIMIT 500
   `).all(req.user!.id);
   res.json(history);
 });
