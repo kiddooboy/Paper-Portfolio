@@ -21,15 +21,6 @@ router.get('/', async (req, res) => {
   `).all()) as any[];
   const realizedMap = new Map(realizedAll.map((r: any) => [r.user_id, { realized: Number(r.realized), closedTrades: Number(r.closed_trades) }]));
 
-  // Realized P&L closed TODAY (for today's P&L)
-  const realizedToday = (await db.prepare(`
-    SELECT user_id, COALESCE(SUM(realized_pnl), 0) as realized_today
-    FROM trade_pnl
-    WHERE date(closed_at) = date('now')
-    GROUP BY user_id
-  `).all()) as any[];
-  const realizedTodayMap = new Map(realizedToday.map((r: any) => [r.user_id, Number(r.realized_today)]));
-
   // Total trade count (all transactions for activity insight)
   const txnCounts = (await db.prepare(`
     SELECT user_id, COUNT(*) as total_txns
@@ -49,20 +40,17 @@ router.get('/', async (req, res) => {
     const userHoldings = holdings.filter(h => h.user_id === u.id);
     let invested = 0;
     let current = 0;
-    let dayPnlHoldings = 0;
 
     for (const h of userHoldings) {
       const q = priceMap.get(h.symbol);
       const price = q?.price ?? h.avg_buy_price;
       invested += h.avg_buy_price * h.quantity;
       current += price * h.quantity;
-      dayPnlHoldings += (q?.change ?? 0) * h.quantity;
     }
 
     const portfolioValue = u.balance + current;
     const realizedTotal = realizedMap.get(u.id)?.realized ?? 0;
     const closedTrades = realizedMap.get(u.id)?.closedTrades ?? 0;
-    const realizedTodayVal = realizedTodayMap.get(u.id) ?? 0;
     const totalTxns = txnCountMap.get(u.id) ?? 0;
 
     // Unrealized P&L (current holdings vs cost)
@@ -73,29 +61,16 @@ router.get('/', async (req, res) => {
     // % return is on the level playing field of starting capital ₹1L
     const overallPnlPercent = (overallPnl / STARTING_CAPITAL) * 100;
 
-    // Today's P&L = day change of held positions + trades closed today
-    const todayPnl = dayPnlHoldings + realizedTodayVal;
-    // Today's % uses yesterday's holdings value as the base
-    const yesterdayHoldingsValue = current - dayPnlHoldings;
-    const todayPnlPercent = yesterdayHoldingsValue > 0
-      ? (todayPnl / yesterdayHoldingsValue) * 100
-      : 0;
-
     return {
       userId: u.id,
       name: u.name,
       portfolioValue: +portfolioValue.toFixed(2),
       cashBalance: +u.balance.toFixed(2),
       holdingsValue: +current.toFixed(2),
-      // Today
-      dayPnl: +todayPnl.toFixed(2),
-      dayPnlPercent: +todayPnlPercent.toFixed(2),
-      // Overall
       totalPnl: +overallPnl.toFixed(2),
       pnlPercent: +overallPnlPercent.toFixed(2),
       realizedPnl: +realizedTotal.toFixed(2),
       unrealizedPnl: +unrealizedPnl.toFixed(2),
-      // Activity insights
       holdingsCount: userHoldings.length,
       closedTrades,
       totalTxns,
@@ -130,8 +105,6 @@ router.get('/:userId/holdings', async (req, res) => {
     const price = q?.price ?? h.avg_buy_price;
     const pnl = (price - h.avg_buy_price) * h.quantity;
     const pnlPct = h.avg_buy_price > 0 ? ((price - h.avg_buy_price) / h.avg_buy_price) * 100 : 0;
-    const dayChange = (q?.change ?? 0) * h.quantity;
-    const dayChangePct = q?.change_percent ?? 0;
     return {
       symbol: h.symbol,
       name: h.stock_name || h.symbol,
@@ -140,8 +113,6 @@ router.get('/:userId/holdings', async (req, res) => {
       ltp: +price.toFixed(2),
       pnl: +pnl.toFixed(2),
       pnlPct: +pnlPct.toFixed(2),
-      dayChange: +dayChange.toFixed(2),
-      dayChangePct: +dayChangePct.toFixed(2),
     };
   });
 

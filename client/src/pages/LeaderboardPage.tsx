@@ -10,8 +10,6 @@ interface LeaderEntry {
   portfolioValue: number;
   cashBalance: number;
   holdingsValue: number;
-  dayPnl: number;
-  dayPnlPercent: number;
   totalPnl: number;
   pnlPercent: number;
   realizedPnl: number;
@@ -29,8 +27,6 @@ interface Holding {
   ltp: number;
   pnl: number;
   pnlPct: number;
-  dayChange: number;
-  dayChangePct: number;
 }
 
 function RankBadge({ rank }: { rank: number }) {
@@ -129,7 +125,6 @@ export default function LeaderboardPage() {
                 </div>
 
                 <div className="flex items-center gap-3 sm:gap-5">
-                  <PnlBadge value={entry.dayPnl} pct={entry.dayPnlPercent} label="Today" />
                   <PnlBadge value={entry.totalPnl} pct={entry.pnlPercent} label="Overall" />
                   <span className="text-gray-400 shrink-0">
                     {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
