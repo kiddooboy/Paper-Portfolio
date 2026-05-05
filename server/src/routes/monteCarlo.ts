@@ -41,18 +41,22 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       num_sims: 1000,
       horizon_months: 60,
     };
-    console.log('[monteCarlo] sending payload:', JSON.stringify(payload));
 
-    const mcRes = await fetch(MC_URL, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload),
-    });
+    const callMC = () => fetch(MC_URL, { method: 'POST', headers, body: JSON.stringify(payload) });
+
+    let mcRes = await callMC();
+
+    // Cold-start retry — Lambda may need ~6s to warm up after inactivity
+    if (mcRes.status === 502 || mcRes.status === 503) {
+      console.log('[monteCarlo] cold start detected, retrying in 5s…');
+      await new Promise(r => setTimeout(r, 5000));
+      mcRes = await callMC();
+    }
 
     const responseText = await mcRes.text();
-    console.log('[monteCarlo] response status:', mcRes.status, 'body:', responseText.slice(0, 300));
 
     if (!mcRes.ok) {
+      console.error('[monteCarlo] upstream error after retry', mcRes.status, responseText.slice(0, 200));
       return res.status(502).json({ error: 'Simulation service unavailable. Try again shortly.' });
     }
 
