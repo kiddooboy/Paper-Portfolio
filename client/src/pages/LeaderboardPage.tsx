@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Trophy, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Info } from 'lucide-react';
-import { formatCurrency, formatPercent, cn } from '../lib/utils';
+import { formatCurrency, cn } from '../lib/utils';
 
 interface LeaderEntry {
   rank: number;
