@@ -167,7 +167,7 @@ export default function PortfolioCompassPage() {
               { key: 'optimistic'  as const, color: 'text-gain',   gradFrom: '#00B38615', gradTo: '#00B38605', border: 'border-green-200 dark:border-green-800',   ringColor: '#00B386' },
               { key: 'expected'    as const, color: 'text-indigo-600 dark:text-indigo-400', gradFrom: '#6366f115', gradTo: '#6366f105', border: 'border-indigo-200 dark:border-indigo-800', ringColor: '#6366f1' },
               { key: 'pessimistic' as const, color: 'text-loss',   gradFrom: '#ef444415', gradTo: '#ef444405', border: 'border-red-200 dark:border-red-800',       ringColor: '#ef4444' },
-            ]).map(({ key, color, gradFrom, border, ringColor }) => {
+            ]).map(({ key, color, gradFrom, border }) => {
               const s = mcResult.scenarios[key];
               const gain = s.percentage_return >= 0;
               return (
