@@ -16,19 +16,32 @@ import {
   BarChart3, PiggyBank, Repeat, Play, RefreshCw,
 } from 'lucide-react';
 
+interface MCScenario {
+  monthly_values: number[];
+  terminal_value: number;
+  cagr_pct: number;
+  absolute_return: number;
+  percentage_return: number;
+  label: string;
+  percentile: number;
+  confidence_band: { lower: number; upper: number };
+}
 interface MCResult {
   current_value: number;
-  scenarios: {
-    optimistic: { monthly_values: number[]; final_value: number; total_return_pct: number };
-    expected:   { monthly_values: number[]; final_value: number; total_return_pct: number };
-    pessimistic:{ monthly_values: number[]; final_value: number; total_return_pct: number };
-  };
+  scenarios: { optimistic: MCScenario; expected: MCScenario; pessimistic: MCScenario };
   probability_scores: {
-    probability_of_profit: number;
-    var_95?: number;
-    var_5?: number;
-    [key: string]: any;
+    probability_of_profit: number;      // 0–100
+    probability_of_doubling: number;
+    probability_of_major_loss_20pct: number;
+    value_at_risk_5pct: number;
+    var_drawdown_pct: number;
+    conditional_var: number;
+    annualized_sharpe_ratio: number;
   };
+  holdings_analysis: {
+    symbol: string; weight_pct: number;
+    return_1y_pct: number; cagr_3y_pct: number;
+  }[];
 }
 
 const COLORS = ['#00B386', '#6366F1', '#F59E0B', '#EB5B3C', '#10B981', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316'];
@@ -477,9 +490,6 @@ function MonteCarloPanel({
       }))
     : [];
 
-  const prob = mcResult?.probability_scores?.probability_of_profit;
-  const varValue = mcResult?.probability_scores?.var_95 ?? mcResult?.probability_scores?.var_5;
-
   return (
     <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
       {/* Header */}
@@ -549,27 +559,28 @@ function MonteCarloPanel({
             {/* 3 scenario cards */}
             <div className="grid grid-cols-3 gap-3">
               {([
-                { key: 'optimistic',  label: 'Optimistic',  color: 'text-gain',    bg: 'bg-green-50 dark:bg-green-900/20',  border: 'border-green-200 dark:border-green-800', pct: '85th %ile' },
-                { key: 'expected',    label: 'Expected',    color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-900/20', border: 'border-indigo-200 dark:border-indigo-800', pct: '50th %ile' },
-                { key: 'pessimistic', label: 'Pessimistic', color: 'text-loss',    bg: 'bg-red-50 dark:bg-red-900/20',      border: 'border-red-200 dark:border-red-800',   pct: '15th %ile' },
-              ] as const).map(({ key, label, color, bg, border, pct }) => {
+                { key: 'optimistic' as const,  color: 'text-gain',   bg: 'bg-green-50 dark:bg-green-900/20',   border: 'border-green-200 dark:border-green-800'  },
+                { key: 'expected'   as const,  color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-900/20', border: 'border-indigo-200 dark:border-indigo-800' },
+                { key: 'pessimistic'as const,  color: 'text-loss',   bg: 'bg-red-50 dark:bg-red-900/20',       border: 'border-red-200 dark:border-red-800'      },
+              ]).map(({ key, color, bg, border }) => {
                 const s = mcResult.scenarios[key];
-                const gain = s.total_return_pct >= 0;
+                const gain = s.percentage_return >= 0;
                 return (
                   <div key={key} className={cn('rounded-xl border p-3', bg, border)}>
-                    <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{label}</p>
-                    <p className="text-[10px] text-gray-400 mb-1">{pct}</p>
-                    <p className="font-bold text-sm tabular-nums text-gray-800 dark:text-gray-100">{fmtVal(s.final_value)}</p>
+                    <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{s.label}</p>
+                    <p className="text-[10px] text-gray-400 mb-1">{s.percentile}th %ile</p>
+                    <p className="font-bold text-sm tabular-nums text-gray-800 dark:text-gray-100">{fmtVal(s.terminal_value)}</p>
                     <p className={cn('text-xs font-semibold tabular-nums', color)}>
-                      {gain ? '+' : ''}{s.total_return_pct.toFixed(1)}%
+                      {gain ? '+' : ''}{s.percentage_return.toFixed(1)}%
                     </p>
+                    <p className="text-[10px] text-gray-400">{s.cagr_pct.toFixed(1)}% CAGR</p>
                   </div>
                 );
               })}
             </div>
 
             {/* Fan chart */}
-            <div className="h-60">
+            <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
@@ -588,42 +599,71 @@ function MonteCarloPanel({
                     tickLine={false}
                     domain={['auto', 'auto']}
                   />
-                  <ReferenceLine y={currentValue} stroke="#9ca3af" strokeDasharray="4 3" strokeWidth={1} label={{ value: 'Today', position: 'insideTopLeft', fontSize: 9, fill: '#9ca3af' }} />
+                  <ReferenceLine y={currentValue} stroke="#9ca3af" strokeDasharray="4 3" strokeWidth={1}
+                    label={{ value: 'Today', position: 'insideTopLeft', fontSize: 9, fill: '#9ca3af' }} />
                   <Tooltip
                     formatter={(v: any, name: string) => [fmtVal(Number(v)), name.charAt(0).toUpperCase() + name.slice(1)]}
-                    labelFormatter={(label) => label ? `Month ${chartData.findIndex(d => d.label === label) || label}` : ''}
+                    labelFormatter={(lbl) => lbl || ''}
                     contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e5e7eb' }}
                   />
                   <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-                  <Line type="monotone" dataKey="optimistic"  stroke="#00B386" strokeWidth={1.5} strokeDasharray="5 3" dot={false} activeDot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="expected"    stroke="#6366f1" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
-                  <Line type="monotone" dataKey="pessimistic" stroke="#ef4444" strokeWidth={1.5} strokeDasharray="5 3" dot={false} activeDot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="optimistic"  name="Bull Case (85th)"  stroke="#00B386" strokeWidth={1.5} strokeDasharray="5 3" dot={false} activeDot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="expected"    name="Base Case (50th)"  stroke="#6366f1" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+                  <Line type="monotone" dataKey="pessimistic" name="Bear Case (15th)"  stroke="#ef4444" strokeWidth={1.5} strokeDasharray="5 3" dot={false} activeDot={{ r: 3 }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
 
-            {/* Probability + VaR */}
-            <div className="grid grid-cols-2 gap-3">
-              {prob !== undefined && (
-                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4">
-                  <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Probability of Profit</p>
-                  <p className={cn('text-2xl font-extrabold tabular-nums', prob >= 0.5 ? 'text-gain' : 'text-loss')}>
-                    {(prob * 100).toFixed(1)}%
-                  </p>
-                  <div className="mt-2 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                    <div className="h-full bg-groww-primary rounded-full" style={{ width: `${(prob * 100).toFixed(0)}%` }} />
-                  </div>
-                  <p className="text-[10px] text-gray-400 mt-1">chance of positive return in 5Y</p>
+            {/* Risk metrics grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3">
+                <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Prob. of Profit</p>
+                <p className={cn('text-xl font-extrabold tabular-nums', mcResult.probability_scores.probability_of_profit >= 50 ? 'text-gain' : 'text-loss')}>
+                  {mcResult.probability_scores.probability_of_profit.toFixed(1)}%
+                </p>
+                <div className="mt-1.5 h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                  <div className="h-full bg-groww-primary rounded-full" style={{ width: `${mcResult.probability_scores.probability_of_profit}%` }} />
                 </div>
-              )}
-              {varValue !== undefined && (
-                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4">
-                  <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Value at Risk (95%)</p>
-                  <p className="text-2xl font-extrabold tabular-nums text-loss">{fmtVal(Math.abs(varValue))}</p>
-                  <p className="text-[10px] text-gray-400 mt-1">max expected loss in worst 5% scenarios</p>
-                </div>
-              )}
+              </div>
+              <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3">
+                <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Prob. of 2x</p>
+                <p className="text-xl font-extrabold tabular-nums text-indigo-600 dark:text-indigo-400">
+                  {mcResult.probability_scores.probability_of_doubling.toFixed(1)}%
+                </p>
+                <p className="text-[10px] text-gray-400 mt-1">chance of doubling</p>
+              </div>
+              <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3">
+                <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Value at Risk (5%)</p>
+                <p className="text-xl font-extrabold tabular-nums text-loss">{fmtVal(mcResult.probability_scores.value_at_risk_5pct)}</p>
+                <p className="text-[10px] text-gray-400 mt-1">worst 5% scenario floor</p>
+              </div>
+              <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3">
+                <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Max Drawdown Risk</p>
+                <p className="text-xl font-extrabold tabular-nums text-loss">{mcResult.probability_scores.var_drawdown_pct.toFixed(1)}%</p>
+                <p className="text-[10px] text-gray-400 mt-1">downside from today</p>
+              </div>
             </div>
+
+            {/* Holdings breakdown from API */}
+            {mcResult.holdings_analysis?.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Holdings Used in Simulation</p>
+                <div className="space-y-1.5">
+                  {mcResult.holdings_analysis.map((h) => (
+                    <div key={h.symbol} className="flex items-center justify-between text-xs px-3 py-2 bg-gray-50 dark:bg-gray-800/40 rounded-lg">
+                      <span className="font-semibold text-gray-700 dark:text-gray-200 w-28 truncate">{h.symbol.replace('.NS','')}</span>
+                      <span className="text-gray-400">{h.weight_pct.toFixed(1)}% weight</span>
+                      <span className={cn('font-medium tabular-nums', h.return_1y_pct >= 0 ? 'text-gain' : 'text-loss')}>
+                        1Y: {h.return_1y_pct >= 0 ? '+' : ''}{h.return_1y_pct.toFixed(1)}%
+                      </span>
+                      <span className={cn('font-medium tabular-nums', h.cagr_3y_pct >= 0 ? 'text-gain' : 'text-loss')}>
+                        3Y CAGR: {h.cagr_3y_pct >= 0 ? '+' : ''}{h.cagr_3y_pct.toFixed(1)}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
