@@ -55,6 +55,7 @@ export default function StockDetail() {
       } else {
         toast.success(`${tab} order ${res.data.status === 'FILLED' ? 'filled' : 'placed'} successfully!`);
       }
+      setQty('');
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Order failed');
     }

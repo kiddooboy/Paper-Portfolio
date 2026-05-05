@@ -157,6 +157,7 @@ export default function TerminalPage() {
       } else {
         toast.success(`${tab.toUpperCase()} order ${res.data.status === 'FILLED' ? 'filled' : 'placed'} successfully!`);
       }
+      setQty('');
       // Refresh balance
       const p = await axios.get('/api/portfolio');
       if (p.data.balance !== undefined) updateBalance(p.data.balance);
