@@ -30,10 +30,10 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       };
     });
 
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (process.env.MONTE_CARLO_API_KEY) {
-      headers['x-api-key'] = process.env.MONTE_CARLO_API_KEY;
-    }
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'x-api-key': 'wwNacOkQ0o6jTocgeCDtAayvSFANpn9M5ZTU8qDy',
+    };
 
     const mcRes = await fetch(MC_URL, {
       method: 'POST',
