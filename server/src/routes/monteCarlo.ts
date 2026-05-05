@@ -35,24 +35,28 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       'x-api-key': 'wwNacOkQ0o6jTocgeCDtAayvSFANpn9M5ZTU8qDy',
     };
 
+    const payload = {
+      portfolio_id: String(req.user!.id),
+      holdings: mcHoldings,
+      num_sims: 1000,
+      horizon_months: 60,
+    };
+    console.log('[monteCarlo] sending payload:', JSON.stringify(payload));
+
     const mcRes = await fetch(MC_URL, {
       method: 'POST',
       headers,
-      body: JSON.stringify({
-        portfolio_id: String(req.user!.id),
-        holdings: mcHoldings,
-        num_sims: 1000,
-        horizon_months: 60,
-      }),
+      body: JSON.stringify(payload),
     });
 
+    const responseText = await mcRes.text();
+    console.log('[monteCarlo] response status:', mcRes.status, 'body:', responseText.slice(0, 300));
+
     if (!mcRes.ok) {
-      const text = await mcRes.text();
-      console.error('[monteCarlo] upstream error', mcRes.status, text);
       return res.status(502).json({ error: 'Simulation service unavailable. Try again shortly.' });
     }
 
-    const data = await mcRes.json();
+    const data = JSON.parse(responseText);
     res.json(data);
   } catch (err: any) {
     console.error('[monteCarlo]', err?.message || err);
