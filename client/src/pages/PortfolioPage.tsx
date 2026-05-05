@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import { formatCurrency, formatPercent, cn } from '../lib/utils';
@@ -6,43 +6,13 @@ import { useMarketStore } from '../store/marketStore';
 import { usePortfolioStore } from '../store/portfolioStore';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
-  XAxis, YAxis, CartesianGrid, ReferenceLine,
-  LineChart, Line, Legend,
 } from 'recharts';
 import StockLogo from '../components/StockLogo';
 import {
   ArrowUpRight, TrendingUp,
   Shield, Target, Award, AlertTriangle, Activity,
-  BarChart3, PiggyBank, Repeat, Play, RefreshCw,
+  BarChart3, PiggyBank, Repeat,
 } from 'lucide-react';
-
-interface MCScenario {
-  monthly_values: number[];
-  terminal_value: number;
-  cagr_pct: number;
-  absolute_return: number;
-  percentage_return: number;
-  label: string;
-  percentile: number;
-  confidence_band: { lower: number; upper: number };
-}
-interface MCResult {
-  current_value: number;
-  scenarios: { optimistic: MCScenario; expected: MCScenario; pessimistic: MCScenario };
-  probability_scores: {
-    probability_of_profit: number;      // 0–100
-    probability_of_doubling: number;
-    probability_of_major_loss_20pct: number;
-    value_at_risk_5pct: number;
-    var_drawdown_pct: number;
-    conditional_var: number;
-    annualized_sharpe_ratio: number;
-  };
-  holdings_analysis: {
-    symbol: string; weight_pct: number;
-    return_1y_pct: number; cagr_3y_pct: number;
-  }[];
-}
 
 const COLORS = ['#00B386', '#6366F1', '#F59E0B', '#EB5B3C', '#10B981', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316'];
 
@@ -57,26 +27,10 @@ export default function PortfolioPage() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [tab, setTab] = useState<'holdings' | 'transactions' | 'pnl'>('holdings');
   const [tradePnl, setTradePnl] = useState<{ trades: any[]; totalRealized: number } | null>(null);
-  const [mcResult, setMcResult] = useState<MCResult | null>(null);
-  const [mcLoading, setMcLoading] = useState(false);
-  const [mcError, setMcError] = useState<string | null>(null);
   const allQuotes = useMarketStore((s) => s.quotes);
   const loading = (portfolioLoading && !rawData);
 
   useEffect(() => { fetchPortfolio(); }, [fetchPortfolio]);
-
-  const runSimulation = useCallback(async () => {
-    setMcLoading(true);
-    setMcError(null);
-    try {
-      const r = await axios.post('/api/monte-carlo');
-      setMcResult(r.data);
-    } catch (e: any) {
-      setMcError(e?.response?.data?.error || 'Simulation failed. Please try again.');
-    } finally {
-      setMcLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
     if (tab === 'pnl' && !tradePnl) {
@@ -158,7 +112,7 @@ export default function PortfolioPage() {
       <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/10 dark:to-emerald-900/10 rounded-2xl p-6 border border-green-100 dark:border-green-900/20">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Portfolio value</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Holdings value</p>
             <h2 className="text-3xl font-bold">{formatCurrency(data?.currentValue || 0)}</h2>
           </div>
           <div className="flex gap-3">
@@ -174,16 +128,6 @@ export default function PortfolioPage() {
           </div>
         </div>
       </div>
-
-      {/* ═══════════ MONTE CARLO FORECAST ═══════════ */}
-      <MonteCarloPanel
-        mcResult={mcResult}
-        mcLoading={mcLoading}
-        mcError={mcError}
-        onRun={runSimulation}
-        currentValue={data?.currentValue ?? 0}
-        isEmpty={isEmpty}
-      />
 
       {isEmpty ? (
         <div className="text-center py-20 bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800">
@@ -450,223 +394,6 @@ export default function PortfolioPage() {
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-/* ── Monte Carlo Panel ── */
-
-function MonteCarloPanel({
-  mcResult, mcLoading, mcError, onRun, currentValue, isEmpty,
-}: {
-  mcResult: MCResult | null;
-  mcLoading: boolean;
-  mcError: string | null;
-  onRun: () => void;
-  currentValue: number;
-  isEmpty: boolean;
-}) {
-  const fmtVal = (v: number) => {
-    if (v >= 10000000) return `₹${(v / 10000000).toFixed(2)}Cr`;
-    if (v >= 100000)   return `₹${(v / 100000).toFixed(2)}L`;
-    if (v >= 1000)     return `₹${(v / 1000).toFixed(1)}K`;
-    return formatCurrency(v);
-  };
-
-  const yFmt = (v: number) => {
-    if (v >= 10000000) return `₹${(v / 10000000).toFixed(1)}Cr`;
-    if (v >= 100000)   return `₹${(v / 100000).toFixed(1)}L`;
-    if (v >= 1000)     return `₹${(v / 1000).toFixed(0)}K`;
-    return `₹${v}`;
-  };
-
-  const chartData = mcResult
-    ? Array.from({ length: 61 }, (_, i) => ({
-        month: i,
-        label: i === 0 ? 'Now' : i % 12 === 0 ? `${i / 12}Y` : '',
-        optimistic:  mcResult.scenarios.optimistic.monthly_values[i],
-        expected:    mcResult.scenarios.expected.monthly_values[i],
-        pessimistic: mcResult.scenarios.pessimistic.monthly_values[i],
-      }))
-    : [];
-
-  return (
-    <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-gray-100 dark:border-gray-800">
-        <div>
-          <h3 className="font-bold text-base flex items-center gap-2">
-            <span className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center">
-              <Activity className="w-4 h-4 text-indigo-500" />
-            </span>
-            5-Year Portfolio Forecast
-          </h3>
-          <p className="text-xs text-gray-400 mt-0.5 ml-9">Monte Carlo simulation · 1,000 runs · based on NSE historical data</p>
-        </div>
-        <button
-          onClick={onRun}
-          disabled={mcLoading || isEmpty}
-          className={cn(
-            'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition',
-            mcResult
-              ? 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-              : 'bg-indigo-600 text-white hover:bg-indigo-700',
-            'disabled:opacity-40 disabled:cursor-not-allowed'
-          )}
-        >
-          {mcLoading
-            ? <><div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> Running…</>
-            : mcResult
-            ? <><RefreshCw className="w-3.5 h-3.5" /> Re-run</>
-            : <><Play className="w-3.5 h-3.5 fill-current" /> Run Simulation</>
-          }
-        </button>
-      </div>
-
-      {/* Body */}
-      <div className="p-5">
-        {mcError && (
-          <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg px-4 py-3 mb-4">
-            <AlertTriangle className="w-4 h-4 shrink-0" /> {mcError}
-          </div>
-        )}
-
-        {!mcResult && !mcLoading && !mcError && (
-          <div className="flex flex-col items-center justify-center py-10 text-center gap-3">
-            <div className="w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center">
-              <BarChart3 className="w-8 h-8 text-indigo-400" />
-            </div>
-            <div>
-              <p className="font-semibold text-gray-700 dark:text-gray-200">See where your portfolio could go</p>
-              <p className="text-sm text-gray-400 mt-1 max-w-xs">
-                Run a Monte Carlo simulation across 1,000 scenarios to forecast your 5-year portfolio range based on real NSE market data.
-              </p>
-            </div>
-            {isEmpty && <p className="text-xs text-orange-500">Add holdings to your portfolio to run a simulation.</p>}
-          </div>
-        )}
-
-        {mcLoading && (
-          <div className="flex flex-col items-center justify-center py-10 gap-3 text-gray-400">
-            <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
-            <p className="text-sm">Running 1,000 simulations…</p>
-            <p className="text-xs text-gray-300">This usually takes 2–4 seconds</p>
-          </div>
-        )}
-
-        {mcResult && !mcLoading && (
-          <div className="space-y-5">
-            {/* 3 scenario cards */}
-            <div className="grid grid-cols-3 gap-3">
-              {([
-                { key: 'optimistic' as const,  color: 'text-gain',   bg: 'bg-green-50 dark:bg-green-900/20',   border: 'border-green-200 dark:border-green-800'  },
-                { key: 'expected'   as const,  color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-900/20', border: 'border-indigo-200 dark:border-indigo-800' },
-                { key: 'pessimistic'as const,  color: 'text-loss',   bg: 'bg-red-50 dark:bg-red-900/20',       border: 'border-red-200 dark:border-red-800'      },
-              ]).map(({ key, color, bg, border }) => {
-                const s = mcResult.scenarios[key];
-                const gain = s.percentage_return >= 0;
-                return (
-                  <div key={key} className={cn('rounded-xl border p-3', bg, border)}>
-                    <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{s.label}</p>
-                    <p className="text-[10px] text-gray-400 mb-1">{s.percentile}th %ile</p>
-                    <p className="font-bold text-sm tabular-nums text-gray-800 dark:text-gray-100">{fmtVal(s.terminal_value)}</p>
-                    <p className={cn('text-xs font-semibold tabular-nums', color)}>
-                      {gain ? '+' : ''}{s.percentage_return.toFixed(1)}%
-                    </p>
-                    <p className="text-[10px] text-gray-400">{s.cagr_pct.toFixed(1)}% CAGR</p>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Fan chart */}
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
-                  <XAxis
-                    dataKey="label"
-                    tick={{ fontSize: 10, fill: '#9ca3af' }}
-                    axisLine={false}
-                    tickLine={false}
-                    interval={0}
-                  />
-                  <YAxis
-                    tickFormatter={yFmt}
-                    tick={{ fontSize: 10, fill: '#9ca3af' }}
-                    width={56}
-                    axisLine={false}
-                    tickLine={false}
-                    domain={['auto', 'auto']}
-                  />
-                  <ReferenceLine y={currentValue} stroke="#9ca3af" strokeDasharray="4 3" strokeWidth={1}
-                    label={{ value: 'Today', position: 'insideTopLeft', fontSize: 9, fill: '#9ca3af' }} />
-                  <Tooltip
-                    formatter={(v: any, name: string) => [fmtVal(Number(v)), name.charAt(0).toUpperCase() + name.slice(1)]}
-                    labelFormatter={(lbl) => lbl || ''}
-                    contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e5e7eb' }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-                  <Line type="monotone" dataKey="optimistic"  name="Bull Case (85th)"  stroke="#00B386" strokeWidth={1.5} strokeDasharray="5 3" dot={false} activeDot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="expected"    name="Base Case (50th)"  stroke="#6366f1" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
-                  <Line type="monotone" dataKey="pessimistic" name="Bear Case (15th)"  stroke="#ef4444" strokeWidth={1.5} strokeDasharray="5 3" dot={false} activeDot={{ r: 3 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Risk metrics grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3">
-                <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Prob. of Profit</p>
-                <p className={cn('text-xl font-extrabold tabular-nums', mcResult.probability_scores.probability_of_profit >= 50 ? 'text-gain' : 'text-loss')}>
-                  {mcResult.probability_scores.probability_of_profit.toFixed(1)}%
-                </p>
-                <div className="mt-1.5 h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                  <div className="h-full bg-groww-primary rounded-full" style={{ width: `${mcResult.probability_scores.probability_of_profit}%` }} />
-                </div>
-              </div>
-              <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3">
-                <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Prob. of 2x</p>
-                <p className="text-xl font-extrabold tabular-nums text-indigo-600 dark:text-indigo-400">
-                  {mcResult.probability_scores.probability_of_doubling.toFixed(1)}%
-                </p>
-                <p className="text-[10px] text-gray-400 mt-1">chance of doubling</p>
-              </div>
-              <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3">
-                <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Value at Risk (5%)</p>
-                <p className="text-xl font-extrabold tabular-nums text-loss">{fmtVal(mcResult.probability_scores.value_at_risk_5pct)}</p>
-                <p className="text-[10px] text-gray-400 mt-1">worst 5% scenario floor</p>
-              </div>
-              <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3">
-                <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Max Drawdown Risk</p>
-                <p className="text-xl font-extrabold tabular-nums text-loss">{mcResult.probability_scores.var_drawdown_pct.toFixed(1)}%</p>
-                <p className="text-[10px] text-gray-400 mt-1">downside from today</p>
-              </div>
-            </div>
-
-            {/* Holdings breakdown from API */}
-            {mcResult.holdings_analysis?.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Holdings Used in Simulation</p>
-                <div className="space-y-1.5">
-                  {mcResult.holdings_analysis.map((h) => (
-                    <div key={h.symbol} className="flex items-center justify-between text-xs px-3 py-2 bg-gray-50 dark:bg-gray-800/40 rounded-lg">
-                      <span className="font-semibold text-gray-700 dark:text-gray-200 w-28 truncate">{h.symbol.replace('.NS','')}</span>
-                      <span className="text-gray-400">{h.weight_pct.toFixed(1)}% weight</span>
-                      <span className={cn('font-medium tabular-nums', h.return_1y_pct >= 0 ? 'text-gain' : 'text-loss')}>
-                        1Y: {h.return_1y_pct >= 0 ? '+' : ''}{h.return_1y_pct.toFixed(1)}%
-                      </span>
-                      <span className={cn('font-medium tabular-nums', h.cagr_3y_pct >= 0 ? 'text-gain' : 'text-loss')}>
-                        3Y CAGR: {h.cagr_3y_pct >= 0 ? '+' : ''}{h.cagr_3y_pct.toFixed(1)}%
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
     </div>
   );
 }

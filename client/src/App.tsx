@@ -21,6 +21,7 @@ import AIChatPage from './pages/AIChatPage';
 import SectorsPage from './pages/SectorsPage';
 import WalletPage from './pages/WalletPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import PortfolioCompassPage from './pages/PortfolioCompassPage';
 import { useAuthStore } from './store/authStore';
 import { bootstrap, teardown, installFocusRevalidation } from './store/bootstrap';
 
@@ -57,6 +58,7 @@ function App() {
         <Route path="/terminal/:symbol" element={<TerminalPage />} />
         <Route path="/stock/:symbol" element={<StockDetail />} />
         <Route path="/portfolio" element={<PortfolioPage />} />
+        <Route path="/compass" element={<PortfolioCompassPage />} />
         <Route path="/positions" element={<PositionsPage />} />
         <Route path="/orders" element={<OrdersPage />} />
         <Route path="/watchlist" element={<WatchlistPage />} />
