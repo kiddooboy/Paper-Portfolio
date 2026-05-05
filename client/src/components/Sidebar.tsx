@@ -28,7 +28,7 @@ const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/market', label: 'Market', icon: Search },
   { path: '/sectors', label: 'Sectors', icon: PieChart },
-  { path: '/portfolio', label: 'Holdings', icon: TrendingUp },
+  { path: '/portfolio', label: 'Portfolio', icon: TrendingUp },
   { path: '/compass',   label: 'Portfolio Compass', icon: Compass },
   { path: '/positions', label: 'Positions', icon: BarChart3 },
   { path: '/orders', label: 'Orders', icon: ListOrdered },
