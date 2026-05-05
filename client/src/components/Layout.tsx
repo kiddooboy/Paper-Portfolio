@@ -8,6 +8,7 @@ import Sidebar from './Sidebar';
 import MobileNav from './MobileNav';
 import GlobalSearch from './GlobalSearch';
 import SetMpinModal from './SetMpinModal';
+import IdleLock from './IdleLock';
 import { Bell, TrendingUp, Moon, Sun, MessageSquare, ListOrdered, Wallet, BarChart3, LogOut, ChevronRight, User, Check, ShoppingBag, TrendingDown, Info } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 
@@ -90,6 +91,7 @@ export default function Layout() {
       </div>
 
       {isAuthenticated && user?.has_mpin === false && <SetMpinModal />}
+      <IdleLock />
       <MobileNav activePath={location.pathname} />
 
       {/* Floating Chat Button */}
