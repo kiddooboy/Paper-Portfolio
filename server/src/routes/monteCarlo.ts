@@ -2,10 +2,21 @@ import { Router } from 'express';
 import { db } from '../db/index.js';
 import { getCachedQuotes } from '../services/marketData.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import axios from 'axios';
 
 const router = Router();
 
 const MC_URL = 'https://35w41kobie.execute-api.ap-south-1.amazonaws.com/default/Compass-MonteCarlo-Bridge';
+const MC_KEY = 'wwNacOkQ0o6jTocgeCDtAayvSFANpn9M5ZTU8qDy';
+
+const mcAxios = axios.create({
+  baseURL: MC_URL,
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json',
+    'x-api-key': MC_KEY,
+  },
+});
 
 router.post('/', authMiddleware, async (req: AuthRequest, res) => {
   try {
@@ -30,11 +41,6 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       };
     });
 
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'x-api-key': 'wwNacOkQ0o6jTocgeCDtAayvSFANpn9M5ZTU8qDy',
-    };
-
     const payload = {
       portfolio_id: String(req.user!.id),
       holdings: mcHoldings,
@@ -42,29 +48,28 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       horizon_months: 60,
     };
 
-    const callMC = () => fetch(MC_URL, { method: 'POST', headers, body: JSON.stringify(payload) });
+    console.log('[monteCarlo] calling API with', mcHoldings.length, 'holdings');
 
-    let mcRes = await callMC();
-
-    // Cold-start retry — Lambda may need ~6s to warm up after inactivity
-    if (mcRes.status === 502 || mcRes.status === 503) {
-      console.log('[monteCarlo] cold start detected, retrying in 5s…');
-      await new Promise(r => setTimeout(r, 5000));
-      mcRes = await callMC();
+    let data: any;
+    try {
+      const r = await mcAxios.post('', payload);
+      data = r.data;
+    } catch (err: any) {
+      // Cold-start: retry once after 6 s
+      const status = err?.response?.status;
+      console.log('[monteCarlo] first attempt failed with status', status, '— retrying in 6s');
+      await new Promise(r => setTimeout(r, 6000));
+      const r2 = await mcAxios.post('', payload);
+      data = r2.data;
     }
 
-    const responseText = await mcRes.text();
-
-    if (!mcRes.ok) {
-      console.error('[monteCarlo] upstream error after retry', mcRes.status, responseText.slice(0, 200));
-      return res.status(502).json({ error: 'Simulation service unavailable. Try again shortly.' });
-    }
-
-    const data = JSON.parse(responseText);
+    console.log('[monteCarlo] success, current_value:', data?.current_value);
     res.json(data);
   } catch (err: any) {
-    console.error('[monteCarlo]', err?.message || err);
-    res.status(500).json({ error: 'Simulation failed. Please try again.' });
+    const status = err?.response?.status;
+    const body = JSON.stringify(err?.response?.data).slice(0, 200);
+    console.error('[monteCarlo] failed after retry — status:', status, 'body:', body, 'msg:', err?.message);
+    res.status(502).json({ error: 'Simulation service unavailable. Try again shortly.' });
   }
 });
 
