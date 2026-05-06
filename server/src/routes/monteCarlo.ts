@@ -6,7 +6,7 @@ import axios from 'axios';
 
 const router = Router();
 
-const MC_URL = 'https://35w41kobie.execute-api.ap-south-1.amazonaws.com/default/Compass-MonteCarlo-Bridge';
+const MC_URL = 'https://35w41kobie.execute-api.ap-south-1.amazonaws.com/default/v2';
 const MC_KEY = 'wwNacOkQ0o6jTocgeCDtAayvSFANpn9M5ZTU8qDy';
 
 const mcAxios = axios.create({
