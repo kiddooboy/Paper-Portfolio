@@ -385,7 +385,7 @@ export default function ScreenerPage() {
                       className="border-t border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition"
                     >
                       <td className="px-4 py-3">
-                        <Link to={`/stock/${s.symbol}`} className="block group">
+                        <Link to={`/company/${s.symbol}`} className="block group">
                           <div className="font-semibold text-gray-900 dark:text-gray-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
                             {s.symbol}
                           </div>

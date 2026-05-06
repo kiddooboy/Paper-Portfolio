@@ -568,6 +568,21 @@ router.get('/screener', async (req, res) => {
   }
 });
 
+// GET /api/stocks/:symbol/fundamentals — screener.in-style deep fundamentals
+router.get('/:symbol/fundamentals', async (req, res) => {
+  try {
+    const { getFundamentals } = await import('../services/fundamentals.js');
+    const symbol = req.params.symbol.toUpperCase();
+    const exchange = parseExchange(req.query.exchange);
+    const data = await getFundamentals(symbol, exchange);
+    res.set('Cache-Control', 'public, max-age=600');
+    res.json(data);
+  } catch (err: any) {
+    console.error('[fundamentals] error:', err?.message || err);
+    res.status(500).json({ error: err?.message || 'failed to load fundamentals' });
+  }
+});
+
 // GET /api/stocks/:symbol?exchange=NSE — full quote + metadata
 router.get('/:symbol', async (req, res) => {
   const symbol = req.params.symbol.toUpperCase();

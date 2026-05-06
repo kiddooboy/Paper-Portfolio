@@ -26,6 +26,7 @@
     "nodemailer": "^8.0.7",
     "ws": "^8.16.0",
     "yahoo-finance2": "^3.14.0",
+    "rss-parser": "^3.13.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {
