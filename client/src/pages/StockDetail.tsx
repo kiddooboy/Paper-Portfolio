@@ -9,6 +9,7 @@ import StockLogo from '../components/StockLogo';
 import StockChart from '../components/StockChart';
 import SellConfirmModal from '../components/SellConfirmModal';
 import { useMarketStore } from '../store/marketStore';
+import NewsFeed from '../components/NewsFeed';
 
 export default function StockDetail() {
   const { symbol } = useParams<{ symbol: string }>();
@@ -230,6 +231,11 @@ export default function StockDetail() {
           <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">{stock.about}</p>
         </div>
       )}
+
+      {/* News Feed */}
+      <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-5">
+        <NewsFeed query={symbol || ''} />
+      </div>
 
       {showSellConfirm && (
         <SellConfirmModal
