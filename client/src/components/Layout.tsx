@@ -94,10 +94,10 @@ export default function Layout() {
       <IdleLock />
       <MobileNav activePath={location.pathname} />
 
-      {/* Floating AI Chat Button — desktop bottom-left, mobile bottom-right above tab bar */}
+      {/* Floating AI Chat Button — bottom-right (clears mobile tab bar) */}
       <button
         onClick={() => navigate('/ai-chat')}
-        className="fixed bottom-4 left-4 lg:bottom-4 lg:left-4 z-50 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 focus:outline-none max-lg:bottom-20 max-lg:left-auto max-lg:right-4"
+        className="fixed right-4 bottom-4 max-lg:bottom-20 z-50 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 focus:outline-none"
         title="AI Assistant"
         style={{ background: 'linear-gradient(135deg, #6366f1 0%, #00B386 100%)', padding: '14px' }}
       >
