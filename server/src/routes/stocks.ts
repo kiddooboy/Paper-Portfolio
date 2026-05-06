@@ -398,6 +398,57 @@ router.get('/:symbol', async (req, res) => {
   });
 });
 
+// GET /api/stocks/:symbol/depth?exchange=NSE — synthetic 5-level market depth
+// Yahoo Finance doesn't expose L2 order book, so we generate realistic depth
+// from the cached quote (price, volume, day range) with a 2.5s time-bucket seed.
+router.get('/:symbol/depth', (req, res) => {
+  const symbol = req.params.symbol.toUpperCase();
+  const exchange = parseExchange(req.query.exchange);
+
+  const q = getCachedQuote(symbol, exchange);
+  if (!q || q.price <= 0) return res.status(404).json({ error: 'No price data' });
+
+  const price = q.price;
+  const volume = q.volume || 1_000_000;
+
+  // NSE tick size
+  const tick = price >= 1000 ? 0.5 : price >= 100 ? 0.05 : price >= 10 ? 0.05 : 0.01;
+
+  // LCG seeded by price + time bucket (changes every 2.5s)
+  const bucket = Math.floor(Date.now() / 2500);
+  let seed = Math.abs(Math.floor((price * 1000 + bucket * 7919) % 2_147_483_647));
+  function rand() {
+    seed = (seed * 1_664_525 + 1_013_904_223) & 0x7fff_ffff;
+    return seed / 0x7fff_ffff;
+  }
+
+  // Base lot size proportional to daily volume
+  const baseQty = Math.max(100, Math.floor(volume / 15_000));
+
+  const bids = Array.from({ length: 5 }, (_, i) => ({
+    price: +(price - (i + 1) * tick).toFixed(2),
+    qty:   Math.floor(baseQty * (0.4 + rand() * 2.5)),
+  }));
+
+  const asks = Array.from({ length: 5 }, (_, i) => ({
+    price: +(price + (i + 1) * tick).toFixed(2),
+    qty:   Math.floor(baseQty * (0.4 + rand() * 2.5)),
+  }));
+
+  const bidTotal = bids.reduce((acc, b) => acc + b.qty, 0);
+  const askTotal = asks.reduce((acc, a) => acc + a.qty, 0);
+  const total = bidTotal + askTotal;
+
+  res.json({
+    bids,
+    asks,
+    bidTotal,
+    askTotal,
+    buyPct:  total > 0 ? +((bidTotal / total) * 100).toFixed(1) : 50,
+    sellPct: total > 0 ? +((askTotal / total) * 100).toFixed(1) : 50,
+  });
+});
+
 // GET /api/stocks/:symbol/history?exchange=NSE&range=3mo&interval=1d
 router.get('/:symbol/history', async (req, res) => {
   const symbol = req.params.symbol.toUpperCase();

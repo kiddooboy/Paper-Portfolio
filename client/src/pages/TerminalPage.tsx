@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -287,8 +287,8 @@ export default function TerminalPage() {
       {/* Body */}
       <div className="flex-1 flex flex-col lg:flex-row min-h-0">
         {/* Chart area */}
-        <div className="flex-1 flex flex-col min-h-[600px] lg:min-h-0">
-          <div className="flex-1 bg-white dark:bg-groww-card border-b lg:border-b-0 lg:border-r border-gray-100 dark:border-gray-800 p-3">
+        <div className="flex-1 flex flex-col min-h-[600px] lg:min-h-0 overflow-y-auto">
+          <div className="flex-1 min-h-[340px] bg-white dark:bg-groww-card border-b lg:border-b-0 lg:border-r border-gray-100 dark:border-gray-800 p-3">
             <StockChart symbol={symbol.toUpperCase()} exchange={exchange} />
           </div>
           {/* Key stats strip */}
@@ -300,6 +300,8 @@ export default function TerminalPage() {
             <Stat label="52w Low" value={quote.low_52w ? formatCurrency(quote.low_52w) : '—'} />
             <Stat label="Volume" value={(quote.volume || 0).toLocaleString('en-IN')} />
           </div>
+          {/* Market Depth */}
+          <MarketDepth symbol={symbol.toUpperCase()} exchange={exchange} />
         </div>
 
         {/* Order panel */}
@@ -622,6 +624,135 @@ export default function TerminalPage() {
           onCancel={() => setShowSellConfirm(false)}
         />
       )}
+    </div>
+  );
+}
+
+/* ── Market Depth ── */
+
+interface DepthLevel { price: number; qty: number; }
+interface DepthData {
+  bids: DepthLevel[];
+  asks: DepthLevel[];
+  bidTotal: number;
+  askTotal: number;
+  buyPct: number;
+  sellPct: number;
+}
+
+function MarketDepth({ symbol, exchange }: { symbol: string; exchange: string }) {
+  const [depth, setDepth] = useState<DepthData | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetch = () =>
+      axios.get(`/api/stocks/${encodeURIComponent(symbol)}/depth`, { params: { exchange } })
+        .then(r => { if (!cancelled) setDepth(r.data); })
+        .catch(() => {});
+
+    fetch();
+    timerRef.current = setInterval(fetch, 2500);
+    return () => {
+      cancelled = true;
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [symbol, exchange]);
+
+  const maxQty = depth
+    ? Math.max(...depth.bids.map(b => b.qty), ...depth.asks.map(a => a.qty), 1)
+    : 1;
+
+  return (
+    <div className="bg-white dark:bg-groww-card border-t border-gray-100 dark:border-gray-800 p-4 lg:border-r">
+      <h3 className="font-semibold text-sm mb-3">Market depth</h3>
+
+      {/* Buy / Sell % bar */}
+      <div className="flex justify-between text-xs mb-1">
+        <div>
+          <p className="text-gray-400">Buy orders</p>
+          <p className="font-bold text-gain">{depth ? `${depth.buyPct}%` : '—'}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-gray-400">Sell orders</p>
+          <p className="font-bold text-loss">{depth ? `${depth.sellPct}%` : '—'}</p>
+        </div>
+      </div>
+      <div className="flex h-1 rounded-full overflow-hidden mb-4">
+        <div
+          className="bg-gain transition-all duration-700"
+          style={{ width: `${depth?.buyPct ?? 50}%` }}
+        />
+        <div
+          className="bg-loss transition-all duration-700"
+          style={{ width: `${depth?.sellPct ?? 50}%` }}
+        />
+      </div>
+
+      {/* Table */}
+      <div className="grid grid-cols-2 gap-x-4 text-xs">
+        {/* Headers */}
+        <div className="flex justify-between text-gray-400 uppercase tracking-wide text-[10px] pb-1.5 border-b border-gray-100 dark:border-gray-800">
+          <span>Bid Price</span>
+          <span>Qty</span>
+        </div>
+        <div className="flex justify-between text-gray-400 uppercase tracking-wide text-[10px] pb-1.5 border-b border-gray-100 dark:border-gray-800">
+          <span>Ask Price</span>
+          <span>Qty</span>
+        </div>
+
+        {/* Rows */}
+        {Array.from({ length: 5 }, (_, i) => {
+          const bid = depth?.bids[i];
+          const ask = depth?.asks[i];
+          const bidPct = bid ? (bid.qty / maxQty) * 100 : 0;
+          const askPct = ask ? (ask.qty / maxQty) * 100 : 0;
+          return (
+            <div key={i} className="contents">
+              {/* Bid row */}
+              <div className="relative flex justify-between items-center py-1.5">
+                <div
+                  className="absolute inset-y-0 right-0 bg-gain/10 transition-all duration-500"
+                  style={{ width: `${bidPct}%` }}
+                />
+                <span className="relative tabular-nums text-gray-700 dark:text-gray-300">
+                  {bid ? bid.price.toFixed(2) : '—'}
+                </span>
+                <span className="relative tabular-nums font-medium text-gain">
+                  {bid ? bid.qty.toLocaleString('en-IN') : '—'}
+                </span>
+              </div>
+              {/* Ask row */}
+              <div className="relative flex justify-between items-center py-1.5">
+                <div
+                  className="absolute inset-y-0 left-0 bg-loss/10 transition-all duration-500"
+                  style={{ width: `${askPct}%` }}
+                />
+                <span className="relative tabular-nums text-gray-700 dark:text-gray-300">
+                  {ask ? ask.price.toFixed(2) : '—'}
+                </span>
+                <span className="relative tabular-nums font-medium text-loss">
+                  {ask ? ask.qty.toLocaleString('en-IN') : '—'}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Totals */}
+        <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-gray-800 font-semibold">
+          <span className="text-gray-500">Bid Total</span>
+          <span className="tabular-nums text-gray-800 dark:text-gray-100">
+            {depth ? depth.bidTotal.toLocaleString('en-IN') : '—'}
+          </span>
+        </div>
+        <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-gray-800 font-semibold">
+          <span className="text-gray-500">Ask Total</span>
+          <span className="tabular-nums text-gray-800 dark:text-gray-100">
+            {depth ? depth.askTotal.toLocaleString('en-IN') : '—'}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
