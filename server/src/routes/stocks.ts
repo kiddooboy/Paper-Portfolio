@@ -359,6 +359,215 @@ router.get('/trending', async (_req, res) => {
   res.json(trending);
 });
 
+// GET /api/stocks/screener — multi-criteria stock screener (filters + sort + paginate)
+// Query params (all optional):
+//   sectors=A,B          marketCapMin/Max (in crore)    peMin/Max
+//   divYieldMin/Max      roeMin/Max                     priceMin/Max
+//   changePctMin/Max     near52wHigh=1   near52wLow=1   (within 5%)
+//   sortBy=market_cap|pe_ratio|div_yield|roe|change_percent|price|name
+//   sortDir=asc|desc     page=1   limit=25 (max 100)    preset=<key>
+router.get('/screener', async (req, res) => {
+  try {
+    const num = (v: any): number | null => {
+      if (v === undefined || v === null || v === '') return null;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    // Apply preset (overrides individual params if specified)
+    const preset = String(req.query.preset || '').trim();
+    const presetFilters: Record<string, any> = {};
+    let presetSort: { sortBy?: string; sortDir?: 'asc' | 'desc' } = {};
+    switch (preset) {
+      case 'large_cap':
+        presetFilters.marketCapMin = 50000; // ≥ 50,000 Cr
+        presetSort = { sortBy: 'market_cap', sortDir: 'desc' };
+        break;
+      case 'mid_cap':
+        presetFilters.marketCapMin = 10000;
+        presetFilters.marketCapMax = 50000;
+        presetSort = { sortBy: 'market_cap', sortDir: 'desc' };
+        break;
+      case 'small_cap':
+        presetFilters.marketCapMax = 10000;
+        presetSort = { sortBy: 'market_cap', sortDir: 'desc' };
+        break;
+      case 'low_pe':
+        presetFilters.peMax = 15;
+        presetFilters.peMin = 0.1; // exclude negative / zero PE
+        presetSort = { sortBy: 'pe_ratio', sortDir: 'asc' };
+        break;
+      case 'high_dividend':
+        presetFilters.divYieldMin = 3;
+        presetSort = { sortBy: 'div_yield', sortDir: 'desc' };
+        break;
+      case 'value':
+        presetFilters.peMax = 20;
+        presetFilters.peMin = 0.1;
+        presetFilters.divYieldMin = 2;
+        presetSort = { sortBy: 'pe_ratio', sortDir: 'asc' };
+        break;
+      case 'quality':
+        presetFilters.roeMin = 15;
+        presetSort = { sortBy: 'roe', sortDir: 'desc' };
+        break;
+      case '52w_high':
+        presetFilters.near52wHigh = true;
+        presetSort = { sortBy: 'change_percent', sortDir: 'desc' };
+        break;
+      case '52w_low':
+        presetFilters.near52wLow = true;
+        presetSort = { sortBy: 'change_percent', sortDir: 'asc' };
+        break;
+      case 'top_gainers':
+        presetFilters.changePctMin = 0;
+        presetSort = { sortBy: 'change_percent', sortDir: 'desc' };
+        break;
+      case 'top_losers':
+        presetFilters.changePctMax = 0;
+        presetSort = { sortBy: 'change_percent', sortDir: 'asc' };
+        break;
+    }
+
+    const sectorsParam = String(req.query.sectors || '').trim();
+    const sectors = sectorsParam ? sectorsParam.split(',').map((s) => s.trim()).filter(Boolean) : [];
+
+    // Filters from query (preset only fills if not provided)
+    const f = {
+      marketCapMin: num(req.query.marketCapMin) ?? presetFilters.marketCapMin ?? null,
+      marketCapMax: num(req.query.marketCapMax) ?? presetFilters.marketCapMax ?? null,
+      peMin:        num(req.query.peMin)        ?? presetFilters.peMin        ?? null,
+      peMax:        num(req.query.peMax)        ?? presetFilters.peMax        ?? null,
+      divYieldMin:  num(req.query.divYieldMin)  ?? presetFilters.divYieldMin  ?? null,
+      divYieldMax:  num(req.query.divYieldMax)  ?? presetFilters.divYieldMax  ?? null,
+      roeMin:       num(req.query.roeMin)       ?? presetFilters.roeMin       ?? null,
+      roeMax:       num(req.query.roeMax)       ?? presetFilters.roeMax       ?? null,
+      priceMin:     num(req.query.priceMin)     ?? null,
+      priceMax:     num(req.query.priceMax)     ?? null,
+      changePctMin: num(req.query.changePctMin) ?? presetFilters.changePctMin ?? null,
+      changePctMax: num(req.query.changePctMax) ?? presetFilters.changePctMax ?? null,
+      near52wHigh:  req.query.near52wHigh === '1' || req.query.near52wHigh === 'true' || presetFilters.near52wHigh === true,
+      near52wLow:   req.query.near52wLow  === '1' || req.query.near52wLow  === 'true' || presetFilters.near52wLow  === true,
+    };
+
+    const validSorts = new Set(['market_cap', 'pe_ratio', 'div_yield', 'roe', 'change_percent', 'price', 'name']);
+    const sortBy = (() => {
+      const v = String(req.query.sortBy || presetSort.sortBy || 'market_cap');
+      return validSorts.has(v) ? v : 'market_cap';
+    })();
+    const sortDir = (() => {
+      const v = String(req.query.sortDir || presetSort.sortDir || 'desc').toLowerCase();
+      return v === 'asc' ? 'asc' : 'desc';
+    })();
+
+    const page = Math.max(parseInt(String(req.query.page || '1')) || 1, 1);
+    const limit = Math.min(parseInt(String(req.query.limit || '25')) || 25, 100);
+
+    // 1. Pull universe from DB (NIFTY 500 ingested rows)
+    const rows = (await db
+      .prepare(
+        `SELECT symbol, name, exchange, sector, market_cap, pe_ratio, high_52w, low_52w, eps,
+                roe, book_value, debt_to_equity, div_yield
+         FROM stocks WHERE exchange = 'NSE'`
+      )
+      .all()) as any[];
+
+    // 2. Merge with live cached quotes (live data overrides DB-stored stale numbers)
+    const liveQuotes = getAllCachedQuotes();
+    const merged = rows.map((r) => {
+      const q = liveQuotes.get(`${r.symbol}:${r.exchange || 'NSE'}`) || liveQuotes.get(`${r.symbol}:NSE`);
+      const market_cap = (q?.market_cap ?? Number(r.market_cap)) || null;
+      const pe_ratio   = (q?.pe_ratio   ?? Number(r.pe_ratio))   || null;
+      const high_52w   = (q?.high_52w   ?? Number(r.high_52w))   || null;
+      const low_52w    = (q?.low_52w    ?? Number(r.low_52w))    || null;
+      // market_cap from Yahoo is in absolute INR; convert to Cr
+      const marketCapCr = market_cap ? market_cap / 1e7 : null;
+      return {
+        symbol: r.symbol,
+        name: r.name,
+        exchange: r.exchange,
+        sector: r.sector || null,
+        price: q?.price ?? 0,
+        change: q?.change ?? 0,
+        change_percent: q?.change_percent ?? 0,
+        volume: q?.volume ?? null,
+        market_cap: marketCapCr,           // in Cr
+        pe_ratio,
+        high_52w,
+        low_52w,
+        eps: r.eps != null ? Number(r.eps) : null,
+        roe: r.roe != null ? Number(r.roe) : null,
+        book_value: r.book_value != null ? Number(r.book_value) : null,
+        debt_to_equity: r.debt_to_equity != null ? Number(r.debt_to_equity) : null,
+        div_yield: r.div_yield != null ? Number(r.div_yield) : null,
+      };
+    });
+
+    // 3. Apply filters
+    const filtered = merged.filter((s) => {
+      if (sectors.length && (!s.sector || !sectors.includes(s.sector))) return false;
+      if (f.marketCapMin != null && (s.market_cap == null || s.market_cap < f.marketCapMin)) return false;
+      if (f.marketCapMax != null && (s.market_cap == null || s.market_cap > f.marketCapMax)) return false;
+      if (f.peMin != null && (s.pe_ratio == null || s.pe_ratio < f.peMin)) return false;
+      if (f.peMax != null && (s.pe_ratio == null || s.pe_ratio > f.peMax)) return false;
+      if (f.divYieldMin != null && (s.div_yield == null || s.div_yield < f.divYieldMin)) return false;
+      if (f.divYieldMax != null && (s.div_yield == null || s.div_yield > f.divYieldMax)) return false;
+      if (f.roeMin != null && (s.roe == null || s.roe < f.roeMin)) return false;
+      if (f.roeMax != null && (s.roe == null || s.roe > f.roeMax)) return false;
+      if (f.priceMin != null && s.price < f.priceMin) return false;
+      if (f.priceMax != null && s.price > f.priceMax) return false;
+      if (f.changePctMin != null && s.change_percent < f.changePctMin) return false;
+      if (f.changePctMax != null && s.change_percent > f.changePctMax) return false;
+      if (f.near52wHigh) {
+        if (!s.high_52w || !s.price || s.price < s.high_52w * 0.95) return false;
+      }
+      if (f.near52wLow) {
+        if (!s.low_52w || !s.price || s.price > s.low_52w * 1.05) return false;
+      }
+      return true;
+    });
+
+    // 4. Sort
+    const dirMul = sortDir === 'asc' ? 1 : -1;
+    filtered.sort((a: any, b: any) => {
+      const av = a[sortBy];
+      const bv = b[sortBy];
+      // null values always at end
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === 'string' && typeof bv === 'string') return av.localeCompare(bv) * dirMul;
+      return (av - bv) * dirMul;
+    });
+
+    // 5. Paginate
+    const total = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const offset = (page - 1) * limit;
+    const stocks = filtered.slice(offset, offset + limit);
+
+    // Available sectors (for filter UI)
+    const sectorSet = new Set<string>();
+    for (const r of merged) if (r.sector) sectorSet.add(r.sector);
+    const availableSectors = Array.from(sectorSet).sort();
+
+    res.json({
+      stocks,
+      total,
+      page,
+      totalPages,
+      limit,
+      sortBy,
+      sortDir,
+      sectors: availableSectors,
+      isOpen: isMarketOpen(),
+    });
+  } catch (err: any) {
+    console.error('[screener] error:', err);
+    res.status(500).json({ error: err.message || 'screener failed' });
+  }
+});
+
 // GET /api/stocks/:symbol?exchange=NSE — full quote + metadata
 router.get('/:symbol', async (req, res) => {
   const symbol = req.params.symbol.toUpperCase();

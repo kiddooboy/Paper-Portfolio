@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { LayoutDashboard, Search, Wallet, ListOrdered, Bookmark, Trophy, ShieldCheck, TrendingUp, BarChart3, PieChart, Compass, Newspaper } from 'lucide-react';
+import { LayoutDashboard, Search, Wallet, ListOrdered, Bookmark, Trophy, ShieldCheck, TrendingUp, BarChart3, PieChart, Compass, Newspaper, SlidersHorizontal } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuthStore } from '../store/authStore';
 
@@ -13,6 +13,7 @@ const navItems = [
   { path: '/positions', label: 'Positions', icon: BarChart3 },
   { path: '/orders', label: 'Orders', icon: ListOrdered },
   { path: '/watchlist', label: 'Watchlist', icon: Bookmark },
+  { path: '/screener',  label: 'Screener',  icon: SlidersHorizontal },
   { path: '/news',      label: 'News',      icon: Newspaper },
   { path: '/wallet', label: 'Wallet', icon: Wallet },
   { path: '/leaderboard', label: 'Leaderboard', icon: Trophy },

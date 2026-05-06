@@ -23,6 +23,7 @@ import WalletPage from './pages/WalletPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import PortfolioCompassPage from './pages/PortfolioCompassPage';
 import NewsPage from './pages/NewsPage';
+import ScreenerPage from './pages/ScreenerPage';
 import { useAuthStore } from './store/authStore';
 import { bootstrap, teardown, installFocusRevalidation } from './store/bootstrap';
 
@@ -70,6 +71,7 @@ function App() {
         <Route path="/wallet" element={<WalletPage />} />
         <Route path="/sectors" element={<SectorsPage />} />
         <Route path="/news" element={<NewsPage />} />
+        <Route path="/screener" element={<ScreenerPage />} />
       </Route>
     </Routes>
   );
