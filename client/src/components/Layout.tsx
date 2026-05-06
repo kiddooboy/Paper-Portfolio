@@ -81,39 +81,8 @@ export default function Layout() {
       <IndexTicker />
 
       <div className="flex">
-        <aside className="hidden lg:flex flex-col w-60 shrink-0 sticky top-[60px] h-[calc(100vh-60px)] border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-groww-dark">
-          <div className="flex-1 overflow-y-auto">
-            <Sidebar activePath={location.pathname} />
-          </div>
-          {/* AI Chat pinned to sidebar bottom */}
-          <div className="shrink-0 p-3 border-t border-gray-200 dark:border-gray-800">
-            <button
-              onClick={() => navigate('/ai-chat')}
-              className={cn(
-                'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition',
-                location.pathname === '/ai-chat'
-                  ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
-              )}
-            >
-              <svg width="20" height="20" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="4" y="7" width="18" height="14" rx="4" fill="currentColor" fillOpacity="0.15"/>
-                <rect x="4" y="7" width="18" height="14" rx="4" stroke="currentColor" strokeWidth="1.5"/>
-                <line x1="13" y1="7" x2="13" y2="3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                <circle cx="13" cy="2.5" r="1.5" fill="currentColor"/>
-                <circle cx="9.5" cy="13" r="1.8" fill="currentColor"/>
-                <circle cx="16.5" cy="13" r="1.8" fill="currentColor"/>
-                <circle cx="10.1" cy="12.4" r="0.55" fill="white"/>
-                <circle cx="17.1" cy="12.4" r="0.55" fill="white"/>
-                <rect x="9" y="17" width="2" height="2" rx="0.5" fill="currentColor" fillOpacity="0.7"/>
-                <rect x="12" y="16" width="2" height="3" rx="0.5" fill="currentColor"/>
-                <rect x="15" y="15" width="2" height="4" rx="0.5" fill="currentColor" fillOpacity="0.7"/>
-                <rect x="1.5" y="11" width="2.5" height="5" rx="1.25" fill="currentColor" fillOpacity="0.5"/>
-                <rect x="22" y="11" width="2.5" height="5" rx="1.25" fill="currentColor" fillOpacity="0.5"/>
-              </svg>
-              AI Assistant
-            </button>
-          </div>
+        <aside className="hidden lg:block w-60 shrink-0 sticky top-[60px] h-[calc(100vh-60px)] border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-groww-dark overflow-y-auto pb-20">
+          <Sidebar activePath={location.pathname} />
         </aside>
 
         <main className="flex-1 p-4 sm:p-6 pb-24 lg:pb-6 max-w-6xl mx-auto w-full">
@@ -125,10 +94,10 @@ export default function Layout() {
       <IdleLock />
       <MobileNav activePath={location.pathname} />
 
-      {/* Floating AI Chat Button — mobile only */}
+      {/* Floating AI Chat Button — desktop bottom-left, mobile bottom-right above tab bar */}
       <button
         onClick={() => navigate('/ai-chat')}
-        className="lg:hidden fixed bottom-20 right-4 z-50 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 focus:outline-none"
+        className="fixed bottom-4 left-4 lg:bottom-4 lg:left-4 z-50 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 focus:outline-none max-lg:bottom-20 max-lg:left-auto max-lg:right-4"
         title="AI Assistant"
         style={{ background: 'linear-gradient(135deg, #6366f1 0%, #00B386 100%)', padding: '14px' }}
       >
