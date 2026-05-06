@@ -22,12 +22,20 @@ export default function TerminalPage() {
   const [loading, setLoading] = useState(true);
 
   const [tab, setTab] = useState<'buy' | 'sell'>('buy');
-  const [orderType, setOrderType] = useState<'MARKET' | 'LIMIT' | 'SL' | 'SL-M'>('MARKET');
+  const [baseOrderType, setBaseOrderType] = useState<'MARKET' | 'LIMIT'>('MARKET');
   const [productType, setProductType] = useState<'CNC' | 'MIS'>('CNC');
   const [qty, setQty] = useState('');
   const [limitPrice, setLimitPrice] = useState('');
-  const [triggerPrice, setTriggerPrice] = useState('');
+  const [slEnabled, setSlEnabled] = useState(false);
+  const [slPrice, setSlPrice] = useState('');
+  const [targetEnabled, setTargetEnabled] = useState(false);
+  const [targetPrice, setTargetPrice] = useState('');
   const [placing, setPlacing] = useState(false);
+
+  // Derived order type for the API
+  const orderType = slEnabled
+    ? (baseOrderType === 'MARKET' ? 'SL-M' : 'SL')
+    : baseOrderType;
   const [showSellConfirm, setShowSellConfirm] = useState(false);
 
   const [alertOpen, setAlertOpen] = useState(false);
@@ -112,12 +120,10 @@ export default function TerminalPage() {
 
   const isGain = (quote?.change_percent ?? 0) >= 0;
   const executionPrice = useMemo(() => {
-    if (orderType === 'MARKET' || orderType === 'SL-M') return quote?.price ?? 0;
+    if (baseOrderType === 'MARKET') return quote?.price ?? 0;
     const lp = parseFloat(limitPrice);
-    const tp = parseFloat(triggerPrice);
-    if (orderType === 'SL') return Number.isFinite(lp) && lp > 0 ? lp : (Number.isFinite(tp) && tp > 0 ? tp : quote?.price ?? 0);
     return Number.isFinite(lp) && lp > 0 ? lp : quote?.price ?? 0;
-  }, [orderType, limitPrice, triggerPrice, quote]);
+  }, [baseOrderType, limitPrice, quote]);
   const qtyNum = parseInt(qty) || 0;
   const totalValue = executionPrice * qtyNum;
 
@@ -128,8 +134,9 @@ export default function TerminalPage() {
   const validateOrder = () => {
     if (!quote) return false;
     if (!qty || qtyNum < 1) { toast.error('Enter a valid quantity'); return false; }
-    if (orderType === 'LIMIT' && !limitPrice) { toast.error('Enter a limit price'); return false; }
-    if ((orderType === 'SL' || orderType === 'SL-M') && !triggerPrice) { toast.error('Enter a trigger price'); return false; }
+    if (baseOrderType === 'LIMIT' && !limitPrice) { toast.error('Enter a limit price'); return false; }
+    if (slEnabled && !slPrice) { toast.error('Enter a stop-loss trigger price'); return false; }
+    if (targetEnabled && !targetPrice) { toast.error('Enter a target price'); return false; }
     return true;
   };
 
@@ -148,8 +155,9 @@ export default function TerminalPage() {
         type: orderType,
         transactionType: tab.toUpperCase(),
         quantity: qtyNum,
-        limitPrice: (orderType === 'LIMIT' || orderType === 'SL') && limitPrice ? parseFloat(limitPrice) : undefined,
-        triggerPrice: (orderType === 'SL' || orderType === 'SL-M') && triggerPrice ? parseFloat(triggerPrice) : undefined,
+        limitPrice: baseOrderType === 'LIMIT' && limitPrice ? parseFloat(limitPrice) : undefined,
+        triggerPrice: slEnabled && slPrice ? parseFloat(slPrice) : undefined,
+        targetPrice: targetEnabled && targetPrice ? parseFloat(targetPrice) : undefined,
         productType,
       });
       if (res.data.queued) {
@@ -339,72 +347,176 @@ export default function TerminalPage() {
           )}
 
           {/* Order form */}
-          <div className="p-4 space-y-3 flex-1">
+          <div className="p-4 space-y-4 flex-1 overflow-y-auto">
+
             {/* Product type: CNC / MIS */}
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] uppercase tracking-wide text-gray-500">Product</span>
-              <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden ml-1">
-                {(['CNC', 'MIS'] as const).map(pt => (
-                  <button key={pt} onClick={() => setProductType(pt)}
-                    className={cn('px-3 py-1 text-xs font-semibold transition',
-                      productType === pt ? 'bg-groww-primary text-white' : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800')}>
-                    {pt}
-                  </button>
-                ))}
-              </div>
-              <span className="text-[10px] text-gray-400 ml-1">{productType === 'MIS' ? 'Intraday — auto square-off 3:20 PM' : 'Delivery'}</span>
+            <div className="flex rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 text-xs font-semibold">
+              <button
+                onClick={() => setProductType('CNC')}
+                className={cn('flex-1 py-2.5 transition flex flex-col items-center gap-0.5',
+                  productType === 'CNC'
+                    ? 'bg-groww-primary text-white'
+                    : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800')}
+              >
+                <span>CNC</span>
+                <span className={cn('text-[10px] font-normal', productType === 'CNC' ? 'text-white/80' : 'text-gray-400')}>Delivery</span>
+              </button>
+              <button
+                onClick={() => setProductType('MIS')}
+                className={cn('flex-1 py-2.5 transition flex flex-col items-center gap-0.5 border-l border-gray-200 dark:border-gray-700',
+                  productType === 'MIS'
+                    ? 'bg-groww-primary text-white'
+                    : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800')}
+              >
+                <span>MIS</span>
+                <span className={cn('text-[10px] font-normal', productType === 'MIS' ? 'text-white/80' : 'text-gray-400')}>Intraday</span>
+              </button>
+            </div>
+            {productType === 'MIS' && (
+              <p className="text-[10px] text-amber-600 dark:text-amber-400 -mt-2 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
+                Auto square-off at 3:20 PM IST
+              </p>
+            )}
+            {productType === 'CNC' && (
+              <p className="text-[10px] text-gray-400 -mt-2">Holds overnight · full margin required</p>
+            )}
+
+            {/* Order type: Market / Limit */}
+            <div className="flex rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 text-xs font-semibold">
+              {(['MARKET', 'LIMIT'] as const).map((ot, i) => (
+                <button
+                  key={ot}
+                  onClick={() => setBaseOrderType(ot)}
+                  className={cn(
+                    'flex-1 py-2 transition',
+                    i > 0 && 'border-l border-gray-200 dark:border-gray-700',
+                    baseOrderType === ot
+                      ? 'bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900'
+                      : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800'
+                  )}
+                >
+                  {ot}
+                </button>
+              ))}
             </div>
 
-            {/* Order type: 4 buttons */}
+            {/* Quantity */}
             <div>
-              <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Order Type</label>
-              <div className="grid grid-cols-4 gap-1.5">
-                {(['MARKET', 'LIMIT', 'SL', 'SL-M'] as const).map(ot => (
-                  <button key={ot} onClick={() => setOrderType(ot)}
-                    className={cn('py-1.5 text-xs rounded-lg border transition font-medium',
-                      orderType === ot
-                        ? 'border-groww-primary bg-groww-primary/10 text-groww-primary'
-                        : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300')}>
-                    {ot}
-                  </button>
-                ))}
+              <label className="block text-[11px] uppercase tracking-wide text-gray-400 mb-1.5">Quantity</label>
+              <input
+                type="number"
+                value={qty}
+                onChange={(e) => setQty(e.target.value)}
+                onBlur={(e) => { if (e.target.value && parseInt(e.target.value) < 1) setQty('1'); }}
+                placeholder="0"
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-groww-primary/30 focus:border-groww-primary"
+              />
+            </div>
+
+            {/* Price (Limit only) */}
+            {baseOrderType === 'LIMIT' && (
+              <div>
+                <label className="block text-[11px] uppercase tracking-wide text-gray-400 mb-1.5">Price</label>
+                <input
+                  type="number"
+                  step="0.05"
+                  value={limitPrice}
+                  placeholder={price.toFixed(2)}
+                  onChange={(e) => setLimitPrice(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-groww-primary/30 focus:border-groww-primary"
+                />
               </div>
-              {(orderType === 'SL' || orderType === 'SL-M') && (
-                <p className="text-[10px] text-amber-500 mt-1">
-                  {orderType === 'SL-M' ? 'Triggers a market order when price hits trigger' : 'Triggers a limit order when price hits trigger'}
-                </p>
+            )}
+
+            {/* Stop Loss toggle */}
+            <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+              <button
+                onClick={() => setSlEnabled(v => !v)}
+                className="w-full flex items-center justify-between px-3.5 py-2.5 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800/60 transition"
+              >
+                <div className="flex items-center gap-2">
+                  <span className={cn('w-2 h-2 rounded-full', slEnabled ? 'bg-amber-500' : 'bg-gray-300 dark:bg-gray-600')} />
+                  <span className="text-gray-700 dark:text-gray-200">Stop Loss</span>
+                  {slEnabled && slPrice && (
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400 tabular-nums">@ {formatCurrency(parseFloat(slPrice))}</span>
+                  )}
+                </div>
+                <div className={cn(
+                  'w-9 h-5 rounded-full transition-colors relative',
+                  slEnabled ? 'bg-amber-500' : 'bg-gray-200 dark:bg-gray-700'
+                )}>
+                  <div className={cn(
+                    'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all',
+                    slEnabled ? 'left-4' : 'left-0.5'
+                  )} />
+                </div>
+              </button>
+              {slEnabled && (
+                <div className="px-3.5 pb-3 pt-1 bg-amber-50/50 dark:bg-amber-900/10 border-t border-amber-100 dark:border-amber-900/30">
+                  <label className="block text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-400 mb-1">
+                    Trigger Price {baseOrderType === 'MARKET' ? '(SL-M — triggers market order)' : '(SL — triggers limit order)'}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.05"
+                    value={slPrice}
+                    placeholder={price.toFixed(2)}
+                    onChange={(e) => setSlPrice(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-gray-900 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                  />
+                  <p className="text-[10px] text-amber-500 mt-1">
+                    {tab === 'buy' ? 'Order cancels if price falls below this' : 'Order triggers if price falls below this'}
+                  </p>
+                </div>
               )}
             </div>
 
-            <div>
-              <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Quantity</label>
-              <input type="number" value={qty}
-                onChange={(e) => setQty(e.target.value)}
-                onBlur={(e) => { if (e.target.value && parseInt(e.target.value) < 1) setQty('1'); }}
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm tabular-nums" />
+            {/* Target toggle */}
+            <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+              <button
+                onClick={() => setTargetEnabled(v => !v)}
+                className="w-full flex items-center justify-between px-3.5 py-2.5 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800/60 transition"
+              >
+                <div className="flex items-center gap-2">
+                  <span className={cn('w-2 h-2 rounded-full', targetEnabled ? 'bg-groww-primary' : 'bg-gray-300 dark:bg-gray-600')} />
+                  <span className="text-gray-700 dark:text-gray-200">Target</span>
+                  {targetEnabled && targetPrice && (
+                    <span className="text-[10px] text-groww-primary tabular-nums">@ {formatCurrency(parseFloat(targetPrice))}</span>
+                  )}
+                </div>
+                <div className={cn(
+                  'w-9 h-5 rounded-full transition-colors relative',
+                  targetEnabled ? 'bg-groww-primary' : 'bg-gray-200 dark:bg-gray-700'
+                )}>
+                  <div className={cn(
+                    'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all',
+                    targetEnabled ? 'left-4' : 'left-0.5'
+                  )} />
+                </div>
+              </button>
+              {targetEnabled && (
+                <div className="px-3.5 pb-3 pt-1 bg-green-50/50 dark:bg-green-900/10 border-t border-green-100 dark:border-green-900/30">
+                  <label className="block text-[10px] uppercase tracking-wide text-groww-primary mb-1">Target Price</label>
+                  <input
+                    type="number"
+                    step="0.05"
+                    value={targetPrice}
+                    placeholder={price.toFixed(2)}
+                    onChange={(e) => setTargetPrice(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-green-300 dark:border-green-700 bg-white dark:bg-gray-900 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-groww-primary/30"
+                  />
+                  <p className="text-[10px] text-green-600 dark:text-green-400 mt-1">
+                    {tab === 'buy' ? 'Auto-book profit when price hits this' : 'Auto-cover when price rises to this'}
+                  </p>
+                </div>
+              )}
             </div>
 
-            {(orderType === 'SL' || orderType === 'SL-M') && (
-              <div>
-                <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Trigger Price</label>
-                <input type="number" step="0.05" value={triggerPrice} placeholder={String(price.toFixed(2))}
-                  onChange={(e) => setTriggerPrice(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-gray-900 text-sm tabular-nums" />
-              </div>
-            )}
-
-            {(orderType === 'LIMIT' || orderType === 'SL') && (
-              <div>
-                <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Limit Price</label>
-                <input type="number" step="0.05" value={limitPrice} placeholder={String(price.toFixed(2))}
-                  onChange={(e) => setLimitPrice(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm tabular-nums" />
-              </div>
-            )}
-
+            {/* Order summary */}
             <div className="space-y-1.5 text-sm pt-2 border-t border-gray-100 dark:border-gray-800">
               <Row label="LTP" value={formatCurrency(price)} />
-              <Row label="Execution Price" value={formatCurrency(executionPrice)} />
+              <Row label={baseOrderType === 'LIMIT' ? 'Limit Price' : 'Market Price'} value={formatCurrency(executionPrice)} />
               <Row label="Quantity" value={String(qtyNum)} />
               <Row
                 label={tab === 'buy' ? 'Amount Required' : 'Expected Proceeds'}
@@ -424,7 +536,7 @@ export default function TerminalPage() {
               onClick={handleOrderClick}
               disabled={placing || (tab === 'buy' && !affordable)}
               className={cn(
-                'w-full py-3 rounded-lg font-semibold text-white transition',
+                'w-full py-3 rounded-xl font-semibold text-white transition',
                 tab === 'buy' ? 'bg-gain hover:brightness-110' : 'bg-loss hover:brightness-110',
                 (placing || (tab === 'buy' && !affordable)) && 'opacity-60 cursor-not-allowed'
               )}
