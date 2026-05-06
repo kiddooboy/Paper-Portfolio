@@ -52,7 +52,7 @@ function makeId(title: string, pubDate: string): string {
 async function fetchFeed(cfg: typeof FEEDS[0]): Promise<NewsItem[]> {
   try {
     const feed = await parser.parseURL(cfg.url);
-    return (feed.items || []).slice(0, 20).map(item => ({
+    return (feed.items || []).slice(0, 20).map((item: any) => ({
       id: makeId(item.title || '', item.pubDate || ''),
       title: (item.title || '').replace(/\s+/g, ' ').trim(),
       description: stripHtml(item.contentSnippet || item.content || item['content:encoded'] || ''),
@@ -61,7 +61,7 @@ async function fetchFeed(cfg: typeof FEEDS[0]): Promise<NewsItem[]> {
       pubDate: item.isoDate || item.pubDate || new Date().toISOString(),
       category: cfg.category,
       image: extractImage(item),
-    })).filter(n => n.title && n.link);
+    })).filter((n: NewsItem) => n.title && n.link);
   } catch (e: any) {
     console.warn(`[news] feed failed (${cfg.source}): ${e?.message}`);
     return [];
@@ -107,7 +107,7 @@ export async function getStockNews(symbol: string): Promise<NewsItem[]> {
     const q = encodeURIComponent(`${key} NSE India stock market`);
     const url = `https://news.google.com/rss/search?q=${q}&hl=en-IN&gl=IN&ceid=IN:en`;
     const feed = await parser.parseURL(url);
-    const items: NewsItem[] = (feed.items || []).slice(0, 15).map(item => {
+    const items: NewsItem[] = (feed.items || []).slice(0, 15).map((item: any) => {
       // Google News wraps source name in the title: "Headline - Source Name"
       const rawTitle: string = item.title || '';
       const dashIdx = rawTitle.lastIndexOf(' - ');
@@ -122,7 +122,7 @@ export async function getStockNews(symbol: string): Promise<NewsItem[]> {
         pubDate: item.isoDate || item.pubDate || new Date().toISOString(),
         category: 'company',
       };
-    }).filter(n => n.title && n.link);
+    }).filter((n: NewsItem) => n.title && n.link);
 
     stockCache.set(key, { data: items, at: Date.now() });
     return items;
