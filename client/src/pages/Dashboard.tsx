@@ -107,7 +107,7 @@ export default function Dashboard() {
   const p = enrichedPortfolio;
 
   return (
-    <div className="flex gap-3 overflow-hidden p-3" style={{ height: 'calc(100vh - 107px)' }}>
+    <div className="flex gap-3 overflow-hidden p-3" style={{ height: 'calc(100vh - 150px)' }}>
     {/* ── Left: main dashboard content ── */}
     <div className="flex-1 min-w-0 flex flex-col gap-3 h-full">
 
