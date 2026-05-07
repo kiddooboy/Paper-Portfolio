@@ -25,7 +25,8 @@ jobs:
 
             echo "=== [2/5] Fix any untracked files conflicting with git ==="
             rm -f .dockerignore
-            git stash --include-untracked 2>/dev/null || true
+            sudo chown -R ubuntu:ubuntu .git
+            git stash clear 2>/dev/null || true
 
             echo "=== [3/5] Git pull ==="
             git pull
