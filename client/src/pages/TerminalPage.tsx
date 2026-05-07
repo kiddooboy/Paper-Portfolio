@@ -215,7 +215,7 @@ export default function TerminalPage() {
   const affordable = tab === 'buy' ? (user?.balance ?? 0) >= margin : true;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] -mx-4 -my-4 sm:-mx-6 sm:-my-6 bg-gray-50 dark:bg-black">
+    <div className="flex flex-col h-full overflow-hidden bg-gray-50 dark:bg-black">
       {/* Header */}
       <div className="flex items-center justify-between px-4 sm:px-6 py-3 bg-white dark:bg-groww-card border-b border-gray-100 dark:border-gray-800">
         <div className="flex items-center gap-3 min-w-0">
@@ -287,8 +287,8 @@ export default function TerminalPage() {
       {/* Body */}
       <div className="flex-1 flex flex-col lg:flex-row min-h-0">
         {/* Chart area */}
-        <div className="flex-1 flex flex-col min-h-[600px] lg:min-h-0 overflow-y-auto">
-          <div className="flex-1 min-h-[340px] bg-white dark:bg-groww-card border-b lg:border-b-0 lg:border-r border-gray-100 dark:border-gray-800 p-3">
+        <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
+          <div className="flex-1 min-h-[220px] lg:min-h-0 bg-white dark:bg-groww-card border-b lg:border-b-0 lg:border-r border-gray-100 dark:border-gray-800 p-3">
             <StockChart symbol={symbol.toUpperCase()} exchange={exchange} />
           </div>
           {/* Key stats strip */}
@@ -305,7 +305,7 @@ export default function TerminalPage() {
         </div>
 
         {/* Order panel */}
-        <aside className="w-full lg:w-[360px] bg-white dark:bg-groww-card flex flex-col">
+        <aside className="w-full lg:w-[360px] shrink-0 bg-white dark:bg-groww-card flex flex-col min-h-0">
           {/* Buy/Sell tabs */}
           <div className="grid grid-cols-2 text-sm font-semibold">
             <button

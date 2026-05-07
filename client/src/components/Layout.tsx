@@ -85,7 +85,12 @@ export default function Layout() {
           <Sidebar activePath={location.pathname} />
         </aside>
 
-        <main className="flex-1 p-3 sm:p-4 pb-24 lg:pb-4 w-full min-w-0">
+        <main className={cn(
+          'flex-1 w-full min-w-0',
+          location.pathname.startsWith('/terminal')
+            ? 'overflow-hidden p-0'
+            : 'p-3 sm:p-4 pb-24 lg:pb-4'
+        )}>
           <Outlet />
         </main>
       </div>
