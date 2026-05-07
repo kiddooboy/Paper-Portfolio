@@ -43,6 +43,7 @@ import insightsRoutes from './routes/insights.js';
 import aiRoutes from './routes/ai.js';
 import walletRoutes from './routes/wallet.js';
 import monteCarloRoutes from './routes/monteCarlo.js';
+import newsRoutes from './routes/news.js';
 
 const PORT = process.env.PORT || 5000;
 
@@ -74,6 +75,7 @@ async function main() {
   app.use('/api/ai', aiRoutes);
   app.use('/api/wallet', walletRoutes);
   app.use('/api/monte-carlo', monteCarloRoutes);
+  app.use('/api/news', newsRoutes);
 
   // Serve static client build and SPA fallback in production (registered AFTER api routes)
   if (process.env.NODE_ENV === 'production') {

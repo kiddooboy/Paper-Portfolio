@@ -14,9 +14,11 @@ export interface NewsItem {
   description: string;
   link: string;
   source: string;
+  publisher: string;
   pubDate: string;
   category: string;
   image?: string;
+  sentiment?: { label: string; score?: number; [key: string]: any };
 }
 
 const FEEDS = [
@@ -27,6 +29,9 @@ const FEEDS = [
   { url: 'https://www.moneycontrol.com/rss/buzzingstocks.xml',             source: 'Moneycontrol',   category: 'stocks'  },
   { url: 'https://www.livemint.com/rss/markets',                           source: 'LiveMint',       category: 'markets' },
 ];
+
+const SENTIMENT_API_URL = 'https://16tkpne8y2.execute-api.ap-south-1.amazonaws.com/prod/analyze-single';
+const SENTIMENT_API_KEY = 'lIpv9Cqnei8apVYwnU5tV5dPu6w50LLhPBvsbDJe';
 
 function stripHtml(html: string): string {
   return (html || '')
@@ -49,6 +54,23 @@ function makeId(title: string, pubDate: string): string {
   return Buffer.from(`${title}${pubDate}`).toString('base64').slice(0, 16);
 }
 
+async function analyzeSentiment(headline: string, stock: string): Promise<NewsItem['sentiment']> {
+  try {
+    const res = await fetch(SENTIMENT_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': SENTIMENT_API_KEY,
+      },
+      body: JSON.stringify({ headline, stock }),
+    });
+    if (!res.ok) return undefined;
+    return await res.json() as NewsItem['sentiment'];
+  } catch {
+    return undefined;
+  }
+}
+
 async function fetchFeed(cfg: typeof FEEDS[0]): Promise<NewsItem[]> {
   try {
     const feed = await parser.parseURL(cfg.url);
@@ -58,6 +80,7 @@ async function fetchFeed(cfg: typeof FEEDS[0]): Promise<NewsItem[]> {
       description: stripHtml(item.contentSnippet || item.content || item['content:encoded'] || ''),
       link: item.link || '',
       source: cfg.source,
+      publisher: cfg.source,
       pubDate: item.isoDate || item.pubDate || new Date().toISOString(),
       category: cfg.category,
       image: extractImage(item),
@@ -79,7 +102,6 @@ export async function getMarketNews(category?: string): Promise<NewsItem[]> {
     for (const r of results) {
       if (r.status === 'fulfilled') all.push(...r.value);
     }
-    // Deduplicate by normalised title prefix
     const seen = new Set<string>();
     const unique = all.filter(n => {
       const key = n.title.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 40);
@@ -104,25 +126,37 @@ export async function getStockNews(symbol: string): Promise<NewsItem[]> {
   if (hit && Date.now() - hit.at < STOCK_TTL) return hit.data;
 
   try {
-    const q = encodeURIComponent(`${key} NSE India stock market`);
-    const url = `https://news.google.com/rss/search?q=${q}&hl=en-IN&gl=IN&ceid=IN:en`;
+    const searchQuery = `${key} (stock OR share OR company)`;
+    const url = `https://news.google.com/rss/search?q=${encodeURIComponent(searchQuery)}+when:1d&hl=en-IN&gl=IN&ceid=IN:en`;
     const feed = await parser.parseURL(url);
-    const items: NewsItem[] = (feed.items || []).slice(0, 15).map((item: any) => {
-      // Google News wraps source name in the title: "Headline - Source Name"
+
+    const raw: NewsItem[] = (feed.items || []).slice(0, 15).map((item: any) => {
       const rawTitle: string = item.title || '';
       const dashIdx = rawTitle.lastIndexOf(' - ');
       const title = dashIdx > 0 ? rawTitle.slice(0, dashIdx).trim() : rawTitle;
-      const src = dashIdx > 0 ? rawTitle.slice(dashIdx + 3).trim() : (item.source?.name || 'Google News');
+      // publisher: prefer source element title, fall back to dash-parsed source
+      const publisher = (item.source as string) || (dashIdx > 0 ? rawTitle.slice(dashIdx + 3).trim() : 'Google News');
       return {
         id: makeId(title, item.pubDate || ''),
         title,
         description: stripHtml(item.contentSnippet || ''),
         link: item.link || '',
-        source: src,
+        source: publisher,
+        publisher,
         pubDate: item.isoDate || item.pubDate || new Date().toISOString(),
         category: 'company',
+        image: extractImage(item),
       };
     }).filter((n: NewsItem) => n.title && n.link);
+
+    // Enrich with sentiment in parallel
+    const sentiments = await Promise.allSettled(
+      raw.map(n => analyzeSentiment(n.title, key))
+    );
+    const items: NewsItem[] = raw.map((n, i) => ({
+      ...n,
+      sentiment: sentiments[i].status === 'fulfilled' ? sentiments[i].value : undefined,
+    }));
 
     stockCache.set(key, { data: items, at: Date.now() });
     return items;
