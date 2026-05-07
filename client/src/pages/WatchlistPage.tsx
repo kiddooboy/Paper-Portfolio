@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
-import { Trash2, Plus } from 'lucide-react';
+import { Trash2, Plus, Pencil, Check, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatCurrency } from '../lib/utils';
 import { useMarketStore } from '../store/marketStore';
@@ -14,6 +14,8 @@ export default function WatchlistPage() {
   const fetchWatchlists = useWatchlistStore((s) => s.fetch);
   const [newName, setNewName] = useState('');
   const [showNew, setShowNew] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState('');
   const allQuotes = useMarketStore((s) => s.quotes);
 
   const fetch = () => fetchWatchlists(true);
@@ -40,6 +42,17 @@ export default function WatchlistPage() {
   const removeItem = async (wlId: number, symbol: string) => {
     try { await axios.delete(`/api/watchlists/${wlId}/items/${symbol}`); fetch(); toast.success('Removed'); }
     catch { toast.error('Failed'); }
+  };
+
+  const renameWatchlist = async (id: number) => {
+    if (!editName.trim()) return;
+    try { await axios.patch(`/api/watchlists/${id}`, { name: editName.trim() }); setEditingId(null); fetch(); toast.success('Renamed'); }
+    catch { toast.error('Failed to rename'); }
+  };
+  const deleteWatchlist = async (id: number) => {
+    if (!confirm('Delete this watchlist?')) return;
+    try { await axios.delete(`/api/watchlists/${id}`); fetch(); toast.success('Deleted'); }
+    catch { toast.error('Failed to delete'); }
   };
 
   const addToWatchlist = async (symbol: string, exchange: string = 'NSE') => {
@@ -80,7 +93,29 @@ export default function WatchlistPage() {
       )}
       {enrichedWatchlists.map((wl) => (
         <div key={wl.id} className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-4">
-          <h3 className="font-semibold mb-3">{wl.name}</h3>
+          <div className="flex items-center justify-between mb-3">
+            {editingId === wl.id ? (
+              <div className="flex items-center gap-2 flex-1">
+                <input
+                  autoFocus
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') renameWatchlist(wl.id); if (e.key === 'Escape') setEditingId(null); }}
+                  className="flex-1 px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm font-semibold"
+                />
+                <button onClick={() => renameWatchlist(wl.id)} className="p-1 text-groww-primary hover:opacity-80"><Check className="w-4 h-4" /></button>
+                <button onClick={() => setEditingId(null)} className="p-1 text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+              </div>
+            ) : (
+              <>
+                <h3 className="font-semibold">{wl.name}</h3>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => { setEditingId(wl.id); setEditName(wl.name); }} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition" title="Rename"><Pencil className="w-3.5 h-3.5" /></button>
+                  <button onClick={() => deleteWatchlist(wl.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                </div>
+              </>
+            )}
+          </div>
           {wl.items?.length === 0 && <p className="text-sm text-gray-500">No stocks added</p>}
           <div className="space-y-2">
             {wl.items?.map((item: any) => (

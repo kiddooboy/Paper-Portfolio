@@ -128,4 +128,23 @@ router.delete('/:id/items/:symbol', authMiddleware, async (req: AuthRequest, res
   res.json({ success: true });
 });
 
+router.patch('/:id', authMiddleware, async (req: AuthRequest, res) => {
+  const watchlistId = parseInt(req.params.id);
+  const { name } = req.body;
+  if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
+  const wl = db.prepare('SELECT id FROM watchlists WHERE id = ? AND user_id = ?').get(watchlistId, req.user!.id);
+  if (!wl) return res.status(404).json({ error: 'Not found' });
+  db.prepare('UPDATE watchlists SET name = ? WHERE id = ?').run(name.trim(), watchlistId);
+  res.json({ success: true });
+});
+
+router.delete('/:id', authMiddleware, async (req: AuthRequest, res) => {
+  const watchlistId = parseInt(req.params.id);
+  const wl = db.prepare('SELECT id FROM watchlists WHERE id = ? AND user_id = ?').get(watchlistId, req.user!.id);
+  if (!wl) return res.status(404).json({ error: 'Not found' });
+  db.prepare('DELETE FROM watchlist_items WHERE watchlist_id = ?').run(watchlistId);
+  db.prepare('DELETE FROM watchlists WHERE id = ?').run(watchlistId);
+  res.json({ success: true });
+});
+
 export default router;

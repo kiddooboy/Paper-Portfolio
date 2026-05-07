@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
 import { LayoutDashboard, Search, Wallet, ListOrdered, Bookmark, Trophy, TrendingUp, BarChart3, PieChart, Compass, Newspaper, SlidersHorizontal } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { useAuthStore } from '../store/authStore';
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
