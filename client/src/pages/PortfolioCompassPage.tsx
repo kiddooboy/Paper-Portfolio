@@ -167,7 +167,7 @@ export default function PortfolioCompassPage() {
       {mcResult && !mcLoading && (
         <div className="space-y-5">
           {/* 3 scenario cards */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {([
               { key: 'optimistic'  as const, color: 'text-gain',   gradFrom: '#00B38615', gradTo: '#00B38605', border: 'border-green-200 dark:border-green-800',   ringColor: '#00B386' },
               { key: 'expected'    as const, color: 'text-indigo-600 dark:text-indigo-400', gradFrom: '#6366f115', gradTo: '#6366f105', border: 'border-indigo-200 dark:border-indigo-800', ringColor: '#6366f1' },

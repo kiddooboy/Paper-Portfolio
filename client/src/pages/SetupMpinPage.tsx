@@ -63,10 +63,10 @@ export default function SetupMpinPage() {
           </div>
 
           {/* Dot indicators */}
-          <div className="flex justify-center gap-4">
+          <div className="flex justify-center gap-3">
             {[0, 1, 2, 3].map((i) => (
               <div key={i} className={cn(
-                'w-16 h-16 rounded-xl border-2 flex items-center justify-center text-2xl font-bold transition-all duration-150',
+                'w-12 h-12 sm:w-16 sm:h-16 rounded-xl border-2 flex items-center justify-center text-xl sm:text-2xl font-bold transition-all duration-150',
                 mpin[i] ? 'border-groww-primary bg-groww-primary/10 text-groww-primary scale-105' : 'border-gray-300 dark:border-gray-700'
               )}>
                 {mpin[i] ? (showMpin ? mpin[i] : 'â—') : ''}

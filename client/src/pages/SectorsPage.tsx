@@ -123,20 +123,20 @@ export default function SectorsPage() {
 
         {/* Stats bar */}
         {meta && (
-          <div className="flex gap-3">
-            <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 px-4 py-3 flex-1 text-center">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 px-4 py-3 text-center">
               <p className="text-xs text-gray-400 mb-0.5">Gainers</p>
               <p className="text-lg font-bold text-gain">{meta.gainers}</p>
             </div>
-            <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 px-4 py-3 flex-1 text-center">
+            <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 px-4 py-3 text-center">
               <p className="text-xs text-gray-400 mb-0.5">Losers</p>
               <p className="text-lg font-bold text-loss">{meta.losers}</p>
             </div>
-            <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 px-4 py-3 flex-1 text-center">
+            <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 px-4 py-3 text-center">
               <p className="text-xs text-gray-400 mb-0.5">Unchanged</p>
               <p className="text-lg font-bold text-gray-500">{meta.unchanged}</p>
             </div>
-            <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 px-4 py-3 flex-1 text-center">
+            <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 px-4 py-3 text-center">
               <p className="text-xs text-gray-400 mb-0.5">Live / Total</p>
               <p className="text-lg font-bold">{meta.liveCount}/{meta.totalStocks}</p>
             </div>

@@ -95,7 +95,7 @@ export default function MpinLoginPage() {
           <div className="flex justify-center gap-3">
             {[0, 1, 2, 3].map((i) => (
               <div key={i} className={cn(
-                'w-14 h-14 rounded-xl border-2 flex items-center justify-center text-xl font-bold transition-all duration-150',
+                'w-11 h-11 sm:w-14 sm:h-14 rounded-xl border-2 flex items-center justify-center text-lg sm:text-xl font-bold transition-all duration-150',
                 mpin[i] ? 'border-groww-primary bg-groww-primary/10 text-groww-primary scale-105' : 'border-gray-300 dark:border-gray-700'
               )}>
                 {mpin[i] ? (showMpin ? mpin[i] : 'â—') : ''}

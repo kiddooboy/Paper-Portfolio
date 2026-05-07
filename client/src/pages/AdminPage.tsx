@@ -141,7 +141,7 @@ export default function AdminPage() {
 
       {/* Platform Stats */}
       {stats && (
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <StatCard icon={Users} label="Total Users" value={stats.userCount} />
           <StatCard icon={Activity} label="Active Traders" value={stats.activeTraders} />
           <StatCard icon={DollarSign} label="Total Transactions" value={stats.totalTransactions} />

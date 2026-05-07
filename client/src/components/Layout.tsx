@@ -195,7 +195,7 @@ function ProfileMenu({ dark, onToggleDark }: { dark: boolean; onToggleDark: () =
       </button>
 
       {open && (
-        <div className="absolute right-0 top-12 w-72 bg-white dark:bg-groww-card rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden z-50">
+        <div className="absolute right-0 top-12 w-[min(288px,calc(100vw-1rem))] bg-white dark:bg-groww-card rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden z-50">
           {/* Header */}
           <div className="px-5 py-4 flex items-center justify-between border-b border-gray-100 dark:border-gray-800">
             <div className="flex items-center gap-3 min-w-0">
@@ -334,7 +334,7 @@ function NotificationDropdown() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-12 w-80 bg-white dark:bg-groww-card rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 z-50 overflow-hidden">
+        <div className="absolute right-0 top-12 w-[min(320px,calc(100vw-1rem))] bg-white dark:bg-groww-card rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 z-50 overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
             <div className="flex items-center gap-2">

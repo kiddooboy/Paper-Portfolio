@@ -217,19 +217,19 @@ export default function TerminalPage() {
   return (
     <div className="flex flex-col h-full overflow-hidden bg-gray-50 dark:bg-black">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 sm:px-6 py-3 bg-white dark:bg-groww-card border-b border-gray-100 dark:border-gray-800">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="flex items-center justify-between px-3 sm:px-6 py-2.5 bg-white dark:bg-groww-card border-b border-gray-100 dark:border-gray-800 gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           <button
             onClick={() => navigate(-1)}
-            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 shrink-0"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <StockLogo symbol={symbol} size={48} />
+          <StockLogo symbol={symbol} size={36} />
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="font-bold truncate">{symbol}</h1>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <h1 className="font-bold truncate text-sm sm:text-base">{symbol}</h1>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 shrink-0">
                 {exchange}
               </span>
               <button
@@ -237,27 +237,26 @@ export default function TerminalPage() {
                   const next = exchange === 'NSE' ? 'BSE' : 'NSE';
                   setSearchParams({ exchange: next });
                 }}
-                className="text-[10px] text-groww-primary hover:underline"
+                className="text-[10px] text-groww-primary hover:underline hidden sm:inline"
               >
                 Switch to {exchange === 'NSE' ? 'BSE' : 'NSE'}
               </button>
             </div>
-            <p className="text-xs text-gray-500 truncate">{quote.name}</p>
+            <p className="text-xs text-gray-500 truncate max-w-[120px] sm:max-w-none">{quote.name}</p>
           </div>
         </div>
-        <div className="flex items-center gap-4 flex-shrink-0">
+        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
           <div className="text-right">
-            <p className="text-xl font-bold tabular-nums">{formatCurrency(price)}</p>
+            <p className="text-base sm:text-xl font-bold tabular-nums">{formatCurrency(price)}</p>
             <p
               className={cn(
                 'text-xs font-medium flex items-center justify-end gap-1 tabular-nums',
                 isGain ? 'text-gain' : 'text-loss'
               )}
             >
-              {isGain ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-              {isGain ? '+' : ''}
-              {(quote.change ?? 0).toFixed(2)} ({isGain ? '+' : ''}
-              {(quote.change_percent ?? 0).toFixed(2)}%)
+              {isGain ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+              <span className="hidden sm:inline">{isGain ? '+' : ''}{(quote.change ?? 0).toFixed(2)} </span>
+              ({isGain ? '+' : ''}{(quote.change_percent ?? 0).toFixed(2)}%)
             </p>
           </div>
           <button
@@ -285,9 +284,9 @@ export default function TerminalPage() {
       </div>
 
       {/* Body */}
-      <div className="flex-1 flex flex-col lg:flex-row min-h-0">
+      <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-y-auto lg:overflow-hidden">
         {/* Chart area */}
-        <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
+        <div className="flex-1 flex flex-col min-h-0 lg:overflow-y-auto">
           <div className="flex-1 min-h-[220px] lg:min-h-0 bg-white dark:bg-groww-card border-b lg:border-b-0 lg:border-r border-gray-100 dark:border-gray-800 p-3">
             <StockChart symbol={symbol.toUpperCase()} exchange={exchange} />
           </div>
@@ -561,7 +560,7 @@ export default function TerminalPage() {
 
       {/* Price Alert popover */}
       {alertOpen && (
-        <div className="fixed right-4 top-20 z-50 bg-white dark:bg-groww-card border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-4 w-72">
+        <div className="fixed right-2 sm:right-4 top-20 z-50 bg-white dark:bg-groww-card border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-4 w-[calc(100vw-1rem)] max-w-[288px]">
           <h3 className="font-semibold text-sm mb-2">Set Price Alert — {symbol}</h3>
           <div className="space-y-2">
             <div className="grid grid-cols-2 gap-2">
