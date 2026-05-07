@@ -13,10 +13,7 @@ const QUICK_TOPICS = [
   { label: 'RBI', q: 'RBI+India+monetary+policy' },
 ];
 
-// Uppercase ticker-like pattern — treat as stock symbol for action cards
 const STOCK_RE = /^[A-Z]{2,10}$/;
-
-// Default popular stocks to analyze when no specific symbol is searched
 const DEFAULT_SYMBOLS = ['BSE', 'RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK'];
 
 export default function NewsPage() {
@@ -25,9 +22,7 @@ export default function NewsPage() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setActiveQuery(inputValue.trim());
-    }, 600);
+    const timer = setTimeout(() => setActiveQuery(inputValue.trim()), 600);
     return () => clearTimeout(timer);
   }, [inputValue]);
 
@@ -37,14 +32,13 @@ export default function NewsPage() {
     inputRef.current?.focus();
   };
 
-  // Derive symbols for action cards: searched stock symbol OR default list
   const actionSymbols = useMemo(() => {
     const q = activeQuery.toUpperCase().replace(/[^A-Z]/g, '');
     return STOCK_RE.test(q) ? [q] : DEFAULT_SYMBOLS;
   }, [activeQuery]);
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
+    <div className="space-y-5 max-w-7xl mx-auto">
       {/* Page header */}
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2.5">
@@ -62,7 +56,7 @@ export default function NewsPage() {
       </div>
 
       {/* Search bar */}
-      <div className="relative">
+      <div className="relative max-w-2xl">
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
         <input
           ref={inputRef}
@@ -104,11 +98,16 @@ export default function NewsPage() {
         ))}
       </div>
 
-      {/* AI Trading Signals */}
-      <ActionCards symbols={actionSymbols} />
+      {/* Two-column body: news feed left, AI signals right */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6 items-start">
+        {/* Left — news feed */}
+        <NewsFeed query={activeQuery} />
 
-      {/* News feed */}
-      <NewsFeed query={activeQuery} />
+        {/* Right — AI trading signals (sticky) */}
+        <div className="lg:sticky lg:top-6">
+          <ActionCards symbols={actionSymbols} />
+        </div>
+      </div>
     </div>
   );
 }
