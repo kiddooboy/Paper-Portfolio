@@ -6,6 +6,7 @@ import { useAuthStore } from '../store/authStore';
 import { useMarketStore } from '../store/marketStore';
 import { usePortfolioStore } from '../store/portfolioStore';
 import StockLogo from '../components/StockLogo';
+import AIChatPanel from '../components/AIChatPanel';
 import axios from 'axios';
 
 interface SectorQuote {
@@ -106,7 +107,9 @@ export default function Dashboard() {
   const p = enrichedPortfolio;
 
   return (
-    <div className="space-y-3">
+    <div className="flex gap-3 items-start">
+    {/* ── Left: main dashboard content ── */}
+    <div className="flex-1 min-w-0 space-y-3">
 
       {/* ── Row 1: Investments + Sector Heatmap ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -256,6 +259,13 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+    </div>{/* end left col */}
+
+    {/* ── Right: AI Chat Panel ── */}
+    <div className="hidden xl:flex flex-col w-[360px] shrink-0 sticky top-[107px]" style={{ height: 'calc(100vh - 120px)' }}>
+      <AIChatPanel />
+    </div>
 
     </div>
   );
