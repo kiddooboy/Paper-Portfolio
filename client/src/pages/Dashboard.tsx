@@ -115,52 +115,52 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 shrink-0">
 
         {/* Your Investments */}
-        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
-          <div className="h-1 w-full bg-gain" />
-          <div className="p-4">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Your Investments</p>
+        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden flex flex-col">
+          <div className="h-1 w-full bg-gain shrink-0" />
+          <div className="p-5 flex flex-col flex-1 justify-between">
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Your Investments</p>
 
             {p ? (
               <>
-                <div className="flex items-start justify-between mb-3">
-                  <p className="text-3xl font-bold">{formatCurrency(p.currentValue || 0)}</p>
+                <div className="flex items-start justify-between mb-5">
+                  <p className="text-4xl font-bold tracking-tight">{formatCurrency(p.currentValue || 0)}</p>
                   <div className="text-right">
                     <span className={cn(
-                      'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold',
+                      'inline-flex items-center px-3 py-1.5 rounded-full text-sm font-bold',
                       (p.dayChangePct ?? 0) >= 0
                         ? 'bg-green-100 dark:bg-green-900/30 text-gain'
                         : 'bg-red-100 dark:bg-red-900/20 text-loss'
                     )}>
                       {(p.dayChangePct ?? 0) >= 0 ? '+' : ''}{(p.dayChangePct ?? 0).toFixed(2)}% today
                     </span>
-                    <p className={cn('text-xs font-semibold mt-0.5 tabular-nums', (p.dayChangeTotal ?? 0) >= 0 ? 'text-gain' : 'text-loss')}>
+                    <p className={cn('text-sm font-semibold mt-1 tabular-nums', (p.dayChangeTotal ?? 0) >= 0 ? 'text-gain' : 'text-loss')}>
                       {(p.dayChangeTotal ?? 0) >= 0 ? '+' : ''}{formatCurrency(p.dayChangeTotal ?? 0)}
                     </p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="border-l-2 border-gain pl-3 py-0.5">
-                    <p className="text-[10px] text-gray-400 mb-0.5">Total returns</p>
-                    <p className={cn('text-sm font-bold tabular-nums leading-tight', (p.totalPnl || 0) >= 0 ? 'text-gain' : 'text-loss')}>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="border-l-2 border-gain pl-3 py-1">
+                    <p className="text-xs text-gray-400 mb-1">Total returns</p>
+                    <p className={cn('text-base font-bold tabular-nums leading-tight', (p.totalPnl || 0) >= 0 ? 'text-gain' : 'text-loss')}>
                       {(p.totalPnl || 0) >= 0 ? '+' : ''}{formatCurrency(p.totalPnl || 0)}
                     </p>
-                    <p className={cn('text-[11px] tabular-nums', (p.totalPnl || 0) >= 0 ? 'text-gain' : 'text-loss')}>
+                    <p className={cn('text-xs font-medium tabular-nums', (p.totalPnl || 0) >= 0 ? 'text-gain' : 'text-loss')}>
                       {(p.totalPnlPercent || 0) >= 0 ? '+' : ''}{(p.totalPnlPercent || 0).toFixed(2)}%
                     </p>
                   </div>
-                  <div className="border-l-2 border-gray-300 dark:border-gray-600 pl-3 py-0.5">
-                    <p className="text-[10px] text-gray-400 mb-0.5">Invested</p>
-                    <p className="text-sm font-bold tabular-nums">{formatCurrency(p.investedValue || 0)}</p>
+                  <div className="border-l-2 border-gray-300 dark:border-gray-600 pl-3 py-1">
+                    <p className="text-xs text-gray-400 mb-1">Invested</p>
+                    <p className="text-base font-bold tabular-nums">{formatCurrency(p.investedValue || 0)}</p>
                   </div>
-                  <div className="border-l-2 border-blue-400 pl-3 py-0.5">
-                    <p className="text-[10px] text-gray-400 mb-0.5">Available cash</p>
-                    <p className="text-sm font-bold tabular-nums text-blue-500">{formatCurrency(p.balance || 0)}</p>
+                  <div className="border-l-2 border-blue-400 pl-3 py-1">
+                    <p className="text-xs text-gray-400 mb-1">Available cash</p>
+                    <p className="text-base font-bold tabular-nums text-blue-500">{formatCurrency(p.balance || 0)}</p>
                   </div>
                 </div>
 
                 {p.holdings?.length === 0 && (
-                  <Link to="/market" className="mt-2 inline-flex items-center gap-1 text-xs text-groww-primary font-semibold hover:underline">
+                  <Link to="/market" className="mt-3 inline-flex items-center gap-1 text-sm text-groww-primary font-semibold hover:underline">
                     Explore stocks to invest →
                   </Link>
                 )}
