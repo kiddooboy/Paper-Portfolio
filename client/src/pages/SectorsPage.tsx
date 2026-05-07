@@ -217,13 +217,13 @@ export default function SectorsPage() {
     <div className="space-y-3">
       <div>
         <h1 className="text-xl font-bold">Sector Performance</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">All NSE-listed stocks · Grouped by sector · Market-cap weighted</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">All NSE-listed stocks (~2 000) · 20 sectors · Market-cap weighted</p>
       </div>
 
       {/* Heatmap */}
       {loading ? (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          {Array.from({ length: 10 }).map((_, i) => (
+          {Array.from({ length: 20 }).map((_, i) => (
             <div key={i} className="h-24 rounded-xl bg-gray-200 dark:bg-gray-800 animate-pulse" />
           ))}
         </div>

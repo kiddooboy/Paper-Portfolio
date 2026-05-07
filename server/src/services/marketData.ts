@@ -486,18 +486,30 @@ export async function getIndices(forceRefresh = false): Promise<IndexQuote[]> {
   return fresh;
 }
 
-// ── NSE Sector indices ──
+// ── NSE Sector indices (20 total) ──
 export const SECTOR_INDICES = [
-  { symbol: '^CNXIT',      name: 'IT',           key: 'IT' },
-  { symbol: '^CNXFMCG',    name: 'FMCG',         key: 'FMCG' },
-  { symbol: '^CNXPHARMA',  name: 'Pharma',       key: 'Pharma' },
-  { symbol: '^CNXAUTO',    name: 'Auto',         key: 'Auto' },
-  { symbol: '^CNXMETAL',   name: 'Metal',        key: 'Metal' },
-  { symbol: '^CNXREALTY',  name: 'Realty',       key: 'Realty' },
-  { symbol: '^CNXPSUBANK', name: 'PSU Bank',     key: 'PSU Bank' },
-  { symbol: '^CNXENERGY',  name: 'Energy',       key: 'Energy' },
-  { symbol: '^CNXFINANCE', name: 'Finance',      key: 'Finance' },
-  { symbol: '^CNXINFRA',   name: 'Infra',        key: 'Infra' },
+  // Original 10
+  { symbol: '^CNXIT',          name: 'IT',           key: 'IT' },
+  { symbol: '^CNXFMCG',        name: 'FMCG',         key: 'FMCG' },
+  { symbol: '^CNXPHARMA',      name: 'Pharma',       key: 'Pharma' },
+  { symbol: '^CNXAUTO',        name: 'Auto',         key: 'Auto' },
+  { symbol: '^CNXMETAL',       name: 'Metal',        key: 'Metal' },
+  { symbol: '^CNXREALTY',      name: 'Realty',       key: 'Realty' },
+  { symbol: '^CNXPSUBANK',     name: 'PSU Bank',     key: 'PSU Bank' },
+  { symbol: '^CNXENERGY',      name: 'Energy',       key: 'Energy' },
+  { symbol: '^CNXFINANCE',     name: 'Finance',      key: 'Finance' },
+  { symbol: '^CNXINFRA',       name: 'Infra',        key: 'Infra' },
+  // New 10
+  { symbol: '^NSEBANK',        name: 'Banking',      key: 'Banking' },
+  { symbol: '^CNXHEALTHCARE',  name: 'Healthcare',   key: 'Healthcare' },
+  { symbol: '^CNXMEDIA',       name: 'Media',        key: 'Media' },
+  { symbol: '^CNXMIDCAP',      name: 'Midcap',       key: 'Midcap' },
+  { symbol: '^CNXMNC',         name: 'MNC',          key: 'MNC' },
+  { symbol: '^CNXPSE',         name: 'PSE',          key: 'PSE' },
+  { symbol: '^CNXSERVICE',     name: 'Services',     key: 'Services' },
+  { symbol: '^CNXCONSUMPTION', name: 'Consumption',  key: 'Consumption' },
+  { symbol: '^CNXCOMMODITY',   name: 'Commodities',  key: 'Commodities' },
+  { symbol: '^CNXSMALLCAP',    name: 'Smallcap',     key: 'Smallcap' },
 ];
 
 const sectorCache = new Map<string, { at: number; data: IndexQuote }>();

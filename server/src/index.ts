@@ -167,8 +167,8 @@ async function main() {
   // ── Two-tier market data poller ──
   // Tier 1 (fast): Nifty50 + user-held + user-watched symbols every 5s during
   //                market hours, every 2min when closed.
-  // Tier 2 (slow): Full NIFTY 500 sweep every 5min during market hours,
-  //                every 30min when closed.
+  // Tier 2 (slow): All NSE stocks from DB (~2 000) every 5min during market
+  //                hours, every 30min when closed.
   //
   // Stale-while-revalidate in marketData.ts means old data is served when
   // Yahoo is temporarily unavailable — data never vanishes.
@@ -192,7 +192,7 @@ async function main() {
       const nifty500 = ((await db.prepare(`SELECT symbol FROM stocks WHERE exchange = 'NSE'`).all()) as any[]).map((r) => r.symbol);
       if (!nifty500.length) return;
       const quotes = await getQuotes(nifty500.map((s) => ({ symbol: s, exchange: 'NSE' as const })), true);
-      console.log(`[market] tier2 sweep — ${quotes.length}/${nifty500.length} NIFTY500 cached`);
+      console.log(`[market] tier2 sweep — ${quotes.length}/${nifty500.length} NSE stocks cached`);
     } catch (err: any) {
       console.warn('[market] tier2 poll error:', err?.message ?? err);
     }

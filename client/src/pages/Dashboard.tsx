@@ -187,7 +187,7 @@ export default function Dashboard() {
             ) : (
               <>
                 <div className="grid grid-cols-4 gap-1.5 mb-2">
-                  {sectors.slice(0, 8).map((s) => (
+                  {sectors.slice(0, 12).map((s) => (
                     <Link
                       key={s.name}
                       to="/sectors"
