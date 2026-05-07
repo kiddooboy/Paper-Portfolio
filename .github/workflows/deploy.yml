@@ -32,7 +32,8 @@ jobs:
             git pull
 
             echo "=== [4/5] Build and start containers ==="
-            sudo docker compose down 2>&1 || true
+            sudo docker compose down --remove-orphans 2>&1 || true
+            sudo docker rm -f paper-portfolio-paper-portfolio-1 2>&1 || true
             sudo docker compose up -d --build 2>&1
 
             echo "=== [5/5] Status and logs ==="
