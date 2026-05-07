@@ -17,17 +17,22 @@ jobs:
           key: ${{ secrets.EC2_KEY }}
           script: |
             set -e
-            echo "=== Disk space before ===" && df -h /
             cd ~/Paper-Portfolio
-            echo "=== Git pull ==="
+
+            echo "=== [1/5] Prune Docker to free disk space ==="
+            sudo docker system prune -af || true
+            df -h /
+
+            echo "=== [2/5] Fix any untracked files conflicting with git ==="
+            rm -f .dockerignore
+            git stash --include-untracked 2>/dev/null || true
+
+            echo "=== [3/5] Git pull ==="
             git pull
-            echo "=== Pruning old Docker layers ==="
-            sudo docker system prune -f || true
-            echo "=== Disk space after prune ===" && df -h /
-            echo "=== Building and starting containers ==="
+
+            echo "=== [4/5] Build and start containers ==="
             sudo docker compose up -d --build 2>&1
-            echo "=== Container status ==="
+
+            echo "=== [5/5] Status and logs ==="
             sudo docker compose ps
-            echo "=== Container logs (last 30 lines) ==="
-            sudo docker compose logs --tail=30
-            echo "=== Deploy complete ==="
+            sudo docker compose logs --tail=20
