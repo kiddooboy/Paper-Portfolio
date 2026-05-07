@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { LayoutDashboard, Search, Wallet, ListOrdered, Bookmark, Trophy, TrendingUp, BarChart3, PieChart, Compass, Newspaper, SlidersHorizontal } from 'lucide-react';
+import { LayoutDashboard, Search, ListOrdered, Bookmark, Trophy, TrendingUp, BarChart3, PieChart, Compass, Newspaper, SlidersHorizontal } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 const navItems = [
@@ -13,7 +13,6 @@ const navItems = [
   { path: '/watchlist', label: 'Watchlist', icon: Bookmark },
   { path: '/screener',  label: 'Screener',  icon: SlidersHorizontal },
   { path: '/news',      label: 'News',      icon: Newspaper },
-  { path: '/wallet', label: 'Wallet', icon: Wallet },
   { path: '/leaderboard', label: 'Leaderboard', icon: Trophy },
 ];
 

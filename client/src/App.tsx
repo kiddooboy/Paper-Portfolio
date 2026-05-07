@@ -19,7 +19,6 @@ import AdminPage from './pages/AdminPage';
 import PositionsPage from './pages/PositionsPage';
 import AIChatPage from './pages/AIChatPage';
 import SectorsPage from './pages/SectorsPage';
-import WalletPage from './pages/WalletPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import PortfolioCompassPage from './pages/PortfolioCompassPage';
 import NewsPage from './pages/NewsPage';
@@ -69,7 +68,6 @@ function App() {
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/ai-chat" element={<AIChatPage />} />
-        <Route path="/wallet" element={<WalletPage />} />
         <Route path="/sectors" element={<SectorsPage />} />
         <Route path="/news" element={<NewsPage />} />
         <Route path="/screener" element={<ScreenerPage />} />

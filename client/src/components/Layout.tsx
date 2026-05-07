@@ -9,7 +9,8 @@ import MobileNav from './MobileNav';
 import GlobalSearch from './GlobalSearch';
 import SetMpinModal from './SetMpinModal';
 import IdleLock from './IdleLock';
-import { Bell, TrendingUp, Moon, Sun, ListOrdered, Wallet, BarChart3, LogOut, ChevronRight, User, Check, ShoppingBag, TrendingDown, Info, ShieldCheck } from 'lucide-react';
+import WalletModal from './WalletModal';
+import { Bell, TrendingUp, Moon, Sun, ListOrdered, BarChart3, LogOut, ChevronRight, User, Check, ShoppingBag, TrendingDown, Info, ShieldCheck, Wallet } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 
 export default function Layout() {
@@ -186,6 +187,7 @@ function ProfileMenu({ dark, onToggleDark }: { dark: boolean; onToggleDark: () =
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [walletOpen, setWalletOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -202,7 +204,6 @@ function ProfileMenu({ dark, onToggleDark }: { dark: boolean; onToggleDark: () =
 
   const menuItems = [
     { icon: <ListOrdered className="w-4 h-4" />, label: 'Orders', path: '/orders' },
-    { icon: <Wallet className="w-4 h-4" />, label: 'Wallet', path: '/wallet' },
     { icon: <BarChart3 className="w-4 h-4" />, label: 'Positions', path: '/positions' },
     ...(user?.role === 'admin' ? [{ icon: <ShieldCheck className="w-4 h-4 text-indigo-500" />, label: 'Admin Console', path: '/admin' }] : []),
   ];
@@ -215,6 +216,8 @@ function ProfileMenu({ dark, onToggleDark }: { dark: boolean; onToggleDark: () =
       >
         {initials}
       </button>
+
+      {walletOpen && <WalletModal onClose={() => setWalletOpen(false)} />}
 
       {open && (
         <div className="absolute right-0 top-12 w-72 bg-white dark:bg-groww-card rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden z-50">
@@ -232,12 +235,12 @@ function ProfileMenu({ dark, onToggleDark }: { dark: boolean; onToggleDark: () =
             <User className="w-4 h-4 text-gray-400 shrink-0" />
           </div>
 
-          {/* Balance */}
+          {/* Balance → opens wallet modal */}
           <div className="px-5 py-3.5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
-            onClick={() => { navigate('/wallet'); setOpen(false); }}>
+            onClick={() => { setOpen(false); setWalletOpen(true); }}>
             <div>
-              <p className="text-base font-bold">{formatCurrency(user?.balance ?? 0)}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Available balance</p>
+              <p className="text-base font-bold tabular-nums">{formatCurrency(user?.balance ?? 0)}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1"><Wallet className="w-3 h-3" /> Wallet</p>
             </div>
             <ChevronRight className="w-4 h-4 text-gray-400" />
           </div>
