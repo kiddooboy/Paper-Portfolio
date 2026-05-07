@@ -1,8 +1,7 @@
 import { Link } from 'react-router-dom';
-import { LayoutDashboard, Search, Wallet, ListOrdered, Bookmark, Trophy, ShieldCheck, TrendingUp, BarChart3, PieChart, Compass, Newspaper, SlidersHorizontal } from 'lucide-react';
+import { LayoutDashboard, Search, Wallet, ListOrdered, Bookmark, Trophy, TrendingUp, BarChart3, PieChart, Compass, Newspaper, SlidersHorizontal } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuthStore } from '../store/authStore';
-
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -20,9 +19,6 @@ const navItems = [
 ];
 
 export default function Sidebar({ activePath }: { activePath: string }) {
-  const user = useAuthStore((s) => s.user);
-  const isAdmin = user?.role === 'admin';
-
   return (
     <nav className="p-4 space-y-1">
       {navItems.map((item) => {
@@ -44,23 +40,6 @@ export default function Sidebar({ activePath }: { activePath: string }) {
         );
       })}
 
-      {isAdmin && (
-        <>
-          <div className="border-t border-gray-200 dark:border-gray-700 my-2" />
-          <Link
-            to="/admin"
-            className={cn(
-              'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-              activePath === '/admin'
-                ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400'
-                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
-            )}
-          >
-            <ShieldCheck className="w-5 h-5" />
-            Admin
-          </Link>
-        </>
-      )}
     </nav>
   );
 }

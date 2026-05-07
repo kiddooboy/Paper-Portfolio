@@ -9,7 +9,7 @@ import MobileNav from './MobileNav';
 import GlobalSearch from './GlobalSearch';
 import SetMpinModal from './SetMpinModal';
 import IdleLock from './IdleLock';
-import { Bell, TrendingUp, Moon, Sun, ListOrdered, Wallet, BarChart3, LogOut, ChevronRight, User, Check, ShoppingBag, TrendingDown, Info } from 'lucide-react';
+import { Bell, TrendingUp, Moon, Sun, ListOrdered, Wallet, BarChart3, LogOut, ChevronRight, User, Check, ShoppingBag, TrendingDown, Info, ShieldCheck } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 
 export default function Layout() {
@@ -204,6 +204,7 @@ function ProfileMenu({ dark, onToggleDark }: { dark: boolean; onToggleDark: () =
     { icon: <ListOrdered className="w-4 h-4" />, label: 'Orders', path: '/orders' },
     { icon: <Wallet className="w-4 h-4" />, label: 'Wallet', path: '/wallet' },
     { icon: <BarChart3 className="w-4 h-4" />, label: 'Positions', path: '/positions' },
+    ...(user?.role === 'admin' ? [{ icon: <ShieldCheck className="w-4 h-4 text-indigo-500" />, label: 'Admin Console', path: '/admin' }] : []),
   ];
 
   return (
