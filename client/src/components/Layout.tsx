@@ -100,28 +100,6 @@ export default function Layout() {
       <IdleLock />
       <MobileNav activePath={location.pathname} />
 
-      {/* Floating AI Chat Button — bottom-right (clears mobile tab bar) */}
-      <button
-        onClick={() => navigate('/ai-chat')}
-        className="fixed right-4 bottom-4 max-lg:bottom-20 z-50 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 focus:outline-none"
-        title="AI Assistant"
-        style={{ background: 'linear-gradient(135deg, #6366f1 0%, #00B386 100%)', padding: '14px' }}
-      >
-        <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect x="4" y="7" width="18" height="14" rx="4" fill="white" fillOpacity="0.95"/>
-          <line x1="13" y1="7" x2="13" y2="3" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-          <circle cx="13" cy="2.5" r="1.5" fill="white"/>
-          <circle cx="9.5" cy="13" r="2" fill="#6366f1"/>
-          <circle cx="16.5" cy="13" r="2" fill="#6366f1"/>
-          <circle cx="10.2" cy="12.3" r="0.6" fill="white"/>
-          <circle cx="17.2" cy="12.3" r="0.6" fill="white"/>
-          <rect x="9" y="17" width="2" height="2" rx="0.5" fill="#00B386"/>
-          <rect x="12" y="16" width="2" height="3" rx="0.5" fill="#6366f1"/>
-          <rect x="15" y="15" width="2" height="4" rx="0.5" fill="#00B386"/>
-          <rect x="1.5" y="11" width="2.5" height="5" rx="1.25" fill="white" fillOpacity="0.8"/>
-          <rect x="22" y="11" width="2.5" height="5" rx="1.25" fill="white" fillOpacity="0.8"/>
-        </svg>
-      </button>
     </div>
   );
 }
