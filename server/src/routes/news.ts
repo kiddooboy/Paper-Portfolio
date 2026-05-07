@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getMarketNews, getStockNews, SentimentAnalysis } from '../services/newsService.js';
 import { getCachedQuote } from '../services/marketData.js';
+import { getRawDb } from '../db/index.js';
 
 const router = Router();
 
@@ -36,27 +37,66 @@ export interface ActionItem {
   publisher: string;
 }
 
-// ── Daily accumulator ─────────────────────────────────────────────────────────
-// Signals are merged throughout the day (deduped by article id).
-// At midnight the store resets automatically so every morning starts fresh.
+// ── Daily accumulator (SQLite-persisted) ─────────────────────────────────────
+// Signals are merged throughout the day (deduped by article id) and written to
+// a SQLite table so they survive server restarts and deploys.
+// At midnight IST the store resets automatically for fresh daily signals.
+
 interface DailyStore {
-  date: string;                    // YYYY-MM-DD in Asia/Kolkata
-  items: Map<string, ActionItem>;  // keyed by article id
+  date: string;                   // YYYY-MM-DD in Asia/Kolkata
+  items: Map<string, ActionItem>; // keyed by article id
 }
 
 let dailyStore: DailyStore = { date: '', items: new Map() };
 
 function todayIST(): string {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+}
+
+function ensureSignalsTable(): void {
+  getRawDb().exec(`
+    CREATE TABLE IF NOT EXISTS daily_signals (
+      date    TEXT PRIMARY KEY,
+      signals TEXT NOT NULL DEFAULT '[]'
+    )
+  `);
+}
+
+function loadSignalsFromDb(date: string): Map<string, ActionItem> {
+  ensureSignalsTable();
+  const row = getRawDb()
+    .prepare('SELECT signals FROM daily_signals WHERE date = ?')
+    .get(date) as { signals: string } | undefined;
+  if (!row) return new Map();
+  try {
+    const items = JSON.parse(row.signals) as ActionItem[];
+    return new Map(items.map(i => [i.id, i]));
+  } catch {
+    return new Map();
+  }
+}
+
+function saveSignalsToDb(date: string, items: Map<string, ActionItem>): void {
+  ensureSignalsTable();
+  getRawDb()
+    .prepare(`INSERT INTO daily_signals (date, signals) VALUES (?, ?)
+              ON CONFLICT(date) DO UPDATE SET signals = excluded.signals`)
+    .run(date, JSON.stringify(Array.from(items.values())));
 }
 
 function mergeIntoDaily(incoming: ActionItem[]): ActionItem[] {
   const today = todayIST();
+
+  // Reload from DB whenever the date changes (covers restarts + new days)
   if (dailyStore.date !== today) {
-    // New calendar day — start fresh
-    console.log(`[signals] New day (${today}), resetting daily store`);
-    dailyStore = { date: today, items: new Map() };
+    const restored = loadSignalsFromDb(today);
+    const isNewDay = restored.size === 0;
+    dailyStore = { date: today, items: restored };
+    console.log(isNewDay
+      ? `[signals] New day (${today}), starting fresh`
+      : `[signals] Restored ${restored.size} signals from DB for ${today}`);
   }
+
   let added = 0;
   for (const item of incoming) {
     if (!dailyStore.items.has(item.id)) {
@@ -64,7 +104,11 @@ function mergeIntoDaily(incoming: ActionItem[]): ActionItem[] {
       added++;
     }
   }
-  if (added > 0) console.log(`[signals] +${added} new signals → ${dailyStore.items.size} total today`);
+  if (added > 0) {
+    saveSignalsToDb(today, dailyStore.items);
+    console.log(`[signals] +${added} new → ${dailyStore.items.size} total today`);
+  }
+
   return Array.from(dailyStore.items.values())
     .sort((a, b) => b.impactScore - a.impactScore);
 }
