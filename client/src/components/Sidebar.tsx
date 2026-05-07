@@ -8,7 +8,7 @@ const navItems = [
   { path: '/sectors', label: 'Sectors', icon: PieChart },
   { path: '/portfolio', label: 'Portfolio', icon: TrendingUp },
   { path: '/compass',   label: 'Portfolio Compass', icon: Compass },
-  { path: '/positions', label: 'Positions', icon: BarChart3 },
+  { path: '/positions', label: 'Holdings', icon: BarChart3 },
   { path: '/orders', label: 'Orders', icon: ListOrdered },
   { path: '/watchlist', label: 'Watchlist', icon: Bookmark },
   { path: '/screener',  label: 'Screener',  icon: SlidersHorizontal },

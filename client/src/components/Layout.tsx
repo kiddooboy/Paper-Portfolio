@@ -202,7 +202,7 @@ function ProfileMenu({ dark, onToggleDark }: { dark: boolean; onToggleDark: () =
 
   const menuItems = [
     { icon: <ListOrdered className="w-4 h-4" />, label: 'Orders', path: '/orders' },
-    { icon: <BarChart3 className="w-4 h-4" />, label: 'Positions', path: '/positions' },
+    { icon: <BarChart3 className="w-4 h-4" />, label: 'Holdings', path: '/positions' },
     ...(user?.role === 'admin' ? [{ icon: <ShieldCheck className="w-4 h-4 text-indigo-500" />, label: 'Admin Console', path: '/admin' }] : []),
   ];
 
