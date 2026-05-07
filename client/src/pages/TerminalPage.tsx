@@ -21,7 +21,7 @@ export default function TerminalPage() {
   const [meta, setMeta] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  const [tab, setTab] = useState<'buy' | 'sell'>('buy');
+  const [tab, setTab] = useState<'buy' | 'sell'>((searchParams.get('tab') as 'buy' | 'sell') || 'buy');
   const [baseOrderType, setBaseOrderType] = useState<'MARKET' | 'LIMIT'>('MARKET');
   const [productType, setProductType] = useState<'CNC' | 'MIS'>('CNC');
   const [qty, setQty] = useState('');

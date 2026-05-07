@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { TrendingUp, TrendingDown, X, ExternalLink, Zap, ShieldAlert, Target } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -55,6 +56,7 @@ function ImpactBar({ score }: { score: number }) {
 
 function GroupedModal({ group, onClose }: { group: GroupedItem; onClose: () => void }) {
   const isBuy = group.action === 'BUY';
+  const navigate = useNavigate();
 
   return (
     <div
@@ -143,7 +145,21 @@ function GroupedModal({ group, onClose }: { group: GroupedItem; onClose: () => v
           ))}
         </div>
 
-        <div className="px-5 pb-4 pt-1 shrink-0 border-t border-gray-100 dark:border-gray-800">
+        <div className="px-5 pb-4 pt-3 shrink-0 border-t border-gray-100 dark:border-gray-800 space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => { onClose(); navigate(`/terminal/${group.stock}?exchange=NSE&tab=buy`); }}
+              className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold text-sm transition"
+            >
+              <TrendingUp className="w-4 h-4" /> Buy {group.stock}
+            </button>
+            <button
+              onClick={() => { onClose(); navigate(`/terminal/${group.stock}?exchange=NSE&tab=sell`); }}
+              className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm transition"
+            >
+              <TrendingDown className="w-4 h-4" /> Sell {group.stock}
+            </button>
+          </div>
           <p className="text-[10px] text-gray-400 text-center">For educational purposes only · Not financial advice</p>
         </div>
       </div>
