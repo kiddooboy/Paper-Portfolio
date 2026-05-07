@@ -59,29 +59,30 @@ export default function Layout() {
 
   return (
     <div className={cn('min-h-screen bg-gray-50 dark:bg-groww-dark text-gray-900 dark:text-groww-text transition-colors', dark ? 'dark' : '')}>
-      <header className="sticky top-0 z-50 bg-white/80 dark:bg-groww-dark/80 backdrop-blur border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center gap-4">
-        <div className="flex items-center gap-2 shrink-0">
-          <TrendingUp className="w-6 h-6 text-groww-primary" />
-          <span className="font-bold text-lg tracking-tight hidden sm:inline">Paper Portfolio</span>
-        </div>
-        <MarketBadge />
-        <div className="flex-1 flex justify-center">
-          <GlobalSearch />
-        </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
-            <span className="font-mono">{currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</span>
-            <span className="text-[10px] uppercase tracking-wide">IST</span>
+      <div className="sticky top-0 z-50">
+        <header className="bg-white/95 dark:bg-groww-dark/95 backdrop-blur border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center gap-4">
+          <div className="flex items-center gap-2 shrink-0">
+            <TrendingUp className="w-6 h-6 text-groww-primary" />
+            <span className="font-bold text-lg tracking-tight hidden sm:inline">Paper Portfolio</span>
           </div>
-          <NotificationDropdown />
-          <ProfileMenu dark={dark} onToggleDark={() => setDark(!dark)} />
-        </div>
-      </header>
-
-      <IndexTicker />
+          <MarketBadge />
+          <div className="flex-1 flex justify-center">
+            <GlobalSearch />
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+              <span className="font-mono">{currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</span>
+              <span className="text-[10px] uppercase tracking-wide">IST</span>
+            </div>
+            <NotificationDropdown />
+            <ProfileMenu dark={dark} onToggleDark={() => setDark(!dark)} />
+          </div>
+        </header>
+        <IndexTicker />
+      </div>
 
       <div className="flex">
-        <aside className="hidden lg:block w-60 shrink-0 sticky top-[60px] h-[calc(100vh-60px)] border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-groww-dark overflow-y-auto pb-20">
+        <aside className="hidden lg:block w-60 shrink-0 sticky top-[107px] h-[calc(100vh-107px)] border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-groww-dark overflow-y-auto pb-20">
           <Sidebar activePath={location.pathname} />
         </aside>
 
@@ -161,10 +162,10 @@ function IndexTicker() {
   });
 
   return (
-    <div className="w-full bg-white dark:bg-groww-dark border-b border-gray-200 dark:border-gray-800">
-      <div className="grid grid-cols-6 lg:[grid-template-columns:240px_repeat(5,1fr)] divide-x divide-gray-200 dark:divide-gray-800">
-        {items.map(({ label, price, pct }) => (
-          <div key={label} className="flex flex-col items-center justify-center px-2 py-1.5 min-w-0">
+    <div className="w-full bg-white dark:bg-groww-dark border-b border-gray-200 dark:border-gray-800 overflow-hidden">
+      <div className="grid grid-cols-3 sm:grid-cols-6 lg:[grid-template-columns:240px_repeat(5,1fr)] divide-x divide-gray-200 dark:divide-gray-800">
+        {items.map(({ label, price, pct }, i) => (
+          <div key={label} className={cn('flex flex-col items-center justify-center px-2 py-1.5 min-w-0', i >= 3 ? 'hidden sm:flex' : '')}>
             <div className="flex items-center gap-1 min-w-0">
               <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide truncate">{label}</span>
               {isOpen && price > 0 && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shrink-0" title="Live" />}
