@@ -36,6 +36,39 @@ export interface ActionItem {
   publisher: string;
 }
 
+// ── Daily accumulator ─────────────────────────────────────────────────────────
+// Signals are merged throughout the day (deduped by article id).
+// At midnight the store resets automatically so every morning starts fresh.
+interface DailyStore {
+  date: string;                    // YYYY-MM-DD in Asia/Kolkata
+  items: Map<string, ActionItem>;  // keyed by article id
+}
+
+let dailyStore: DailyStore = { date: '', items: new Map() };
+
+function todayIST(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD
+}
+
+function mergeIntoDaily(incoming: ActionItem[]): ActionItem[] {
+  const today = todayIST();
+  if (dailyStore.date !== today) {
+    // New calendar day — start fresh
+    console.log(`[signals] New day (${today}), resetting daily store`);
+    dailyStore = { date: today, items: new Map() };
+  }
+  let added = 0;
+  for (const item of incoming) {
+    if (!dailyStore.items.has(item.id)) {
+      dailyStore.items.set(item.id, item);
+      added++;
+    }
+  }
+  if (added > 0) console.log(`[signals] +${added} new signals → ${dailyStore.items.size} total today`);
+  return Array.from(dailyStore.items.values())
+    .sort((a, b) => b.impactScore - a.impactScore);
+}
+
 // GET /api/news?category=stocks|markets|economy|ipo|all
 router.get('/', async (req, res) => {
   try {
@@ -119,9 +152,9 @@ router.get('/actions', async (req, res) => {
       });
     });
 
-    // Sort by impact score descending
-    actions.sort((a, b) => b.impactScore - a.impactScore);
-    res.json(actions);
+    // Merge into today's accumulator and return the full day's signals
+    const accumulated = mergeIntoDaily(actions);
+    res.json(accumulated);
   } catch (e: any) {
     res.status(500).json({ error: e?.message || 'Failed to fetch actions' });
   }
