@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Newspaper, Search, X } from 'lucide-react';
 import NewsFeed from '../components/NewsFeed';
+import ActionCards from '../components/ActionCards';
 import { cn } from '../lib/utils';
 
 const QUICK_TOPICS = [
@@ -11,6 +12,12 @@ const QUICK_TOPICS = [
   { label: 'IPO', q: 'IPO+India+2025' },
   { label: 'RBI', q: 'RBI+India+monetary+policy' },
 ];
+
+// Uppercase ticker-like pattern — treat as stock symbol for action cards
+const STOCK_RE = /^[A-Z]{2,10}$/;
+
+// Default popular stocks to analyze when no specific symbol is searched
+const DEFAULT_SYMBOLS = ['BSE', 'RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK'];
 
 export default function NewsPage() {
   const [inputValue, setInputValue] = useState('');
@@ -30,6 +37,12 @@ export default function NewsPage() {
     inputRef.current?.focus();
   };
 
+  // Derive symbols for action cards: searched stock symbol OR default list
+  const actionSymbols = useMemo(() => {
+    const q = activeQuery.toUpperCase().replace(/[^A-Z]/g, '');
+    return STOCK_RE.test(q) ? [q] : DEFAULT_SYMBOLS;
+  }, [activeQuery]);
+
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
       {/* Page header */}
@@ -44,7 +57,7 @@ export default function NewsPage() {
           Market News
         </h1>
         <p className="text-sm text-gray-400 mt-1 ml-11">
-          Real-time Indian market headlines · Google News · Auto-refreshes every 5 min
+          Real-time Indian market headlines · AI trading signals · Auto-refreshes every 5 min
         </p>
       </div>
 
@@ -91,7 +104,10 @@ export default function NewsPage() {
         ))}
       </div>
 
-      {/* Feed */}
+      {/* AI Trading Signals */}
+      <ActionCards symbols={actionSymbols} />
+
+      {/* News feed */}
       <NewsFeed query={activeQuery} />
     </div>
   );

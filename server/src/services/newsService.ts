@@ -8,6 +8,21 @@ const parser = new RSSParser({
   timeout: 8000,
 });
 
+export interface SentimentAnalysis {
+  stock: string;
+  analysis: {
+    sentiment: string;
+    confidence: number;
+    event_type: string;
+    clean_title: string;
+    summary: string;
+    impact_score: number;
+    user_action: string;
+    risk: string;
+  };
+  processed_at: string;
+}
+
 export interface NewsItem {
   id: string;
   title: string;
@@ -18,7 +33,7 @@ export interface NewsItem {
   pubDate: string;
   category: string;
   image?: string;
-  sentiment?: { label: string; score?: number; [key: string]: any };
+  sentiment?: SentimentAnalysis;
 }
 
 const FEEDS = [
@@ -54,7 +69,7 @@ function makeId(title: string, pubDate: string): string {
   return Buffer.from(`${title}${pubDate}`).toString('base64').slice(0, 16);
 }
 
-async function analyzeSentiment(headline: string, stock: string): Promise<NewsItem['sentiment']> {
+async function analyzeSentiment(headline: string, stock: string): Promise<SentimentAnalysis | undefined> {
   try {
     const res = await fetch(SENTIMENT_API_URL, {
       method: 'POST',
@@ -65,7 +80,7 @@ async function analyzeSentiment(headline: string, stock: string): Promise<NewsIt
       body: JSON.stringify({ headline, stock }),
     });
     if (!res.ok) return undefined;
-    return await res.json() as NewsItem['sentiment'];
+    return await res.json() as SentimentAnalysis;
   } catch {
     return undefined;
   }
