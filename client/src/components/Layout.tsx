@@ -88,7 +88,7 @@ export default function Layout() {
 
         <main className={cn(
           'flex-1 w-full min-w-0',
-          location.pathname.startsWith('/terminal')
+          location.pathname.startsWith('/terminal') || location.pathname === '/dashboard'
             ? 'overflow-hidden p-0'
             : 'p-3 sm:p-4 pb-24 lg:pb-4'
         )}>

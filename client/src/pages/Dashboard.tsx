@@ -107,12 +107,12 @@ export default function Dashboard() {
   const p = enrichedPortfolio;
 
   return (
-    <div className="flex gap-3 items-start">
+    <div className="flex gap-3 overflow-hidden p-3" style={{ height: 'calc(100vh - 107px)' }}>
     {/* ── Left: main dashboard content ── */}
-    <div className="flex-1 min-w-0 space-y-3">
+    <div className="flex-1 min-w-0 flex flex-col gap-3 h-full">
 
       {/* ── Row 1: Investments + Sector Heatmap ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 shrink-0">
 
         {/* Your Investments */}
         <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
@@ -210,33 +210,33 @@ export default function Dashboard() {
       </div>
 
       {/* ── Row 2: Gainers | Losers | Most Active ── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 flex-1 min-h-0">
 
-        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-3">
-          <h3 className="text-sm font-semibold flex items-center gap-2 mb-2">
+        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-3 flex flex-col min-h-0">
+          <h3 className="text-sm font-semibold flex items-center gap-2 mb-2 shrink-0">
             <TrendingUp className="w-4 h-4 text-gain" /> Top Gainers
           </h3>
-          <div className="space-y-0.5">
+          <div className="flex-1 overflow-y-auto space-y-0.5">
             {gainers.length === 0 && <p className="text-xs text-gray-400 py-3 text-center">No data yet</p>}
             {gainers.map((s: any) => <StockRow key={s.symbol} s={s} pctColor="gain" />)}
           </div>
         </div>
 
-        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-3">
-          <h3 className="text-sm font-semibold flex items-center gap-2 mb-2">
+        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-3 flex flex-col min-h-0">
+          <h3 className="text-sm font-semibold flex items-center gap-2 mb-2 shrink-0">
             <TrendingDown className="w-4 h-4 text-loss" /> Top Losers
           </h3>
-          <div className="space-y-0.5">
+          <div className="flex-1 overflow-y-auto space-y-0.5">
             {losers.length === 0 && <p className="text-xs text-gray-400 py-3 text-center">No data yet</p>}
             {losers.map((s: any) => <StockRow key={s.symbol} s={s} pctColor="loss" />)}
           </div>
         </div>
 
-        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-3">
-          <h3 className="text-sm font-semibold flex items-center gap-2 mb-2">
+        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-3 flex flex-col min-h-0">
+          <h3 className="text-sm font-semibold flex items-center gap-2 mb-2 shrink-0">
             <TrendingUp className="w-4 h-4 text-blue-500" /> Most Active
           </h3>
-          <div className="space-y-0.5">
+          <div className="flex-1 overflow-y-auto space-y-0.5">
             {mostBought.length === 0 && <p className="text-xs text-gray-400 py-3 text-center">No data yet</p>}
             {mostBought.map((s: any) => (
               <Link key={s.symbol} to={`/terminal/${s.symbol}?exchange=${s.exchange || 'NSE'}`}
@@ -263,7 +263,7 @@ export default function Dashboard() {
     </div>{/* end left col */}
 
     {/* ── Right: AI Chat Panel ── */}
-    <div className="hidden xl:flex flex-col w-[360px] shrink-0 sticky top-[107px]" style={{ height: 'calc(100vh - 120px)' }}>
+    <div className="hidden xl:flex flex-col w-[360px] shrink-0 h-full">
       <AIChatPanel />
     </div>
 
