@@ -508,17 +508,24 @@ interface FiltersPanelProps {
 
 function FiltersPanel({ filters, sectors, updateFilter, toggleSector, onClose }: FiltersPanelProps) {
   return (
-    <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-4 lg:sticky lg:top-[80px]">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-          <Filter className="w-4 h-4" /> Filters
-        </h3>
-        <button onClick={onClose} className="lg:hidden p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded">
-          <X className="w-4 h-4" />
-        </button>
-      </div>
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg bg-white dark:bg-groww-card rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
+          <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            <Filter className="w-4 h-4" /> Filters
+          </h3>
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
 
-      <div className="space-y-4 max-h-[70vh] lg:max-h-[calc(100vh-180px)] overflow-y-auto pr-1">
+      <div className="space-y-4 overflow-y-auto px-5 py-4 flex-1">
         <FilterGroup label="Market Cap (₹ Cr)">
           <RangeInputs
             min={filters.marketCapMin}
@@ -643,6 +650,16 @@ function FiltersPanel({ filters, sectors, updateFilter, toggleSector, onClose }:
           </FilterGroup>
         )}
       </div>
+
+        <div className="px-5 py-4 border-t border-gray-100 dark:border-gray-800 shrink-0">
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition"
+          >
+            Apply Filters
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -761,19 +778,19 @@ function ScreenerTableSection({
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-5">
-        {/* Filters sidebar */}
-        <aside className={cn('lg:block', showFilters ? 'block' : 'hidden')}>
-          <FiltersPanel
-            filters={filters}
-            sectors={screenerData.sectors}
-            updateFilter={updateFilter}
-            toggleSector={toggleSector}
-            onClose={() => onSetShowFilters(false)}
-          />
-        </aside>
+      {/* Filter popup */}
+      {showFilters && (
+        <FiltersPanel
+          filters={filters}
+          sectors={screenerData.sectors}
+          updateFilter={updateFilter}
+          toggleSector={toggleSector}
+          onClose={() => onSetShowFilters(false)}
+        />
+      )}
 
-        {/* Results */}
+      {/* Results */}
+      <div>
         <section className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 dark:border-gray-800">
             <div className="text-sm text-gray-500 dark:text-gray-400">
@@ -793,7 +810,7 @@ function ScreenerTableSection({
             <div className="flex items-center gap-2">
               <button
                 onClick={() => onSetShowFilters(!showFilters)}
-                className="lg:hidden inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-groww-card text-sm font-medium hover:border-indigo-400"
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-groww-card text-sm font-medium hover:border-indigo-400 dark:text-gray-300"
               >
                 <Filter className="w-4 h-4" />
                 Filters
