@@ -89,7 +89,7 @@ export default function StockDetail() {
   const mcapCr = stock.market_cap ? (stock.market_cap / 1e7).toFixed(0) : null;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div className="flex items-center gap-3">

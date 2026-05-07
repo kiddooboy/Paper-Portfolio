@@ -193,9 +193,9 @@ export default function CompanyPage() {
   const isDown = (quote.changePercent ?? 0) < 0;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       {/* Header */}
-      <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-5">
+      <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-4">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-1">
@@ -269,7 +269,7 @@ export default function CompanyPage() {
       {/* Pros & Cons */}
       {(pros.length > 0 || cons.length > 0) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-5">
+          <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-4">
             <h3 className="font-bold text-groww-primary mb-3 flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4" /> PROS
             </h3>
@@ -286,7 +286,7 @@ export default function CompanyPage() {
               </ul>
             )}
           </div>
-          <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-5">
+          <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-4">
             <h3 className="font-bold text-red-500 mb-3 flex items-center gap-2">
               <XCircle className="w-4 h-4" /> CONS
             </h3>
@@ -307,7 +307,7 @@ export default function CompanyPage() {
       )}
 
       {/* Chart */}
-      <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-5">
+      <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-4">
         <h3 className="font-bold mb-3">Price Chart</h3>
         <StockChart symbol={data.symbol} exchange={data.exchange as 'NSE' | 'BSE'} />
       </div>
@@ -408,7 +408,7 @@ function StatementTable({
 function OverviewTab({ data }: { data: FundamentalsResponse }) {
   const { profile, financials, keyStats } = data;
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {profile.summary && (
         <div>
           <h3 className="font-bold mb-2">About</h3>
@@ -604,7 +604,7 @@ function QuarterlyTab({ data }: { data: FundamentalsResponse }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {q.length > 0 && (
         <div>
           <h3 className="font-bold mb-3">Quarterly Income Statement</h3>
@@ -810,7 +810,7 @@ function HoldersTab({ data }: { data: FundamentalsResponse }) {
   const h = data.holders;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div>
         <h3 className="font-bold mb-3">Ownership Breakdown</h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -939,7 +939,7 @@ function AnalystsTab({ data }: { data: FundamentalsResponse }) {
   }, [trend]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div>
         <h3 className="font-bold mb-3 flex items-center gap-2">
           <Target className="w-4 h-4" /> Analyst Targets

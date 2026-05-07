@@ -92,7 +92,7 @@ export default function PortfolioCompassPage() {
   const ps = mcResult?.probability_scores;
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-3">
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div>

@@ -214,7 +214,7 @@ export default function SectorsPage() {
 
   // ── Main sectors view ──
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <div>
         <h1 className="text-xl font-bold">Sector Performance</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">All NSE-listed stocks · Grouped by sector · Market-cap weighted</p>

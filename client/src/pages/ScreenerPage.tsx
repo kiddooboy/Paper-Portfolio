@@ -392,9 +392,9 @@ function ResearchView({
   const isDown = (quote.changePercent ?? 0) < 0;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       {/* Header card */}
-      <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-5">
+      <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-4">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div className="min-w-0">
             <button
@@ -1091,7 +1091,7 @@ export default function ScreenerPage() {
   }, [filters]);
 
   return (
-    <div className="max-w-7xl mx-auto space-y-5">
+    <div className="space-y-3">
       {/* Page header */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>

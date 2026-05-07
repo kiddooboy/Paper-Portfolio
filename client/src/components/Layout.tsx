@@ -85,7 +85,7 @@ export default function Layout() {
           <Sidebar activePath={location.pathname} />
         </aside>
 
-        <main className="flex-1 p-4 sm:p-6 pb-24 lg:pb-6 max-w-6xl mx-auto w-full">
+        <main className="flex-1 p-3 sm:p-4 pb-24 lg:pb-4 w-full min-w-0">
           <Outlet />
         </main>
       </div>

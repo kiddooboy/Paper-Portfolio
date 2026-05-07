@@ -38,7 +38,7 @@ export default function NewsPage() {
   }, [activeQuery]);
 
   return (
-    <div className="space-y-5 max-w-7xl mx-auto">
+    <div className="space-y-3">
       {/* Page header */}
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2.5">

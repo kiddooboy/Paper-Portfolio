@@ -106,20 +106,20 @@ export default function Dashboard() {
   const p = enrichedPortfolio;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
 
       {/* ── Row 1: Investments + Sector Heatmap ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
 
         {/* Your Investments */}
         <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
           <div className="h-1 w-full bg-gain" />
-          <div className="p-5">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Your Investments</p>
+          <div className="p-4">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Your Investments</p>
 
             {p ? (
               <>
-                <div className="flex items-start justify-between mb-4">
+                <div className="flex items-start justify-between mb-3">
                   <p className="text-3xl font-bold">{formatCurrency(p.currentValue || 0)}</p>
                   <div className="text-right">
                     <span className={cn(
@@ -130,14 +130,14 @@ export default function Dashboard() {
                     )}>
                       {(p.dayChangePct ?? 0) >= 0 ? '+' : ''}{(p.dayChangePct ?? 0).toFixed(2)}% today
                     </span>
-                    <p className={cn('text-xs font-semibold mt-1 tabular-nums', (p.dayChangeTotal ?? 0) >= 0 ? 'text-gain' : 'text-loss')}>
+                    <p className={cn('text-xs font-semibold mt-0.5 tabular-nums', (p.dayChangeTotal ?? 0) >= 0 ? 'text-gain' : 'text-loss')}>
                       {(p.dayChangeTotal ?? 0) >= 0 ? '+' : ''}{formatCurrency(p.dayChangeTotal ?? 0)}
                     </p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">
-                  <div className="border-l-2 border-gain pl-3 py-1">
+                  <div className="border-l-2 border-gain pl-3 py-0.5">
                     <p className="text-[10px] text-gray-400 mb-0.5">Total returns</p>
                     <p className={cn('text-sm font-bold tabular-nums leading-tight', (p.totalPnl || 0) >= 0 ? 'text-gain' : 'text-loss')}>
                       {(p.totalPnl || 0) >= 0 ? '+' : ''}{formatCurrency(p.totalPnl || 0)}
@@ -146,24 +146,24 @@ export default function Dashboard() {
                       {(p.totalPnlPercent || 0) >= 0 ? '+' : ''}{(p.totalPnlPercent || 0).toFixed(2)}%
                     </p>
                   </div>
-                  <div className="border-l-2 border-gray-300 dark:border-gray-600 pl-3 py-1">
+                  <div className="border-l-2 border-gray-300 dark:border-gray-600 pl-3 py-0.5">
                     <p className="text-[10px] text-gray-400 mb-0.5">Invested</p>
                     <p className="text-sm font-bold tabular-nums">{formatCurrency(p.investedValue || 0)}</p>
                   </div>
-                  <div className="border-l-2 border-blue-400 pl-3 py-1">
+                  <div className="border-l-2 border-blue-400 pl-3 py-0.5">
                     <p className="text-[10px] text-gray-400 mb-0.5">Available cash</p>
                     <p className="text-sm font-bold tabular-nums text-blue-500">{formatCurrency(p.balance || 0)}</p>
                   </div>
                 </div>
 
                 {p.holdings?.length === 0 && (
-                  <Link to="/market" className="mt-3 inline-flex items-center gap-1 text-xs text-groww-primary font-semibold hover:underline">
+                  <Link to="/market" className="mt-2 inline-flex items-center gap-1 text-xs text-groww-primary font-semibold hover:underline">
                     Explore stocks to invest →
                   </Link>
                 )}
               </>
             ) : (
-              <p className="text-sm text-gray-400 py-6 text-center">Sign in to see your investments</p>
+              <p className="text-sm text-gray-400 py-4 text-center">Sign in to see your investments</p>
             )}
           </div>
         </div>
@@ -171,8 +171,8 @@ export default function Dashboard() {
         {/* Sector Heatmap */}
         <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
           <div className="h-1 w-full bg-blue-500" />
-          <div className="p-5">
-            <div className="flex items-center justify-between mb-3">
+          <div className="p-4">
+            <div className="flex items-center justify-between mb-2">
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Sector Performance · Today</p>
               <Link to="/sectors" className="text-[10px] text-groww-primary font-semibold hover:underline">
                 View all →
@@ -180,18 +180,18 @@ export default function Dashboard() {
             </div>
 
             {sectors.length === 0 ? (
-              <p className="text-sm text-gray-400 py-6 text-center">Loading sector data…</p>
+              <p className="text-sm text-gray-400 py-4 text-center">Loading sector data…</p>
             ) : (
               <>
-                <div className="grid grid-cols-4 gap-1.5 mb-3">
+                <div className="grid grid-cols-4 gap-1.5 mb-2">
                   {sectors.slice(0, 8).map((s) => (
                     <Link
                       key={s.name}
                       to="/sectors"
-                      className={cn('rounded-lg p-2.5 flex flex-col hover:opacity-90 transition', heatColor(s.change_percent))}
+                      className={cn('rounded-lg p-2 flex flex-col hover:opacity-90 transition', heatColor(s.change_percent))}
                     >
                       <p className="text-[11px] font-semibold text-white/90 leading-tight truncate">{s.name}</p>
-                      <p className={cn('text-xs font-bold mt-1', s.change_percent >= 0 ? 'text-green-200' : 'text-red-200')}>
+                      <p className={cn('text-xs font-bold mt-0.5', s.change_percent >= 0 ? 'text-green-200' : 'text-red-200')}>
                         {s.change_percent >= 0 ? '+' : ''}{s.change_percent.toFixed(2)}%
                       </p>
                     </Link>
@@ -207,39 +207,39 @@ export default function Dashboard() {
       </div>
 
       {/* ── Row 2: Gainers | Losers | Most Active ── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
 
-        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-4">
-          <h3 className="text-sm font-semibold flex items-center gap-2 mb-3">
+        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-3">
+          <h3 className="text-sm font-semibold flex items-center gap-2 mb-2">
             <TrendingUp className="w-4 h-4 text-gain" /> Top Gainers
           </h3>
-          <div className="space-y-1">
-            {gainers.length === 0 && <p className="text-xs text-gray-400 py-4 text-center">No data yet</p>}
+          <div className="space-y-0.5">
+            {gainers.length === 0 && <p className="text-xs text-gray-400 py-3 text-center">No data yet</p>}
             {gainers.map((s: any) => <StockRow key={s.symbol} s={s} pctColor="gain" />)}
           </div>
         </div>
 
-        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-4">
-          <h3 className="text-sm font-semibold flex items-center gap-2 mb-3">
+        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-3">
+          <h3 className="text-sm font-semibold flex items-center gap-2 mb-2">
             <TrendingDown className="w-4 h-4 text-loss" /> Top Losers
           </h3>
-          <div className="space-y-1">
-            {losers.length === 0 && <p className="text-xs text-gray-400 py-4 text-center">No data yet</p>}
+          <div className="space-y-0.5">
+            {losers.length === 0 && <p className="text-xs text-gray-400 py-3 text-center">No data yet</p>}
             {losers.map((s: any) => <StockRow key={s.symbol} s={s} pctColor="loss" />)}
           </div>
         </div>
 
-        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-4">
-          <h3 className="text-sm font-semibold flex items-center gap-2 mb-3">
+        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-3">
+          <h3 className="text-sm font-semibold flex items-center gap-2 mb-2">
             <TrendingUp className="w-4 h-4 text-blue-500" /> Most Active
           </h3>
-          <div className="space-y-1">
-            {mostBought.length === 0 && <p className="text-xs text-gray-400 py-4 text-center">No data yet</p>}
+          <div className="space-y-0.5">
+            {mostBought.length === 0 && <p className="text-xs text-gray-400 py-3 text-center">No data yet</p>}
             {mostBought.map((s: any) => (
               <Link key={s.symbol} to={`/terminal/${s.symbol}?exchange=${s.exchange || 'NSE'}`}
-                className="flex items-center justify-between py-2 px-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
+                className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
                 <span className="flex items-center gap-2 min-w-0">
-                  <StockLogo symbol={s.symbol} size={30} />
+                  <StockLogo symbol={s.symbol} size={28} />
                   <div className="min-w-0">
                     <p className="text-sm font-medium truncate">{s.symbol}</p>
                     <p className="text-[11px] text-gray-400">Vol: {formatNumber(s.volume || 0)}</p>
@@ -265,9 +265,9 @@ function StockRow({ s, pctColor }: { s: any; pctColor: 'gain' | 'loss' }) {
   const pct = s.change_percent ?? 0;
   return (
     <Link to={`/terminal/${s.symbol}?exchange=${s.exchange || 'NSE'}`}
-      className="flex items-center justify-between py-2 px-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
+      className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
       <span className="flex items-center gap-2 min-w-0">
-        <StockLogo symbol={s.symbol} size={30} />
+        <StockLogo symbol={s.symbol} size={28} />
         <p className="text-sm font-medium truncate">{s.symbol}</p>
       </span>
       <div className="text-right shrink-0">
