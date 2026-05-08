@@ -7,7 +7,7 @@ import StockLogo from '../components/StockLogo';
 import DatePicker from '../components/DatePicker';
 import { TrendingUp, TrendingDown, ArrowUpRight, Search } from 'lucide-react';
 
-type SortKey = 'symbol' | 'qty' | 'avg' | 'current' | 'pnl' | 'pnl_pct' | 'day_change';
+type SortKey = 'symbol' | 'qty' | 'invested' | 'avg' | 'current' | 'pnl' | 'pnl_pct' | 'day_change';
 type SortDir = 'asc' | 'desc';
 
 export default function PositionsPage() {
@@ -89,6 +89,10 @@ export default function PositionsPage() {
         case 'qty':
           valA = a.quantity;
           valB = b.quantity;
+          break;
+        case 'invested':
+          valA = a.invested;
+          valB = b.invested;
           break;
         case 'avg':
           valA = a.average_price;
@@ -246,6 +250,9 @@ export default function PositionsPage() {
                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800" onClick={() => handleSort('qty')}>
                   Qty {sortKey === 'qty' && (sortDir === 'asc' ? '↑' : '↓')}
                 </th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800" onClick={() => handleSort('invested')}>
+                  Invested {sortKey === 'invested' && (sortDir === 'asc' ? '↑' : '↓')}
+                </th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800" onClick={() => handleSort('current')}>
                   Current {sortKey === 'current' && (sortDir === 'asc' ? '↑' : '↓')}
                 </th>
@@ -263,7 +270,7 @@ export default function PositionsPage() {
             <tbody>
               {filteredPositions.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
                     No positions found
                   </td>
                 </tr>
@@ -280,6 +287,7 @@ export default function PositionsPage() {
                       </Link>
                     </td>
                     <td className="px-4 py-3 text-right font-medium">{position.quantity}</td>
+                    <td className="px-4 py-3 text-right font-medium">{formatCurrency(position.invested)}</td>
                     <td className="px-4 py-3 text-right font-medium">{formatCurrency(position.currentPrice)}</td>
                     <td className={cn('px-4 py-3 text-right font-medium', position.pnl >= 0 ? 'text-green-600' : 'text-red-500')}>
                       {position.pnl >= 0 ? '+' : ''}{formatCurrency(position.pnl)}
