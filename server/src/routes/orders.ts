@@ -13,8 +13,9 @@ const orderSchema = z.object({
   type: z.enum(['MARKET', 'LIMIT', 'SL', 'SL-M']),
   transactionType: z.enum(['BUY', 'SELL']),
   quantity: z.number().int().positive(),
-  limitPrice: z.number().optional(),
-  triggerPrice: z.number().optional(),
+  limitPrice: z.number().positive().optional(),
+  triggerPrice: z.number().positive().optional(),
+  targetPrice: z.number().positive().optional(),
   productType: z.enum(['CNC', 'MIS']).optional().default('CNC'),
 });
 
@@ -26,16 +27,16 @@ const modifySchema = z.object({
 
 router.post('/', authMiddleware, async (req: AuthRequest, res) => {
   try {
-    const { symbol, exchange, type, transactionType, quantity, limitPrice, triggerPrice, productType } = orderSchema.parse(req.body);
+    const { symbol, exchange, type, transactionType, quantity, limitPrice, triggerPrice, targetPrice, productType } = orderSchema.parse(req.body);
     const userId = req.user!.id;
     const ex = exchange ?? 'NSE';
     const upperSymbol = symbol.toUpperCase();
 
-    // Guard: only allow trading NIFTY 500 constituents
+    // Guard: only allow trading known NSE stocks
     const known = await db
       .prepare(`SELECT 1 FROM stocks WHERE symbol = ? AND exchange = 'NSE' LIMIT 1`)
       .get(upperSymbol);
-    if (!known) return res.status(400).json({ error: 'Trading restricted to NIFTY 500 stocks only' });
+    if (!known) return res.status(400).json({ error: 'Trading restricted to NSE-listed stocks only' });
 
     // SL/SL-M require a trigger price
     if ((type === 'SL' || type === 'SL-M') && !triggerPrice) {
@@ -46,12 +47,25 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     if (!quote) return res.status(404).json({ error: 'Stock not found or market data unavailable' });
 
     const currentPrice = quote.price;
-    const orderPrice = type === 'MARKET' ? currentPrice : (limitPrice || triggerPrice || currentPrice);
+
+    // ── Target price semantics ──
+    // SELL + target (no SL trigger): treat as a LIMIT SELL at target price.
+    //   User wants to sell only when price rises to target — hold the order until then.
+    // BUY + target: buy normally; on fill a child SELL LIMIT at target is auto-created (take-profit).
+    let effectiveType = type;
+    let effectiveLimitPrice = limitPrice;
+    if (transactionType === 'SELL' && targetPrice && !triggerPrice) {
+      effectiveType = 'LIMIT';
+      effectiveLimitPrice = targetPrice;
+    }
+
+    const orderPrice = effectiveType === 'MARKET' ? currentPrice : (effectiveLimitPrice || triggerPrice || currentPrice);
     const totalAmount = orderPrice * quantity;
     const marketOpen = isMarketOpen();
 
     let orderId = 0;
     let queued = false;
+    let filledNow = false;
     try {
       await db.transaction(async () => {
         if (transactionType === 'BUY') {
@@ -68,23 +82,30 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
         }
 
         const result = await db.prepare(`
-          INSERT INTO orders (user_id, symbol, type, transaction_type, quantity, price, limit_price, trigger_price, product_type, status)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(userId, upperSymbol, type, transactionType, quantity, orderPrice, limitPrice || null, triggerPrice || null, productType, 'PENDING');
+          INSERT INTO orders (user_id, symbol, type, transaction_type, quantity, price, limit_price, trigger_price, target_price, product_type, status)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(userId, upperSymbol, effectiveType, transactionType, quantity, orderPrice,
+               effectiveLimitPrice || null, triggerPrice || null, targetPrice || null, productType, 'PENDING');
 
         orderId = result.lastInsertRowid as number;
 
-        // Fill immediately only for MARKET orders while market is open
-        if (marketOpen && type === 'MARKET') {
+        if (marketOpen && effectiveType === 'MARKET') {
+          // MARKET orders: fill immediately at current price
           await fillOrder(orderId, userId, upperSymbol, transactionType, quantity, currentPrice);
+          filledNow = true;
+        } else if (marketOpen && (effectiveType === 'LIMIT' || effectiveType === 'SL' || effectiveType === 'SL-M')) {
+          // LIMIT/SL orders: check if condition is already met; fill now if so, otherwise leave PENDING for sweep
+          const conditionMet = checkFillCondition(effectiveType, transactionType, currentPrice, effectiveLimitPrice || null, triggerPrice || null);
+          if (conditionMet) {
+            await fillOrder(orderId, userId, upperSymbol, transactionType, quantity, currentPrice);
+            filledNow = true;
+          }
         } else if (!marketOpen) {
           queued = true;
-          await db.prepare(`
-            INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, 'order')
-          `).run(
+          await db.prepare(`INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, 'order')`).run(
             userId,
             `Order Queued: ${transactionType} ${upperSymbol}`,
-            `Markets are closed. Your ${type} ${transactionType} order for ${quantity} ${upperSymbol} share(s) will execute at next market open (9:15 AM IST).`,
+            `Markets are closed. Your ${effectiveType} ${transactionType} order for ${quantity} ${upperSymbol} share(s) will execute at next market open (9:15 AM IST).`,
           );
         }
       });
@@ -96,17 +117,44 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       success: true,
       orderId,
       queued,
-      status: queued ? 'PENDING' : (marketOpen && type === 'MARKET' ? 'FILLED' : 'PENDING'),
-      message: queued ? 'Markets are closed. Order queued for execution at next market open (9:15 AM IST).' : undefined,
+      status: queued ? 'PENDING' : (filledNow ? 'FILLED' : 'PENDING'),
+      message: queued
+        ? 'Markets are closed. Order queued for execution at next market open (9:15 AM IST).'
+        : undefined,
     });
 
     logActivity(userId, transactionType === 'BUY' ? 'BUY_ORDER' : 'SELL_ORDER' as any, {
-      orderId, symbol: upperSymbol, type, quantity, price: orderPrice, total: totalAmount, queued, productType,
+      orderId, symbol: upperSymbol, type: effectiveType, quantity, price: orderPrice,
+      total: totalAmount, queued, productType, targetPrice,
     }, getClientIp(req));
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Invalid data' });
   }
 });
+
+// Pure function: returns true if a LIMIT/SL/SL-M order's fill condition is already met at currentPrice
+function checkFillCondition(
+  type: string,
+  transactionType: string,
+  currentPrice: number,
+  limitPrice: number | null,
+  triggerPrice: number | null,
+): boolean {
+  if (type === 'LIMIT') {
+    const limit = limitPrice ?? 0;
+    return transactionType === 'BUY' ? currentPrice <= limit : currentPrice >= limit;
+  }
+  if (type === 'SL' || type === 'SL-M') {
+    const trigger = triggerPrice ?? 0;
+    const triggered = transactionType === 'SELL' ? currentPrice <= trigger : currentPrice >= trigger;
+    if (!triggered) return false;
+    if (type === 'SL' && limitPrice) {
+      return transactionType === 'SELL' ? currentPrice >= limitPrice : currentPrice <= limitPrice;
+    }
+    return true;
+  }
+  return false;
+}
 
 // PUT /api/orders/:id — modify a PENDING order
 router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
@@ -191,13 +239,25 @@ export async function fillOrder(orderId: number, userId: number, symbolRaw: stri
 
     await db.prepare(`UPDATE orders SET status = 'FILLED', filled_at = CURRENT_TIMESTAMP WHERE id = ?`).run(orderId);
 
+    // Auto-create take-profit child order: when a BUY with target_price fills,
+    // place a PENDING SELL LIMIT at target so profit books automatically.
+    let targetNote = '';
+    if (transactionType === 'BUY') {
+      const parentOrder = db.prepare('SELECT target_price, product_type FROM orders WHERE id = ?').get(orderId) as any;
+      if (parentOrder?.target_price) {
+        db.prepare(`
+          INSERT INTO orders (user_id, symbol, type, transaction_type, quantity, price, limit_price, product_type, status)
+          VALUES (?, ?, 'LIMIT', 'SELL', ?, ?, ?, ?, 'PENDING')
+        `).run(userId, symbol, quantity, parentOrder.target_price, parentOrder.target_price, parentOrder.product_type || 'CNC');
+        targetNote = ` · Take-profit SELL set at ₹${Number(parentOrder.target_price).toFixed(2)}`;
+      }
+    }
+
     try {
-      await db.prepare(`
-        INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, 'order')
-      `).run(
+      db.prepare(`INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, 'order')`).run(
         userId,
         `Order Filled: ${transactionType} ${symbol}`,
-        `Your ${transactionType} order for ${quantity} shares of ${symbol} has been executed at ₹${price.toFixed(2)}`,
+        `Your ${transactionType} order for ${quantity} shares of ${symbol} has been executed at ₹${price.toFixed(2)}${targetNote}`,
       );
     } catch {}
   });

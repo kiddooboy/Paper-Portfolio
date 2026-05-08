@@ -352,9 +352,10 @@ export async function initSchema() {
   safeExec(`ALTER TABLE users MODIFY COLUMN password TEXT`, 'migration: users.password nullable');
   safeExec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_firebase_uid ON users(firebase_uid) WHERE firebase_uid IS NOT NULL`, 'index: users.firebase_uid');
 
-  // Orders: new columns for SL/SL-M, MIS/CNC
+  // Orders: new columns for SL/SL-M, MIS/CNC, target price
   safeExec(`ALTER TABLE orders ADD COLUMN trigger_price REAL`, 'migration: orders.trigger_price');
   safeExec(`ALTER TABLE orders ADD COLUMN product_type TEXT NOT NULL DEFAULT 'CNC'`, 'migration: orders.product_type');
+  safeExec(`ALTER TABLE orders ADD COLUMN target_price REAL`, 'migration: orders.target_price');
 
   // Stocks: fundamental data columns
   safeExec(`ALTER TABLE stocks ADD COLUMN roe REAL`, 'migration: stocks.roe');

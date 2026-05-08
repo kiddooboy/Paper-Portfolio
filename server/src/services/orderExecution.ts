@@ -13,6 +13,7 @@ interface PendingOrder {
   price: number;
   limit_price: number | null;
   trigger_price: number | null;
+  target_price: number | null;
   product_type: 'CNC' | 'MIS';
   status: string;
 }
