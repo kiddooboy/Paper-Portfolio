@@ -147,36 +147,14 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
   }
 });
 
-// FIFO P&L matching helper — call inside a transaction when selling
-async function recordFifoPnl(userId: number, sellOrderId: number, symbol: string, sellQty: number, sellPrice: number) {
-  // Get FIFO buy transactions for this symbol, oldest first
-  const buyTxns = (await db.prepare(`
-    SELECT t.*, o.id as order_id FROM transactions t
-    LEFT JOIN orders o ON o.id = t.order_id
-    WHERE t.user_id = ? AND t.symbol = ? AND t.type = 'BUY'
-    ORDER BY t.created_at ASC
-  `).all(userId, symbol)) as any[];
-
-  // Get already-matched quantities
-  const matched = (await db.prepare(`
-    SELECT COALESCE(SUM(quantity), 0) as qty FROM trade_pnl WHERE user_id = ? AND symbol = ?
-  `).get(userId, symbol)) as any;
-  let alreadyMatched = Number(matched?.qty || 0);
-
-  let remaining = sellQty;
-  for (const tx of buyTxns) {
-    if (remaining <= 0) break;
-    const available = tx.quantity - alreadyMatched;
-    if (available <= 0) { alreadyMatched = Math.max(0, alreadyMatched - tx.quantity); continue; }
-    alreadyMatched = 0;
-    const matchQty = Math.min(remaining, available);
-    const pnl = (sellPrice - tx.price) * matchQty;
-    await db.prepare(`
-      INSERT INTO trade_pnl (user_id, symbol, buy_order_id, sell_order_id, quantity, buy_price, sell_price, realized_pnl)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(userId, symbol, tx.order_id || null, sellOrderId, matchQty, tx.price, sellPrice, pnl);
-    remaining -= matchQty;
-  }
+// Avg-cost P&L helper — records realized P&L using the holding's weighted average buy price.
+// This keeps realized + unrealized consistent (both use avg_buy_price as cost basis).
+async function recordAvgCostPnl(userId: number, sellOrderId: number, symbol: string, quantity: number, avgBuyPrice: number, sellPrice: number) {
+  const pnl = (sellPrice - avgBuyPrice) * quantity;
+  await db.prepare(`
+    INSERT INTO trade_pnl (user_id, symbol, sell_order_id, quantity, buy_price, sell_price, realized_pnl)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(userId, symbol, sellOrderId, quantity, avgBuyPrice, sellPrice, pnl);
 }
 
 export async function fillOrder(orderId: number, userId: number, symbolRaw: string, transactionType: string, quantity: number, price: number) {
@@ -202,9 +180,8 @@ export async function fillOrder(orderId: number, userId: number, symbolRaw: stri
         const newQty = holding.quantity - quantity;
         if (newQty <= 0) await db.prepare('DELETE FROM holdings WHERE id = ?').run(holding.id);
         else await db.prepare('UPDATE holdings SET quantity = ? WHERE id = ?').run(newQty, holding.id);
+        await recordAvgCostPnl(userId, orderId, symbol, quantity, holding.avg_buy_price, price);
       }
-      // FIFO P&L tracking for sells
-      await recordFifoPnl(userId, orderId, symbol, quantity, price);
     }
 
     await db.prepare(`

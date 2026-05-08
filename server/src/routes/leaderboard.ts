@@ -56,9 +56,9 @@ router.get('/', async (req, res) => {
     // Unrealized P&L (current holdings vs cost)
     const unrealizedPnl = current - invested;
 
-    // Overall P&L = realized (closed trades) + unrealized (open holdings)
-    const overallPnl = realizedTotal + unrealizedPnl;
-    // % return is on the level playing field of starting capital ₹1L
+    // Overall P&L = current portfolio value minus starting capital.
+    // This is always correct regardless of how realized/unrealized are accounted.
+    const overallPnl = portfolioValue - STARTING_CAPITAL;
     const overallPnlPercent = (overallPnl / STARTING_CAPITAL) * 100;
 
     return {

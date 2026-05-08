@@ -119,10 +119,12 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
   const worstPerformer = sorted[sorted.length - 1] || null;
   const biggestHolding = holdings[0] || null; // already sorted by value desc
 
-  // ── Realized P&L — from FIFO trade_pnl table (accurate) ──
+  const STARTING_CAPITAL = 100_000;
+
+  // ── Realized P&L — from avg-cost trade_pnl records ──
   const pnlRow = (await db.prepare(`SELECT COALESCE(SUM(realized_pnl), 0) as total FROM trade_pnl WHERE user_id = ?`).get(userId)) as any;
   const realizedPnl = Number(pnlRow?.total || 0);
-  const unrealizedPnl = totalPnl;
+  const unrealizedPnl = totalPnl; // currentValue - investedValue (open holdings only)
 
   // ── Transactions ──
   const transactions = await db.prepare(`
@@ -164,7 +166,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
     pnlBreakdown: {
       realized: +realizedPnl.toFixed(2),
       unrealized: +unrealizedPnl.toFixed(2),
-      total: +(realizedPnl + unrealizedPnl).toFixed(2),
+      total: +((user.balance + currentValue) - STARTING_CAPITAL).toFixed(2),
     },
     tradeStats: {
       totalBuys: buyStats.count,
