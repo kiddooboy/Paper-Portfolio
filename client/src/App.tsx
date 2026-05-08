@@ -1,39 +1,49 @@
 import { Routes, Route } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import Layout from './components/Layout';
-import Dashboard from './pages/Dashboard';
-import LandingPage from './pages/LandingPage';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import SetupMpinPage from './pages/SetupMpinPage';
-import MpinLoginPage from './pages/MpinLoginPage';
-import MarketExplorer from './pages/MarketExplorer';
-import StockDetail from './pages/StockDetail';
-import TerminalPage from './pages/TerminalPage';
-import PortfolioPage from './pages/PortfolioPage';
-import OrdersPage from './pages/OrdersPage';
-import WatchlistPage from './pages/WatchlistPage';
-import LeaderboardPage from './pages/LeaderboardPage';
-import NotificationsPage from './pages/NotificationsPage';
-import AdminPage from './pages/AdminPage';
-import PositionsPage from './pages/PositionsPage';
-import AIChatPage from './pages/AIChatPage';
-import SectorsPage from './pages/SectorsPage';
-import ForgotPasswordPage from './pages/ForgotPasswordPage';
-import PortfolioCompassPage from './pages/PortfolioCompassPage';
-import NewsPage from './pages/NewsPage';
-import ScreenerPage from './pages/ScreenerPage';
-import CompanyPage from './pages/CompanyPage';
 import { useAuthStore } from './store/authStore';
 import { bootstrap, teardown, installFocusRevalidation } from './store/bootstrap';
+
+// ── Critical path: load eagerly (these pages are hit immediately on first visit) ──
+import LandingPage    from './pages/LandingPage';
+import Login          from './pages/Login';
+import Register       from './pages/Register';
+import MpinLoginPage  from './pages/MpinLoginPage';
+import SetupMpinPage  from './pages/SetupMpinPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+
+// ── All authenticated pages: lazy-load on demand ──
+const Dashboard          = lazy(() => import('./pages/Dashboard'));
+const MarketExplorer     = lazy(() => import('./pages/MarketExplorer'));
+const TerminalPage       = lazy(() => import('./pages/TerminalPage'));
+const StockDetail        = lazy(() => import('./pages/StockDetail'));
+const PortfolioPage      = lazy(() => import('./pages/PortfolioPage'));
+const PortfolioCompassPage = lazy(() => import('./pages/PortfolioCompassPage'));
+const PositionsPage      = lazy(() => import('./pages/PositionsPage'));
+const OrdersPage         = lazy(() => import('./pages/OrdersPage'));
+const WatchlistPage      = lazy(() => import('./pages/WatchlistPage'));
+const LeaderboardPage    = lazy(() => import('./pages/LeaderboardPage'));
+const NotificationsPage  = lazy(() => import('./pages/NotificationsPage'));
+const AdminPage          = lazy(() => import('./pages/AdminPage'));
+const AIChatPage         = lazy(() => import('./pages/AIChatPage'));
+const SectorsPage        = lazy(() => import('./pages/SectorsPage'));
+const NewsPage           = lazy(() => import('./pages/NewsPage'));
+const ScreenerPage       = lazy(() => import('./pages/ScreenerPage'));
+const CompanyPage        = lazy(() => import('./pages/CompanyPage'));
+
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center min-h-[40vh]">
+      <div className="w-8 h-8 border-4 border-groww-primary border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
 
 function App() {
   const hydrated = useAuthStore((s) => s.hydrated);
 
   useEffect(() => {
     if (!hydrated) return;
-    
-    // Always attempt bootstrap on load since we rely on cookies.
     bootstrap().finally(() => {
       useAuthStore.getState().setInitialized();
       if (useAuthStore.getState().isAuthenticated) {
@@ -42,38 +52,39 @@ function App() {
         teardown();
       }
     });
-
     return () => teardown();
   }, [hydrated]);
 
   return (
-    <Routes>
-      <Route path="/" element={<LandingPage />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
-      <Route path="/mpin-login" element={<MpinLoginPage />} />
-      <Route path="/setup-mpin" element={<SetupMpinPage />} />
-      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-      <Route element={<Layout />}>
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/market" element={<MarketExplorer />} />
-        <Route path="/terminal/:symbol" element={<TerminalPage />} />
-        <Route path="/stock/:symbol" element={<StockDetail />} />
-        <Route path="/portfolio" element={<PortfolioPage />} />
-        <Route path="/compass" element={<PortfolioCompassPage />} />
-        <Route path="/positions" element={<PositionsPage />} />
-        <Route path="/orders" element={<OrdersPage />} />
-        <Route path="/watchlist" element={<WatchlistPage />} />
-        <Route path="/leaderboard" element={<LeaderboardPage />} />
-        <Route path="/notifications" element={<NotificationsPage />} />
-        <Route path="/admin" element={<AdminPage />} />
-        <Route path="/ai-chat" element={<AIChatPage />} />
-        <Route path="/sectors" element={<SectorsPage />} />
-        <Route path="/news" element={<NewsPage />} />
-        <Route path="/screener" element={<ScreenerPage />} />
-        <Route path="/company/:symbol" element={<CompanyPage />} />
-      </Route>
-    </Routes>
+    <Suspense fallback={<PageLoader />}>
+      <Routes>
+        <Route path="/"             element={<LandingPage />} />
+        <Route path="/login"        element={<Login />} />
+        <Route path="/register"     element={<Register />} />
+        <Route path="/mpin-login"   element={<MpinLoginPage />} />
+        <Route path="/setup-mpin"   element={<SetupMpinPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route element={<Layout />}>
+          <Route path="/dashboard"       element={<Dashboard />} />
+          <Route path="/market"          element={<MarketExplorer />} />
+          <Route path="/terminal/:symbol" element={<TerminalPage />} />
+          <Route path="/stock/:symbol"   element={<StockDetail />} />
+          <Route path="/portfolio"       element={<PortfolioPage />} />
+          <Route path="/compass"         element={<PortfolioCompassPage />} />
+          <Route path="/positions"       element={<PositionsPage />} />
+          <Route path="/orders"          element={<OrdersPage />} />
+          <Route path="/watchlist"       element={<WatchlistPage />} />
+          <Route path="/leaderboard"     element={<LeaderboardPage />} />
+          <Route path="/notifications"   element={<NotificationsPage />} />
+          <Route path="/admin"           element={<AdminPage />} />
+          <Route path="/ai-chat"         element={<AIChatPage />} />
+          <Route path="/sectors"         element={<SectorsPage />} />
+          <Route path="/news"            element={<NewsPage />} />
+          <Route path="/screener"        element={<ScreenerPage />} />
+          <Route path="/company/:symbol" element={<CompanyPage />} />
+        </Route>
+      </Routes>
+    </Suspense>
   );
 }
 
