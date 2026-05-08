@@ -42,6 +42,8 @@ export default function TerminalPage() {
   const [alertPrice, setAlertPrice] = useState('');
   const [alertCond, setAlertCond] = useState<'above' | 'below'>('above');
 
+  const [holding, setHolding] = useState<{ quantity: number; avg_buy_price: number } | null>(null);
+
   const [bookmarked, setBookmarked] = useState(false);
   const [bookmarkBusy, setBookmarkBusy] = useState(false);
 
@@ -58,6 +60,21 @@ export default function TerminalPage() {
     return () => {
       abort = true;
     };
+  }, [symbol]);
+
+  useEffect(() => {
+    if (!symbol) return;
+    let abort = false;
+    axios.get('/api/portfolio')
+      .then((res) => {
+        if (abort) return;
+        const h = (res.data.holdings || []).find(
+          (h: any) => h.symbol === symbol.toUpperCase()
+        );
+        setHolding(h ? { quantity: Number(h.quantity), avg_buy_price: Number(h.avg_buy_price) } : null);
+      })
+      .catch(() => {});
+    return () => { abort = true; };
   }, [symbol]);
 
   const toggleBookmark = async () => {
@@ -166,9 +183,11 @@ export default function TerminalPage() {
         toast.success(`${tab.toUpperCase()} order ${res.data.status === 'FILLED' ? 'filled' : 'placed'} successfully!`);
       }
       setQty('');
-      // Refresh balance
+      // Refresh balance and holding
       const p = await axios.get('/api/portfolio');
       if (p.data.balance !== undefined) updateBalance(p.data.balance);
+      const h = (p.data.holdings || []).find((h: any) => h.symbol === symbol.toUpperCase());
+      setHolding(h ? { quantity: Number(h.quantity), avg_buy_price: Number(h.avg_buy_price) } : null);
     } catch (e: any) {
       toast.error(e?.response?.data?.error || 'Order failed');
     } finally {
@@ -404,7 +423,18 @@ export default function TerminalPage() {
 
             {/* Quantity */}
             <div>
-              <label className="block text-[11px] uppercase tracking-wide text-gray-400 mb-1.5">Quantity</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-[11px] uppercase tracking-wide text-gray-400">Quantity</label>
+                {tab === 'sell' && holding && holding.quantity > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setQty(String(holding.quantity))}
+                    className="text-[11px] font-medium text-groww-primary hover:underline"
+                  >
+                    Max: {holding.quantity}
+                  </button>
+                )}
+              </div>
               <input
                 type="number"
                 value={qty}
@@ -413,6 +443,16 @@ export default function TerminalPage() {
                 placeholder="0"
                 className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-groww-primary/30 focus:border-groww-primary"
               />
+              {tab === 'sell' && holding && holding.quantity > 0 && (
+                <p className="mt-1.5 text-[11px] text-gray-400">
+                  Holding: <span className="font-semibold text-gray-600 dark:text-gray-300">{holding.quantity} shares</span>
+                  <span className="mx-1">·</span>
+                  Avg <span className="font-semibold text-gray-600 dark:text-gray-300 tabular-nums">{formatCurrency(holding.avg_buy_price)}</span>
+                </p>
+              )}
+              {tab === 'sell' && (!holding || holding.quantity === 0) && (
+                <p className="mt-1.5 text-[11px] text-loss">You don't hold any {symbol} shares.</p>
+              )}
             </div>
 
             {/* Price (Limit only) */}
