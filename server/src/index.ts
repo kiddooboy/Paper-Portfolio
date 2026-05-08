@@ -24,6 +24,7 @@ if (fs.existsSync(envPath)) {
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import compression from 'compression';
 import { initSchema, db, shutdownPool } from './db/index.js';
 import cron from 'node-cron';
 import { getQuote, getQuotes, getIndices, isMarketOpen, NIFTY50 } from './services/marketData.js';
@@ -58,6 +59,9 @@ async function main() {
 
   const app = express();
 
+  // Gzip all responses (JS, CSS, JSON, HTML) — cuts transfer size by ~70%
+  app.use(compression());
+
   app.use(cors({ origin: true, credentials: true }));
   app.use(cookieParser());
   app.use(express.json());
@@ -80,11 +84,20 @@ async function main() {
   // Serve static client build and SPA fallback in production (registered AFTER api routes)
   if (process.env.NODE_ENV === 'production') {
     const clientDistPath = path.join(process.cwd(), 'client', 'dist');
-    app.use(express.static(clientDistPath));
 
-    // SPA fallback: any non-API GET returns index.html
+    // Hashed assets (JS/CSS chunks from Vite) — cache forever, filename changes on update
+    app.use('/assets', express.static(path.join(clientDistPath, 'assets'), {
+      maxAge: '1y',
+      immutable: true,
+    }));
+
+    // Everything else (fonts, favicon, manifest) — cache 1 day
+    app.use(express.static(clientDistPath, { maxAge: '1d' }));
+
+    // SPA fallback: any non-API GET returns index.html (never cached)
     app.get('*', (req, res, next) => {
       if (req.path.startsWith('/api')) return next();
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.sendFile(path.join(clientDistPath, 'index.html'));
     });
   }
