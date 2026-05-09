@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { LayoutDashboard, Search, ListOrdered, Bookmark, Trophy, TrendingUp, BarChart3, PieChart, Compass, Newspaper, SlidersHorizontal, Activity, Layers, Swords, Medal, Repeat, ShoppingBag, Share2, Calendar, Building2, FlaskConical, ChevronDown, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Search, ListOrdered, Bookmark, Trophy, TrendingUp, BarChart3, PieChart, Compass, Newspaper, SlidersHorizontal, Activity, Medal, Repeat, ShoppingBag, Calendar, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useState } from 'react';
 
@@ -12,7 +12,6 @@ const sections = [
       { path: '/market-overview', label: 'Market Overview', icon: Activity },
       { path: '/sectors', label: 'Sectors', icon: PieChart },
       { path: '/earnings', label: 'Earnings Calendar', icon: Calendar },
-      { path: '/fii-dii', label: 'FII / DII', icon: Building2 },
     ],
   },
   {
@@ -22,7 +21,6 @@ const sections = [
       { path: '/compass',   label: 'Portfolio Compass', icon: Compass },
       { path: '/positions', label: 'Holdings', icon: BarChart3 },
       { path: '/orders', label: 'Orders', icon: ListOrdered },
-      { path: '/backtest', label: 'Backtest', icon: FlaskConical },
     ],
   },
   {
@@ -32,16 +30,13 @@ const sections = [
       { path: '/sip', label: 'SIP Simulation', icon: Repeat },
       { path: '/watchlist', label: 'Watchlist', icon: Bookmark },
       { path: '/screener', label: 'Screener', icon: SlidersHorizontal },
-      { path: '/collections', label: 'Collections', icon: Layers },
     ],
   },
   {
     label: 'Social',
     items: [
       { path: '/leaderboard', label: 'Leaderboard', icon: Trophy },
-      { path: '/contests', label: 'Contests', icon: Swords },
       { path: '/achievements', label: 'Achievements', icon: Medal },
-      { path: '/strategies', label: 'Strategies', icon: Share2 },
     ],
   },
   {
