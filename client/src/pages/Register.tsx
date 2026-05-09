@@ -26,7 +26,7 @@ export default function Register() {
       const res = await axios.post('/api/auth/firebase', { idToken });
       login(res.data.user);
       await bootstrap();
-      toast.success('Account created! You got â‚¹1,00,000 virtual balance.');
+      toast.success('Account created! You got ₹1,00,000 virtual balance.');
       navigate('/dashboard');
     } catch (err: any) {
       toast.error(err?.response?.data?.error || 'Google sign-in failed');
@@ -42,7 +42,7 @@ export default function Register() {
       const res = await axios.post('/api/auth/register', { name, email, password });
       login(res.data.user);
       await bootstrap();
-      toast.success('Account created! You got â‚¹1,00,000 virtual balance.');
+      toast.success('Account created! You got ₹1,00,000 virtual balance.');
       navigate(`/setup-mpin?email=${encodeURIComponent(email)}`);
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Registration failed');
@@ -57,7 +57,7 @@ export default function Register() {
         <div className="space-y-1">
           <h1 className="text-3xl font-bold">Create your account</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Start paper trading with â‚¹1,00,000 virtual balance
+            Start paper trading with ₹1,00,000 virtual balance
           </p>
         </div>
 
