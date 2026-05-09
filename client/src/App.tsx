@@ -30,9 +30,7 @@ const SectorsPage        = lazy(() => import('./pages/SectorsPage'));
 const NewsPage           = lazy(() => import('./pages/NewsPage'));
 const ScreenerPage       = lazy(() => import('./pages/ScreenerPage'));
 const CompanyPage        = lazy(() => import('./pages/CompanyPage'));
-const MarketOverviewPage = lazy(() => import('./pages/MarketOverviewPage'));
 const AchievementsPage   = lazy(() => import('./pages/AchievementsPage'));
-const EarningsCalendarPage = lazy(() => import('./pages/EarningsCalendarPage'));
 
 function PageLoader() {
   return (
@@ -85,9 +83,7 @@ function App() {
           <Route path="/news"            element={<NewsPage />} />
           <Route path="/screener"        element={<ScreenerPage />} />
           <Route path="/company/:symbol" element={<CompanyPage />} />
-          <Route path="/market-overview" element={<MarketOverviewPage />} />
           <Route path="/achievements"    element={<AchievementsPage />} />
-          <Route path="/earnings"        element={<EarningsCalendarPage />} />
         </Route>
       </Routes>
     </Suspense>
