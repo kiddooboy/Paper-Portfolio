@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { ArrowLeft, TrendingUp, TrendingDown, Bell, Bookmark, BookmarkCheck, Clock } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Bell, Bookmark, BookmarkCheck, Clock, Zap, Plus, Trash2 } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
 import { useAuthStore } from '../store/authStore';
 import { useMarketStore } from '../store/marketStore';
@@ -595,6 +595,9 @@ export default function TerminalPage() {
               View orders →
             </Link>
           </div>
+
+          {/* GTT Orders panel */}
+          <GTTPanel symbol={symbol.toUpperCase()} price={price} />
         </aside>
       </div>
 
@@ -662,6 +665,113 @@ export default function TerminalPage() {
           onConfirm={() => { setShowSellConfirm(false); placeOrder(); }}
           onCancel={() => setShowSellConfirm(false)}
         />
+      )}
+    </div>
+  );
+}
+
+/* ── GTT Panel ── */
+
+function GTTPanel({ symbol, price }: { symbol: string; price: number }) {
+  const [open, setOpen] = useState(false);
+  const [gtts, setGtts] = useState<any[]>([]);
+  const [form, setForm] = useState({ txType: 'BUY' as 'BUY' | 'SELL', qty: '', trigger: '', limit: '', validTill: '' });
+  const [saving, setSaving] = useState(false);
+
+  const loadGtts = () => axios.get('/api/gtt').then(r => setGtts(r.data)).catch(() => {});
+
+  useEffect(() => { if (open) loadGtts(); }, [open]);
+
+  const createGTT = async () => {
+    if (!form.qty || !form.trigger) { toast.error('Enter quantity and trigger price'); return; }
+    setSaving(true);
+    try {
+      await axios.post('/api/gtt', {
+        symbol,
+        transaction_type: form.txType,
+        quantity: parseInt(form.qty),
+        trigger_price: parseFloat(form.trigger),
+        limit_price: form.limit ? parseFloat(form.limit) : undefined,
+        valid_till: form.validTill || undefined,
+      });
+      toast.success('GTT order created');
+      setForm({ txType: 'BUY', qty: '', trigger: '', limit: '', validTill: '' });
+      loadGtts();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || 'Failed to create GTT');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteGTT = async (id: number) => {
+    try {
+      await axios.delete(`/api/gtt/${id}`);
+      toast.success('GTT cancelled');
+      setGtts(g => g.filter(x => x.id !== id));
+    } catch {
+      toast.error('Failed to cancel GTT');
+    }
+  };
+
+  const symbolGtts = gtts.filter(g => g.symbol === symbol);
+
+  return (
+    <div className="border-t border-gray-100 dark:border-gray-800">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800/60 transition"
+      >
+        <div className="flex items-center gap-2">
+          <Zap className="w-4 h-4 text-violet-500" />
+          <span>GTT Orders</span>
+          {symbolGtts.length > 0 && (
+            <span className="text-[10px] bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400 font-bold px-1.5 py-0.5 rounded-full">{symbolGtts.length}</span>
+          )}
+        </div>
+        <span className="text-gray-400">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 space-y-3">
+          {/* Active GTTs for this symbol */}
+          {symbolGtts.map(g => (
+            <div key={g.id} className="flex items-center justify-between bg-violet-50 dark:bg-violet-900/10 border border-violet-100 dark:border-violet-900/30 rounded-xl px-3 py-2">
+              <div className="text-xs">
+                <span className={cn('font-bold mr-2', g.transaction_type === 'BUY' ? 'text-gain' : 'text-loss')}>{g.transaction_type}</span>
+                <span className="font-medium">{g.quantity} @ ₹{g.trigger_price}</span>
+                {g.gtt_valid_till && <span className="text-gray-400 ml-1">· till {g.gtt_valid_till}</span>}
+              </div>
+              <button onClick={() => deleteGTT(g.id)} className="p-1 text-gray-400 hover:text-red-500 transition">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+          {symbolGtts.length === 0 && <p className="text-xs text-gray-400">No active GTT orders for {symbol}.</p>}
+          {/* Create GTT form */}
+          <div className="border border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-3 space-y-2">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 flex items-center gap-1"><Plus className="w-3 h-3" /> New GTT</p>
+            <div className="flex gap-1">
+              {(['BUY', 'SELL'] as const).map(t => (
+                <button key={t} onClick={() => setForm(f => ({ ...f, txType: t }))}
+                  className={cn('flex-1 py-1.5 text-xs font-semibold rounded-lg transition', form.txType === t ? (t === 'BUY' ? 'bg-gain text-white' : 'bg-loss text-white') : 'bg-gray-100 dark:bg-gray-800 text-gray-500')}>
+                  {t}
+                </button>
+              ))}
+            </div>
+            <input type="number" placeholder="Qty" value={form.qty} onChange={e => setForm(f => ({ ...f, qty: e.target.value }))}
+              className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900" />
+            <input type="number" placeholder={`Trigger price (LTP: ${price.toFixed(2)})`} value={form.trigger} onChange={e => setForm(f => ({ ...f, trigger: e.target.value }))}
+              className="w-full px-3 py-2 text-xs rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-gray-900" />
+            <input type="number" placeholder="Limit price (optional)" value={form.limit} onChange={e => setForm(f => ({ ...f, limit: e.target.value }))}
+              className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900" />
+            <input type="date" value={form.validTill} onChange={e => setForm(f => ({ ...f, validTill: e.target.value }))}
+              className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900" />
+            <button onClick={createGTT} disabled={saving}
+              className="w-full py-2 text-xs font-semibold rounded-lg bg-violet-600 hover:bg-violet-700 text-white transition disabled:opacity-50">
+              {saving ? 'Creating…' : 'Create GTT'}
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

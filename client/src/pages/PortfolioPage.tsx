@@ -11,7 +11,7 @@ import StockLogo from '../components/StockLogo';
 import {
   ArrowUpRight, TrendingUp,
   Shield, Target, Award, AlertTriangle, Activity,
-  BarChart3, PiggyBank, Repeat,
+  BarChart3, PiggyBank, Repeat, Download, Calculator,
 } from 'lucide-react';
 
 const COLORS = ['#00B386', '#6366F1', '#F59E0B', '#EB5B3C', '#10B981', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316'];
@@ -25,8 +25,9 @@ export default function PortfolioPage() {
   const fetchPortfolio = usePortfolioStore((s) => s.fetch);
   const [sortKey, setSortKey] = useState<SortKey>('value');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
-  const [tab, setTab] = useState<'holdings' | 'transactions' | 'pnl'>('holdings');
+  const [tab, setTab] = useState<'holdings' | 'transactions' | 'pnl' | 'capital-gains'>('holdings');
   const [tradePnl, setTradePnl] = useState<{ trades: any[]; totalRealized: number } | null>(null);
+  const [capitalGains, setCapitalGains] = useState<any>(null);
   const allQuotes = useMarketStore((s) => s.quotes);
   const loading = (portfolioLoading && !rawData);
 
@@ -36,7 +37,10 @@ export default function PortfolioPage() {
     if (tab === 'pnl' && !tradePnl) {
       axios.get('/api/portfolio/trade-pnl').then(r => setTradePnl(r.data)).catch(() => {});
     }
-  }, [tab, tradePnl]);
+    if (tab === 'capital-gains' && !capitalGains) {
+      axios.get('/api/portfolio/capital-gains').then(r => setCapitalGains(r.data)).catch(() => {});
+    }
+  }, [tab, tradePnl, capitalGains]);
 
   // Live-enrich holdings from global market store for real-time updates
   const data = useMemo(() => {
@@ -115,7 +119,7 @@ export default function PortfolioPage() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Portfolio value</p>
             <h2 className="text-3xl font-bold">{formatCurrency(data?.currentValue || 0)}</h2>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap">
             <div className="text-right">
               <p className="text-xs text-gray-500 dark:text-gray-400">Total invested</p>
               <p className="font-semibold">{formatCurrency(data?.investedValue || 0)}</p>
@@ -124,6 +128,34 @@ export default function PortfolioPage() {
             <div className="text-right">
               <p className="text-xs text-gray-500 dark:text-gray-400">Available cash</p>
               <p className="font-semibold">{formatCurrency(data?.balance || 0)}</p>
+            </div>
+            {(data as any)?.returns?.xirr != null && (
+              <>
+                <div className="w-px bg-gray-200 dark:bg-gray-700" />
+                <div className="text-right">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 justify-end"><Calculator className="w-3 h-3" />XIRR</p>
+                  <p className={cn('font-semibold', (data as any).returns.xirr >= 0 ? 'text-gain' : 'text-loss')}>{(data as any).returns.xirr >= 0 ? '+' : ''}{(data as any).returns.xirr}%</p>
+                </div>
+              </>
+            )}
+            {(data as any)?.returns?.cagr != null && (
+              <>
+                <div className="w-px bg-gray-200 dark:bg-gray-700" />
+                <div className="text-right">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">CAGR</p>
+                  <p className={cn('font-semibold', (data as any).returns.cagr >= 0 ? 'text-gain' : 'text-loss')}>{(data as any).returns.cagr >= 0 ? '+' : ''}{(data as any).returns.cagr}%</p>
+                </div>
+              </>
+            )}
+            <div className="w-px bg-gray-200 dark:bg-gray-700" />
+            <div className="flex items-center">
+              <div className="flex gap-1">
+                {(['transactions', 'holdings', 'capital-gains'] as const).map(t => (
+                  <a key={t} href={`/api/portfolio/export?type=${t === 'capital-gains' ? 'capital-gains' : t}`} download className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-groww-primary hover:text-groww-primary transition">
+                    <Download className="w-3 h-3" />{t === 'capital-gains' ? 'CG' : t.slice(0, 4).charAt(0).toUpperCase() + t.slice(1, 5)}
+                  </a>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -264,6 +296,9 @@ export default function PortfolioPage() {
               <button onClick={() => setTab('pnl')} className={cn('flex-1 py-3 text-sm font-medium transition', tab === 'pnl' ? 'text-groww-primary border-b-2 border-groww-primary' : 'text-gray-500')}>
                 Realized P&L
               </button>
+              <button onClick={() => setTab('capital-gains')} className={cn('flex-1 py-3 text-sm font-medium transition', tab === 'capital-gains' ? 'text-groww-primary border-b-2 border-groww-primary' : 'text-gray-500')}>
+                Tax / CG
+              </button>
             </div>
 
             {tab === 'holdings' && (
@@ -388,6 +423,67 @@ export default function PortfolioPage() {
                   <div className="flex items-center justify-center py-10">
                     <div className="w-5 h-5 border-2 border-groww-primary border-t-transparent rounded-full animate-spin" />
                   </div>
+                )}
+              </div>
+            )}
+
+            {tab === 'capital-gains' && (
+              <div className="p-4 space-y-4">
+                {!capitalGains ? (
+                  <div className="flex items-center justify-center py-10"><div className="w-5 h-5 border-2 border-groww-primary border-t-transparent rounded-full animate-spin" /></div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {[
+                        { label: 'Short-Term P&L (STCG)', val: capitalGains.stcg, trades: capitalGains.stcgTrades, rate: '15%' },
+                        { label: 'Long-Term P&L (LTCG)', val: capitalGains.ltcg, trades: capitalGains.ltcgTrades, rate: '10%' },
+                        { label: 'STCG Tax (est.)', val: capitalGains.tax?.stcg_tax, isNeg: true },
+                        { label: 'LTCG Tax (est.)', val: capitalGains.tax?.ltcg_tax, isNeg: true },
+                      ].map(c => (
+                        <div key={c.label} className="bg-gray-50 dark:bg-gray-900/40 rounded-xl p-3">
+                          <div className="text-xs text-gray-500 mb-1">{c.label}</div>
+                          <div className={cn('font-bold text-base tabular-nums', c.isNeg ? 'text-loss' : (c.val >= 0 ? 'text-gain' : 'text-loss'))}>
+                            {c.isNeg ? '-' : c.val >= 0 ? '+' : ''}{formatCurrency(Math.abs(c.val || 0))}
+                          </div>
+                          {c.rate && <div className="text-[10px] text-gray-400">Tax rate: {c.rate}</div>}
+                          {c.trades !== undefined && <div className="text-[10px] text-gray-400">{c.trades} trades</div>}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-2.5 text-xs text-amber-700 dark:text-amber-400">
+                      Estimated tax: <strong>{formatCurrency(capitalGains.tax?.total_estimated_tax || 0)}</strong> · LTCG exempt up to ₹1,00,000 · For actual filings consult a tax professional.
+                    </div>
+                    {(capitalGains.breakdown || []).length > 0 && (
+                      <div className="overflow-x-auto max-h-96 overflow-y-auto">
+                        <table className="w-full text-sm">
+                          <thead className="sticky top-0 bg-white dark:bg-groww-card z-10">
+                            <tr className="text-left text-[11px] text-gray-500 uppercase tracking-wider border-b border-gray-100 dark:border-gray-800">
+                              <th className="px-4 py-2.5">Symbol</th>
+                              <th className="px-3 py-2.5">Type</th>
+                              <th className="px-3 py-2.5">Qty</th>
+                              <th className="px-3 py-2.5">Buy</th>
+                              <th className="px-3 py-2.5">Sell</th>
+                              <th className="px-3 py-2.5">P&L</th>
+                              <th className="px-3 py-2.5">Hold Days</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {capitalGains.breakdown.map((t: any, i: number) => (
+                              <tr key={i} className="border-t border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/40">
+                                <td className="px-4 py-2.5 font-medium">{t.symbol}</td>
+                                <td className="px-3 py-2.5"><span className={cn('text-xs font-bold px-2 py-0.5 rounded-full', t.type === 'LTCG' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400')}>{t.type}</span></td>
+                                <td className="px-3 py-2.5 tabular-nums">{t.quantity}</td>
+                                <td className="px-3 py-2.5 tabular-nums">{formatCurrency(t.buy_price)}</td>
+                                <td className="px-3 py-2.5 tabular-nums">{formatCurrency(t.sell_price)}</td>
+                                <td className={cn('px-3 py-2.5 tabular-nums font-semibold', t.realized_pnl >= 0 ? 'text-gain' : 'text-loss')}>{t.realized_pnl >= 0 ? '+' : ''}{formatCurrency(t.realized_pnl)}</td>
+                                <td className="px-3 py-2.5 tabular-nums text-gray-500">{t.hold_days}d</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}

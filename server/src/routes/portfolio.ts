@@ -3,6 +3,27 @@ import { db } from '../db/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { getCachedQuotes, Quote } from '../services/marketData.js';
 
+// Newton-Raphson XIRR implementation
+function xirr(cashflows: { amount: number; date: Date }[], guess = 0.1): number {
+  const maxIter = 100;
+  const tol = 1e-6;
+  let rate = guess;
+  for (let i = 0; i < maxIter; i++) {
+    let f = 0, df = 0;
+    const t0 = cashflows[0].date.getTime();
+    for (const cf of cashflows) {
+      const t = (cf.date.getTime() - t0) / (365.25 * 24 * 3600 * 1000);
+      const denom = Math.pow(1 + rate, t);
+      f += cf.amount / denom;
+      df -= t * cf.amount / (denom * (1 + rate));
+    }
+    const delta = f / df;
+    rate -= delta;
+    if (Math.abs(delta) < tol) return rate;
+  }
+  return rate;
+}
+
 const router = Router();
 
 // ---------------------------------------------------------------------------
@@ -132,6 +153,42 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
   `).get(userId)) as any;
   const totalCapital = user.balance + Number(netBuysRow?.net_buys || 0);
 
+  // ── XIRR / CAGR ──
+  // Build cash-flow series: each BUY is negative (money out), final portfolio value is positive (money in today).
+  const allTxnsForXirr = (await db.prepare(`
+    SELECT type, total_amount, created_at FROM transactions WHERE user_id = ? ORDER BY created_at ASC
+  `).all(userId)) as any[];
+
+  const walletTxns = (await db.prepare(`
+    SELECT type, amount, created_at FROM wallet_transactions WHERE user_id = ? ORDER BY created_at ASC
+  `).all(userId)) as any[];
+
+  let xirr_rate: number | null = null;
+  let cagr: number | null = null;
+  try {
+    const cashflows: { amount: number; date: Date }[] = [];
+    // Wallet deposits are money in (negative from investor's perspective)
+    for (const w of walletTxns) {
+      cashflows.push({ amount: w.type === 'DEPOSIT' ? -Number(w.amount) : Number(w.amount), date: new Date(w.created_at) });
+    }
+    // Current portfolio value is the terminal cash flow (positive)
+    const terminalValue = user.balance + currentValue;
+    if (cashflows.length > 0 && terminalValue > 0) {
+      cashflows.push({ amount: terminalValue, date: new Date() });
+      // Only compute if we have at least one negative (investment) and one positive (current value)
+      const hasInvestment = cashflows.some(c => c.amount < 0);
+      if (hasInvestment) {
+        xirr_rate = xirr(cashflows);
+        // CAGR from first investment date
+        const firstDate = cashflows[0].date;
+        const years = (Date.now() - firstDate.getTime()) / (365.25 * 24 * 3600 * 1000);
+        if (years > 0 && totalCapital > 0) {
+          cagr = Math.pow(terminalValue / totalCapital, 1 / years) - 1;
+        }
+      }
+    }
+  } catch {}
+
   // ── Transactions ──
   const transactions = await db.prepare(`
     SELECT * FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 50
@@ -181,8 +238,224 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
       buyVolume: +(buyStats.total || 0).toFixed(2),
       sellVolume: +(sellStats.total || 0).toFixed(2),
     },
+    returns: {
+      xirr: xirr_rate !== null ? +(xirr_rate * 100).toFixed(2) : null,
+      cagr: cagr !== null ? +(cagr * 100).toFixed(2) : null,
+    },
     transactions,
   });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/portfolio/capital-gains — STCG / LTCG breakdown
+// ---------------------------------------------------------------------------
+router.get('/capital-gains', authMiddleware, async (req: AuthRequest, res) => {
+  const userId = req.user!.id;
+  const trades = (await db.prepare(`
+    SELECT tp.*, t.created_at as buy_date
+    FROM trade_pnl tp
+    LEFT JOIN transactions t ON t.order_id = tp.buy_order_id
+    WHERE tp.user_id = ?
+    ORDER BY tp.closed_at DESC
+  `).all(userId)) as any[];
+
+  let stcg = 0, ltcg = 0, stcgTrades = 0, ltcgTrades = 0;
+  const breakdown: any[] = [];
+
+  for (const trade of trades) {
+    const closeDate = new Date(trade.closed_at);
+    const buyDate = trade.buy_date ? new Date(trade.buy_date) : closeDate;
+    const holdDays = Math.floor((closeDate.getTime() - buyDate.getTime()) / (24 * 3600 * 1000));
+    const isLTCG = holdDays > 365;
+    const pnl = Number(trade.realized_pnl);
+
+    if (isLTCG) { ltcg += pnl; ltcgTrades++; }
+    else { stcg += pnl; stcgTrades++; }
+
+    breakdown.push({
+      symbol: trade.symbol,
+      quantity: trade.quantity,
+      buy_price: trade.buy_price,
+      sell_price: trade.sell_price,
+      realized_pnl: +pnl.toFixed(2),
+      hold_days: holdDays,
+      type: isLTCG ? 'LTCG' : 'STCG',
+      closed_at: trade.closed_at,
+    });
+  }
+
+  // Tax estimates: STCG @ 15%, LTCG @ 10% above ₹1L exemption
+  const ltcgExemption = 100000;
+  const stcgTax = stcg > 0 ? stcg * 0.15 : 0;
+  const ltcgTaxable = Math.max(0, ltcg - ltcgExemption);
+  const ltcgTax = ltcgTaxable * 0.10;
+
+  res.json({
+    stcg: +stcg.toFixed(2),
+    ltcg: +ltcg.toFixed(2),
+    stcgTrades,
+    ltcgTrades,
+    tax: {
+      stcg_tax: +stcgTax.toFixed(2),
+      ltcg_tax: +ltcgTax.toFixed(2),
+      total_estimated_tax: +(stcgTax + ltcgTax).toFixed(2),
+      ltcg_exemption: ltcgExemption,
+    },
+    breakdown,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/portfolio/export — CSV export
+// ---------------------------------------------------------------------------
+router.get('/export', authMiddleware, async (req: AuthRequest, res) => {
+  const userId = req.user!.id;
+  const type = (req.query.type as string) || 'transactions';
+
+  if (type === 'holdings') {
+    const holdings = (await db.prepare(`SELECT * FROM holdings WHERE user_id = ?`).all(userId)) as any[];
+    const rows = [['Symbol', 'Quantity', 'Avg Buy Price', 'Invested Value']];
+    for (const h of holdings) rows.push([h.symbol, h.quantity, h.avg_buy_price.toFixed(2), (h.avg_buy_price * h.quantity).toFixed(2)]);
+    const csv = rows.map(r => r.join(',')).join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="holdings.csv"');
+    return res.send(csv);
+  }
+
+  if (type === 'capital-gains') {
+    const trades = (await db.prepare(`SELECT tp.*, t.created_at as buy_date FROM trade_pnl tp LEFT JOIN transactions t ON t.order_id = tp.buy_order_id WHERE tp.user_id = ? ORDER BY tp.closed_at DESC`).all(userId)) as any[];
+    const rows = [['Symbol', 'Quantity', 'Buy Price', 'Sell Price', 'Realized P&L', 'Type', 'Close Date']];
+    for (const t of trades) {
+      const holdDays = Math.floor((new Date(t.closed_at).getTime() - (t.buy_date ? new Date(t.buy_date).getTime() : new Date(t.closed_at).getTime())) / (24 * 3600 * 1000));
+      rows.push([t.symbol, t.quantity, Number(t.buy_price).toFixed(2), Number(t.sell_price).toFixed(2), Number(t.realized_pnl).toFixed(2), holdDays > 365 ? 'LTCG' : 'STCG', t.closed_at.slice(0, 10)]);
+    }
+    const csv = rows.map(r => r.join(',')).join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="capital_gains.csv"');
+    return res.send(csv);
+  }
+
+  // Default: transactions
+  const transactions = (await db.prepare(`SELECT * FROM transactions WHERE user_id = ? ORDER BY created_at DESC`).all(userId)) as any[];
+  const rows = [['Date', 'Symbol', 'Type', 'Quantity', 'Price', 'Total Amount']];
+  for (const t of transactions) rows.push([t.created_at.slice(0, 10), t.symbol, t.type, t.quantity, Number(t.price).toFixed(2), Number(t.total_amount).toFixed(2)]);
+  const csv = rows.map(r => r.join(',')).join('\n');
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename="transactions.csv"');
+  return res.send(csv);
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/portfolio/risk-metrics — Beta, volatility, correlation
+// ---------------------------------------------------------------------------
+router.get('/risk-metrics', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user!.id;
+    const holdings = (await db.prepare(`SELECT symbol, quantity, avg_buy_price FROM holdings WHERE user_id = ? AND quantity > 0`).all(userId)) as any[];
+    if (!holdings.length) return res.json({ beta: null, volatility: null, correlation: [], sharpe: null });
+
+    // Fetch 90-day history from portfolio_history
+    const history = (await db.prepare(`
+      SELECT total_value, recorded_at FROM portfolio_history WHERE user_id = ? ORDER BY recorded_at ASC LIMIT 90
+    `).all(userId)) as any[];
+
+    let portfolioVolatility: number | null = null;
+    let sharpe: number | null = null;
+
+    if (history.length >= 5) {
+      const returns: number[] = [];
+      for (let i = 1; i < history.length; i++) {
+        const prev = Number(history[i - 1].total_value);
+        const curr = Number(history[i].total_value);
+        if (prev > 0) returns.push((curr - prev) / prev);
+      }
+      if (returns.length > 0) {
+        const mean = returns.reduce((s, r) => s + r, 0) / returns.length;
+        const variance = returns.reduce((s, r) => s + (r - mean) ** 2, 0) / returns.length;
+        portfolioVolatility = +(Math.sqrt(variance * 252) * 100).toFixed(2); // Annualized
+        const riskFreeDaily = 0.065 / 252; // 6.5% RBI repo rate
+        sharpe = returns.length > 0 ? +((mean - riskFreeDaily) / Math.sqrt(variance) * Math.sqrt(252)).toFixed(2) : null;
+      }
+    }
+
+    // Per-holding weights
+    const quotes = getCachedQuotes(holdings.map(h => ({ symbol: h.symbol, exchange: 'NSE' as const })));
+    const qMap = new Map(quotes.map(q => [q.symbol, q]));
+    let totalValue = 0;
+    for (const h of holdings) totalValue += (qMap.get(h.symbol)?.price ?? h.avg_buy_price) * h.quantity;
+
+    const holdingWeights = holdings.map(h => ({
+      symbol: h.symbol,
+      weight: totalValue > 0 ? +((qMap.get(h.symbol)?.price ?? h.avg_buy_price) * h.quantity / totalValue * 100).toFixed(2) : 0,
+      price: qMap.get(h.symbol)?.price ?? h.avg_buy_price,
+    }));
+
+    res.json({
+      volatility: portfolioVolatility,
+      sharpe,
+      holdingWeights,
+      holdings_count: holdings.length,
+      note: 'Beta vs Nifty 50 requires extended historical price data. Volatility is annualized from portfolio history.',
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/portfolio/backtest — Replay historical prices against current allocation
+// ---------------------------------------------------------------------------
+router.get('/backtest', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user!.id;
+    const initialCapital = Number(req.query.capital || 100000);
+    const range = (req.query.range as string) || '1y';
+
+    const holdings = (await db.prepare(`SELECT symbol, quantity, avg_buy_price FROM holdings WHERE user_id = ? AND quantity > 0`).all(userId)) as any[];
+    if (!holdings.length) return res.json({ snapshots: [], message: 'No holdings to backtest' });
+
+    // Use portfolio_history as proxy for backtest (actual historical prices require Yahoo Finance historical API)
+    const cutoffMap: Record<string, string> = {
+      '1m': "datetime('now', '-30 days')",
+      '3m': "datetime('now', '-90 days')",
+      '6m': "datetime('now', '-180 days')",
+      '1y': "datetime('now', '-365 days')",
+    };
+    const cutoff = cutoffMap[range] || cutoffMap['1y'];
+
+    const history = (await db.prepare(`
+      SELECT total_value, cash_balance, recorded_at FROM portfolio_history
+      WHERE user_id = ? AND recorded_at >= ${cutoff}
+      ORDER BY recorded_at ASC LIMIT 365
+    `).all(userId)) as any[];
+
+    // Calculate invested capital at each point from wallet transactions
+    const walletTxns = (await db.prepare(`SELECT type, amount, created_at FROM wallet_transactions WHERE user_id = ? ORDER BY created_at ASC`).all(userId)) as any[];
+
+    let cumulativeCapital = 0;
+    const snapshots = history.map(h => {
+      const date = h.recorded_at;
+      for (const w of walletTxns) {
+        if (w.created_at <= date) {
+          cumulativeCapital += w.type === 'DEPOSIT' ? Number(w.amount) : -Number(w.amount);
+        }
+      }
+      const portfolioValue = Number(h.total_value);
+      const pnl = cumulativeCapital > 0 ? portfolioValue - cumulativeCapital : 0;
+      const pnlPct = cumulativeCapital > 0 ? (pnl / cumulativeCapital) * 100 : 0;
+      return {
+        date: date.slice(0, 10),
+        portfolio_value: +portfolioValue.toFixed(2),
+        invested_capital: +Math.max(0, cumulativeCapital).toFixed(2),
+        pnl: +pnl.toFixed(2),
+        pnl_percent: +pnlPct.toFixed(2),
+      };
+    });
+
+    res.json({ snapshots, initial_capital: initialCapital, range });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
 });
 
 // ---------------------------------------------------------------------------

@@ -16,7 +16,9 @@ const orderSchema = z.object({
   limitPrice: z.number().positive().optional(),
   triggerPrice: z.number().positive().optional(),
   targetPrice: z.number().positive().optional(),
+  stopLossPrice: z.number().positive().optional(), // bracket order SL leg
   productType: z.enum(['CNC', 'MIS']).optional().default('CNC'),
+  is_amo: z.boolean().optional().default(false),
 });
 
 const modifySchema = z.object({
@@ -27,7 +29,7 @@ const modifySchema = z.object({
 
 router.post('/', authMiddleware, async (req: AuthRequest, res) => {
   try {
-    const { symbol, exchange, type, transactionType, quantity, limitPrice, triggerPrice, targetPrice, productType } = orderSchema.parse(req.body);
+    const { symbol, exchange, type, transactionType, quantity, limitPrice, triggerPrice, targetPrice, stopLossPrice, productType, is_amo } = orderSchema.parse(req.body);
     const userId = req.user!.id;
     const ex = exchange ?? 'NSE';
     const upperSymbol = symbol.toUpperCase();
@@ -82,10 +84,10 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
         }
 
         const result = await db.prepare(`
-          INSERT INTO orders (user_id, symbol, type, transaction_type, quantity, price, limit_price, trigger_price, target_price, product_type, status)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO orders (user_id, symbol, type, transaction_type, quantity, price, limit_price, trigger_price, target_price, product_type, is_amo, status)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(userId, upperSymbol, effectiveType, transactionType, quantity, orderPrice,
-               effectiveLimitPrice || null, triggerPrice || null, targetPrice || null, productType, 'PENDING');
+               effectiveLimitPrice || null, triggerPrice || null, targetPrice || null, productType, is_amo ? 1 : 0, 'PENDING');
 
         orderId = result.lastInsertRowid as number;
 
@@ -239,17 +241,26 @@ export async function fillOrder(orderId: number, userId: number, symbolRaw: stri
 
     await db.prepare(`UPDATE orders SET status = 'FILLED', filled_at = CURRENT_TIMESTAMP WHERE id = ?`).run(orderId);
 
-    // Auto-create take-profit child order: when a BUY with target_price fills,
-    // place a PENDING SELL LIMIT at target so profit books automatically.
+    // Auto-create take-profit and/or stop-loss child orders when a BUY fills (bracket order)
     let targetNote = '';
     if (transactionType === 'BUY') {
-      const parentOrder = db.prepare('SELECT target_price, product_type FROM orders WHERE id = ?').get(orderId) as any;
+      const parentOrder = db.prepare('SELECT target_price, trigger_price, product_type FROM orders WHERE id = ?').get(orderId) as any;
       if (parentOrder?.target_price) {
         db.prepare(`
-          INSERT INTO orders (user_id, symbol, type, transaction_type, quantity, price, limit_price, product_type, status)
-          VALUES (?, ?, 'LIMIT', 'SELL', ?, ?, ?, ?, 'PENDING')
-        `).run(userId, symbol, quantity, parentOrder.target_price, parentOrder.target_price, parentOrder.product_type || 'CNC');
-        targetNote = ` · Take-profit SELL set at ₹${Number(parentOrder.target_price).toFixed(2)}`;
+          INSERT INTO orders (user_id, symbol, type, transaction_type, quantity, price, limit_price, product_type, parent_order_id, status)
+          VALUES (?, ?, 'LIMIT', 'SELL', ?, ?, ?, ?, ?, 'PENDING')
+        `).run(userId, symbol, quantity, parentOrder.target_price, parentOrder.target_price, parentOrder.product_type || 'CNC', orderId);
+        targetNote += ` · Take-profit SELL @ ₹${Number(parentOrder.target_price).toFixed(2)}`;
+      }
+      // Bracket SL leg: if a stop_loss_price was stored via trigger_price on the parent BUY LIMIT/MARKET
+      // We use a second trigger_price field as the SL for bracket. Stored in parent as trigger_price when type is MARKET/LIMIT (unusual - indicates bracket).
+      if (parentOrder?.trigger_price && parentOrder.target_price) {
+        // Both target AND trigger present on a BUY = bracket order
+        db.prepare(`
+          INSERT INTO orders (user_id, symbol, type, transaction_type, quantity, price, trigger_price, product_type, parent_order_id, status)
+          VALUES (?, ?, 'SL-M', 'SELL', ?, ?, ?, ?, ?, 'PENDING')
+        `).run(userId, symbol, quantity, parentOrder.trigger_price, parentOrder.trigger_price, parentOrder.product_type || 'CNC', orderId);
+        targetNote += ` · Stop-loss SELL @ ₹${Number(parentOrder.trigger_price).toFixed(2)}`;
       }
     }
 

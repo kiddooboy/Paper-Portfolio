@@ -128,10 +128,20 @@ export default function OrdersPage() {
               {o.product_type}
             </span>
           )}
+          {o.is_amo === 1 && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">AMO</span>
+          )}
+          {o.is_gtt === 1 && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">GTT</span>
+          )}
+          {o.parent_order_id && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400">Bracket</span>
+          )}
         </div>
         <p className="text-sm text-gray-500 mt-1">Qty: {o.quantity} @ {formatCurrency(o.price)}</p>
         {o.limit_price && <p className="text-xs text-gray-400">Limit: {formatCurrency(o.limit_price)}</p>}
         {o.trigger_price && <p className="text-xs text-amber-500">Trigger: {formatCurrency(o.trigger_price)}</p>}
+        {o.is_gtt === 1 && o.gtt_valid_till && <p className="text-xs text-violet-500">GTT valid till: {o.gtt_valid_till}</p>}
         <p className="text-xs text-gray-400">
           {o.status === 'FILLED' && o.filled_at
             ? `Filled: ${new Date(o.filled_at).toLocaleString()}`

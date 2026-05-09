@@ -2,6 +2,7 @@ import { db } from '../db/index.js';
 import { getCachedQuote, isMarketOpen } from './marketData.js';
 import { fillOrder } from '../routes/orders.js';
 import { logActivity } from './activityLogger.js';
+import { executeDueSIPs } from '../routes/sip.js';
 
 interface PendingOrder {
   id: number;
@@ -75,6 +76,34 @@ async function tryFillOrder(order: PendingOrder, currentPrice: number): Promise<
   return true;
 }
 
+// Smart holdings alerts: notify if a held stock moves >5% in a day
+function checkSmartHoldingsAlerts(symbol: string, currentPrice: number, previousClose: number) {
+  if (!previousClose || previousClose <= 0) return;
+  const changePct = ((currentPrice - previousClose) / previousClose) * 100;
+  if (Math.abs(changePct) < 5) return;
+
+  const holders = db.prepare(`
+    SELECT h.user_id, h.quantity, h.avg_buy_price FROM holdings h WHERE h.symbol = ?
+  `).all(symbol) as any[];
+
+  for (const h of holders) {
+    const gain = (currentPrice - Number(h.avg_buy_price)) * Number(h.quantity);
+    const direction = changePct > 0 ? '▲' : '▼';
+    // Throttle: only send once per hour per user-symbol
+    const recentAlert = db.prepare(`
+      SELECT 1 FROM notifications WHERE user_id = ? AND title LIKE ? AND created_at >= datetime('now', '-1 hour') LIMIT 1
+    `).get(h.user_id, `%${symbol}%`);
+    if (recentAlert) continue;
+
+    notify(
+      h.user_id,
+      `${direction} ${symbol} moved ${changePct > 0 ? '+' : ''}${changePct.toFixed(1)}% today`,
+      `${symbol} is now ₹${currentPrice.toFixed(2)}. Your ${h.quantity} shares have a total P&L of ₹${gain.toFixed(2)}.`,
+      'system'
+    );
+  }
+}
+
 // Check price alerts for a given symbol and trigger any that are met
 function checkPriceAlerts(symbol: string, currentPrice: number) {
   const alerts = db.prepare(`SELECT * FROM price_alerts WHERE symbol = ? AND triggered = 0`).all(symbol) as any[];
@@ -103,6 +132,9 @@ async function sweepPendingOrders(label: string) {
     if (q && q.price > 0) {
       priceMap.set(sym, q.price);
       checkPriceAlerts(sym, q.price);
+      if (q.previous_close && q.previous_close > 0) {
+        checkSmartHoldingsAlerts(sym, q.price, q.previous_close);
+      }
     }
   }
 
@@ -278,6 +310,7 @@ export function startOrderExecutionScheduler() {
 
   intradayInterval = setInterval(() => {
     executePendingOrdersIntraday().catch((err) => console.error('[OrderExecution] intraday error:', err));
+    executeDueSIPs().catch((err) => console.error('[OrderExecution] SIP execution error:', err));
   }, 60_000);
 
   if (isMarketOpen()) {

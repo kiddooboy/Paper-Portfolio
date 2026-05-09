@@ -24,6 +24,9 @@ export default function StockDetail() {
   const [alertPrice, setAlertPrice] = useState('');
   const [showSellConfirm, setShowSellConfirm] = useState(false);
   const [alertCond, setAlertCond] = useState<'above' | 'below'>('above');
+  const [researchTab, setResearchTab] = useState<'financials' | 'analyst' | 'shareholding' | 'peers' | null>(null);
+  const [researchData, setResearchData] = useState<Record<string, any>>({});
+  const [researchLoading, setResearchLoading] = useState<string | null>(null);
   const balance = useAuthStore((s) => s.user?.balance || 0);
   const marketStatus = useMarketStore((s) => s.status);
   const isMarketClosed = marketStatus ? !marketStatus.isOpen : false;
@@ -60,6 +63,24 @@ export default function StockDetail() {
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Order failed');
     }
+  };
+
+  const loadResearch = async (tab: string) => {
+    if (researchData[tab] !== undefined) return;
+    setResearchLoading(tab);
+    try {
+      const res = await axios.get(`/api/research/${symbol}/${tab}`);
+      setResearchData(r => ({ ...r, [tab]: res.data }));
+    } catch {
+      setResearchData(r => ({ ...r, [tab]: null }));
+    } finally {
+      setResearchLoading(null);
+    }
+  };
+
+  const handleResearchTab = (t: typeof researchTab) => {
+    setResearchTab(t);
+    if (t) loadResearch(t);
   };
 
   const setAlert = async () => {
@@ -232,6 +253,39 @@ export default function StockDetail() {
         </div>
       )}
 
+      {/* Research Tabs */}
+      <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden">
+        <div className="flex border-b border-gray-100 dark:border-gray-800">
+          {(['financials', 'analyst', 'shareholding', 'peers'] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => handleResearchTab(t)}
+              className={cn(
+                'flex-1 py-3 text-sm font-medium capitalize transition border-b-2',
+                researchTab === t
+                  ? 'border-groww-primary text-groww-primary'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+              )}
+            >
+              {t === 'shareholding' ? 'Holding' : t.charAt(0).toUpperCase() + t.slice(1)}
+            </button>
+          ))}
+        </div>
+        {researchTab && (
+          <div className="p-5">
+            {researchLoading === researchTab ? (
+              <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-groww-primary border-t-transparent rounded-full animate-spin" /></div>
+            ) : researchData[researchTab] === null ? (
+              <p className="text-center text-gray-400 py-8 text-sm">Data not available for this stock.</p>
+            ) : researchData[researchTab] === undefined ? null
+            : researchTab === 'financials' ? <FinancialsTab data={researchData.financials} />
+            : researchTab === 'analyst' ? <AnalystTab data={researchData.analyst} />
+            : researchTab === 'shareholding' ? <ShareholdingTab data={researchData.shareholding} />
+            : <PeersTab data={researchData.peers} />}
+          </div>
+        )}
+      </div>
+
       {/* News Feed */}
       <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-5">
         <NewsFeed query={symbol || ''} />
@@ -248,6 +302,212 @@ export default function StockDetail() {
           onCancel={() => setShowSellConfirm(false)}
         />
       )}
+    </div>
+  );
+}
+
+function FinancialsTab({ data }: { data: any }) {
+  const fmt = (v: number | null | undefined) => v != null ? `₹${(v / 1e7).toFixed(0)} Cr` : '—';
+  const pct = (v: number | null | undefined) => v != null ? `${(v * 100).toFixed(1)}%` : '—';
+  return (
+    <div className="space-y-5">
+      {data?.income_statements?.length > 0 && (
+        <div>
+          <h4 className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-3">Income Statement</h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-gray-400">
+                  <th className="text-left py-1.5 pr-3">Metric</th>
+                  {data.income_statements.map((s: any) => <th key={s.date} className="text-right py-1.5 px-2">{s.date}</th>)}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+                {[{ label: 'Revenue', key: 'revenue' }, { label: 'Gross Profit', key: 'gross_profit' }, { label: 'EBIT', key: 'ebit' }, { label: 'Net Income', key: 'net_income' }].map(row => (
+                  <tr key={row.key}>
+                    <td className="py-2 pr-3 font-medium text-gray-600 dark:text-gray-400">{row.label}</td>
+                    {data.income_statements.map((s: any) => <td key={s.date} className="text-right py-2 px-2 tabular-nums font-medium">{fmt(s[row.key])}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      {data?.financial_data && (
+        <div>
+          <h4 className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-3">Key Ratios</h4>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: 'Revenue Growth', value: pct(data.financial_data.revenue_growth) },
+              { label: 'Gross Margin', value: pct(data.financial_data.gross_margins) },
+              { label: 'Op. Margin', value: pct(data.financial_data.operating_margins) },
+              { label: 'Net Margin', value: pct(data.financial_data.profit_margins) },
+              { label: 'ROE', value: pct(data.financial_data.roe) },
+              { label: 'ROA', value: pct(data.financial_data.roa) },
+              { label: 'D/E Ratio', value: data.financial_data.debt_to_equity?.toFixed(2) ?? '—' },
+              { label: 'Current Ratio', value: data.financial_data.current_ratio?.toFixed(2) ?? '—' },
+            ].map(item => (
+              <div key={item.label} className="bg-gray-50 dark:bg-gray-900/50 rounded-xl p-3">
+                <p className="text-[10px] text-gray-400 mb-0.5">{item.label}</p>
+                <p className="font-bold text-sm">{item.value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AnalystTab({ data }: { data: any }) {
+  const recColor = (r: string) => {
+    if (!r) return '';
+    if (r === 'buy' || r === 'strongBuy' || r === 'strong_buy') return 'text-gain';
+    if (r === 'sell' || r === 'strongSell' || r === 'strong_sell') return 'text-loss';
+    return 'text-amber-500';
+  };
+  const total = data?.trend ? (data.trend.strong_buy + data.trend.buy + data.trend.hold + data.trend.sell + data.trend.strong_sell) : 0;
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap gap-4">
+        <div className="flex-1 min-w-[130px] bg-gray-50 dark:bg-gray-900/50 rounded-xl p-4 text-center">
+          <p className="text-xs text-gray-400 mb-1">Consensus</p>
+          <p className={cn('text-xl font-bold uppercase', recColor(data?.recommendation))}>{data?.recommendation || '—'}</p>
+          {data?.number_of_analysts && <p className="text-xs text-gray-400 mt-1">{data.number_of_analysts} analysts</p>}
+        </div>
+        <div className="flex-1 min-w-[130px] bg-gray-50 dark:bg-gray-900/50 rounded-xl p-4 text-center">
+          <p className="text-xs text-gray-400 mb-1">Target (Mean)</p>
+          <p className="text-xl font-bold">{data?.target_mean_price ? formatCurrency(data.target_mean_price) : '—'}</p>
+          {data?.target_low_price && <p className="text-xs text-gray-400 mt-1">{formatCurrency(data.target_low_price)} – {formatCurrency(data.target_high_price)}</p>}
+        </div>
+        <div className="flex-1 min-w-[130px] bg-gray-50 dark:bg-gray-900/50 rounded-xl p-4 text-center">
+          <p className="text-xs text-gray-400 mb-1">Forward P/E</p>
+          <p className="text-xl font-bold">{data?.forward_pe?.toFixed(1) ?? '—'}</p>
+          <p className="text-xs text-gray-400 mt-1">PEG: {data?.peg_ratio?.toFixed(2) ?? '—'}</p>
+        </div>
+      </div>
+      {data?.trend && (
+        <div>
+          <h4 className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-3">Analyst Breakdown</h4>
+          <div className="space-y-2">
+            {[
+              { label: 'Strong Buy', val: data.trend.strong_buy, color: 'bg-gain' },
+              { label: 'Buy', val: data.trend.buy, color: 'bg-green-400' },
+              { label: 'Hold', val: data.trend.hold, color: 'bg-amber-400' },
+              { label: 'Sell', val: data.trend.sell, color: 'bg-orange-400' },
+              { label: 'Strong Sell', val: data.trend.strong_sell, color: 'bg-loss' },
+            ].map(item => (
+              <div key={item.label} className="flex items-center gap-3">
+                <span className="text-xs w-20 text-gray-500">{item.label}</span>
+                <div className="flex-1 h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                  <div className={cn('h-full rounded-full', item.color)} style={{ width: total > 0 ? `${Math.round((item.val / total) * 100)}%` : '0%' }} />
+                </div>
+                <span className="text-xs font-medium w-4 text-right">{item.val}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ShareholdingTab({ data }: { data: any }) {
+  const cats = [
+    { label: 'Promoter/Insider', value: data?.promoter_percent, color: 'bg-groww-primary' },
+    { label: 'Institutions', value: data?.institutions_percent, color: 'bg-indigo-500' },
+    { label: 'Public', value: data?.public_percent, color: 'bg-amber-400' },
+  ].filter(c => c.value != null);
+  return (
+    <div className="space-y-5">
+      {cats.length > 0 && (
+        <div>
+          <h4 className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-3">Shareholding Pattern</h4>
+          <div className="flex h-3 rounded-full overflow-hidden mb-4">
+            {cats.map(c => <div key={c.label} className={cn('transition-all', c.color)} style={{ width: `${c.value}%` }} />)}
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            {cats.map(c => (
+              <div key={c.label} className="text-center">
+                <div className={cn('w-3 h-3 rounded-full mx-auto mb-1', c.color)} />
+                <p className="text-xs text-gray-500">{c.label}</p>
+                <p className="font-bold text-sm">{(c.value as number).toFixed(2)}%</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {data?.top_institutions?.length > 0 && (
+        <div>
+          <h4 className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-3">Top Institutional Holders</h4>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-gray-400 border-b border-gray-100 dark:border-gray-800">
+                <th className="text-left py-2">Institution</th>
+                <th className="text-right py-2">Holding %</th>
+                <th className="text-right py-2">Shares</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+              {data.top_institutions.map((inst: any) => (
+                <tr key={inst.name}>
+                  <td className="py-2 text-gray-700 dark:text-gray-300 font-medium truncate max-w-[160px]">{inst.name}</td>
+                  <td className="py-2 text-right tabular-nums">{inst.percent?.toFixed(2) ?? '—'}%</td>
+                  <td className="py-2 text-right tabular-nums text-gray-500">{inst.shares?.toLocaleString('en-IN') ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {cats.length === 0 && !data?.top_institutions?.length && (
+        <p className="text-center text-gray-400 py-8 text-sm">Shareholding data not available.</p>
+      )}
+    </div>
+  );
+}
+
+function PeersTab({ data }: { data: any }) {
+  return (
+    <div>
+      {data?.sector && <p className="text-xs text-gray-400 mb-3">Sector: <span className="font-medium text-gray-600 dark:text-gray-300">{data.sector}</span></p>}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-gray-400 border-b border-gray-100 dark:border-gray-800 text-xs uppercase tracking-wide">
+              <th className="text-left py-2">Company</th>
+              <th className="text-right py-2 px-2">Price</th>
+              <th className="text-right py-2 px-2">Chg%</th>
+              <th className="text-right py-2 px-2">Mkt Cap</th>
+              <th className="text-right py-2">P/E</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+            {data?.peers?.map((p: any) => (
+              <tr key={p.symbol} className={cn('hover:bg-gray-50 dark:hover:bg-gray-800/30', p.is_selected && 'bg-groww-primary/5')}>
+                <td className="py-2.5">
+                  <div className="flex items-center gap-2">
+                    {p.is_selected && <span className="w-1 h-4 rounded bg-groww-primary shrink-0" />}
+                    <div>
+                      <p className={cn('font-semibold text-xs', p.is_selected && 'text-groww-primary')}>{p.symbol}</p>
+                      <p className="text-[10px] text-gray-400 truncate max-w-[100px]">{p.name}</p>
+                    </div>
+                  </div>
+                </td>
+                <td className="text-right py-2.5 px-2 tabular-nums text-xs font-medium">{formatCurrency(p.price)}</td>
+                <td className={cn('text-right py-2.5 px-2 tabular-nums text-xs font-semibold', p.change_percent >= 0 ? 'text-gain' : 'text-loss')}>
+                  {p.change_percent >= 0 ? '+' : ''}{p.change_percent?.toFixed(2)}%
+                </td>
+                <td className="text-right py-2.5 px-2 tabular-nums text-xs text-gray-500">
+                  {p.market_cap ? `₹${(p.market_cap / 1e7).toFixed(0)} Cr` : '—'}
+                </td>
+                <td className="text-right py-2.5 tabular-nums text-xs">{p.pe_ratio?.toFixed(1) ?? '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

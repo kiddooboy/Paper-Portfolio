@@ -368,6 +368,165 @@ export async function initSchema() {
   safeExec(`CREATE INDEX IF NOT EXISTS idx_trade_pnl_symbol ON trade_pnl(symbol, user_id)`, 'index: trade_pnl.symbol');
   safeExec(`CREATE INDEX IF NOT EXISTS idx_password_reset_otps_email ON password_reset_otps(email)`, 'index: password_reset_otps.email');
 
+  // ── Phase 2c: New feature tables ──
+
+  // GTT / AMO flags on orders
+  safeExec(`ALTER TABLE orders ADD COLUMN is_gtt INTEGER NOT NULL DEFAULT 0`, 'migration: orders.is_gtt');
+  safeExec(`ALTER TABLE orders ADD COLUMN gtt_valid_till TEXT`, 'migration: orders.gtt_valid_till');
+  safeExec(`ALTER TABLE orders ADD COLUMN is_amo INTEGER NOT NULL DEFAULT 0`, 'migration: orders.is_amo');
+  safeExec(`ALTER TABLE orders ADD COLUMN parent_order_id INTEGER`, 'migration: orders.parent_order_id');
+
+  // Basket orders
+  safeExec(`CREATE TABLE IF NOT EXISTS baskets (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    description TEXT,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  )`, 'table: baskets');
+  safeExec(`CREATE TABLE IF NOT EXISTS basket_items (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    basket_id   INTEGER NOT NULL REFERENCES baskets(id) ON DELETE CASCADE,
+    symbol      TEXT NOT NULL,
+    quantity    INTEGER NOT NULL DEFAULT 1,
+    transaction_type TEXT NOT NULL DEFAULT 'BUY' CHECK(transaction_type IN ('BUY','SELL')),
+    UNIQUE(basket_id, symbol)
+  )`, 'table: basket_items');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_baskets_user_id ON baskets(user_id)`, 'index: baskets.user_id');
+
+  // Stock Collections / Themes
+  safeExec(`CREATE TABLE IF NOT EXISTS collections (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    description TEXT,
+    icon        TEXT,
+    color       TEXT DEFAULT '#00B386',
+    is_public   INTEGER NOT NULL DEFAULT 1,
+    created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  )`, 'table: collections');
+  safeExec(`CREATE TABLE IF NOT EXISTS collection_items (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    collection_id INTEGER NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+    symbol        TEXT NOT NULL,
+    UNIQUE(collection_id, symbol)
+  )`, 'table: collection_items');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_collection_items_collection_id ON collection_items(collection_id)`, 'index: collection_items');
+
+  // Trading Contests
+  safeExec(`CREATE TABLE IF NOT EXISTS contests (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    name          TEXT NOT NULL,
+    description   TEXT,
+    start_date    TEXT NOT NULL,
+    end_date      TEXT NOT NULL,
+    starting_capital REAL NOT NULL DEFAULT 100000,
+    status        TEXT NOT NULL DEFAULT 'upcoming' CHECK(status IN ('upcoming','active','completed')),
+    created_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  )`, 'table: contests');
+  safeExec(`CREATE TABLE IF NOT EXISTS contest_participants (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    contest_id  INTEGER NOT NULL REFERENCES contests(id) ON DELETE CASCADE,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    balance     REAL NOT NULL DEFAULT 100000,
+    joined_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(contest_id, user_id)
+  )`, 'table: contest_participants');
+  safeExec(`CREATE TABLE IF NOT EXISTS contest_holdings (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    contest_id    INTEGER NOT NULL REFERENCES contests(id) ON DELETE CASCADE,
+    user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    symbol        TEXT NOT NULL,
+    quantity      INTEGER NOT NULL DEFAULT 0,
+    avg_buy_price REAL NOT NULL DEFAULT 0,
+    UNIQUE(contest_id, user_id, symbol)
+  )`, 'table: contest_holdings');
+  safeExec(`CREATE TABLE IF NOT EXISTS contest_transactions (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    contest_id    INTEGER NOT NULL REFERENCES contests(id) ON DELETE CASCADE,
+    user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    symbol        TEXT NOT NULL,
+    type          TEXT NOT NULL CHECK(type IN ('BUY','SELL')),
+    quantity      INTEGER NOT NULL,
+    price         REAL NOT NULL,
+    total_amount  REAL NOT NULL,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  )`, 'table: contest_transactions');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_contest_participants_user ON contest_participants(user_id)`, 'index: contest_participants');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_contest_holdings_user ON contest_holdings(contest_id, user_id)`, 'index: contest_holdings');
+
+  // SIP Schedules
+  safeExec(`CREATE TABLE IF NOT EXISTS sip_schedules (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    symbol        TEXT NOT NULL,
+    quantity      INTEGER NOT NULL DEFAULT 1,
+    frequency     TEXT NOT NULL DEFAULT 'weekly' CHECK(frequency IN ('daily','weekly','monthly')),
+    day_of_week   INTEGER,
+    day_of_month  INTEGER,
+    is_active     INTEGER NOT NULL DEFAULT 1,
+    next_run      TEXT,
+    total_runs    INTEGER NOT NULL DEFAULT 0,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  )`, 'table: sip_schedules');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_sip_schedules_user ON sip_schedules(user_id)`, 'index: sip_schedules');
+
+  // Achievements
+  safeExec(`CREATE TABLE IF NOT EXISTS achievements (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    key         TEXT NOT NULL UNIQUE,
+    name        TEXT NOT NULL,
+    description TEXT NOT NULL,
+    icon        TEXT NOT NULL DEFAULT '🏆',
+    category    TEXT NOT NULL DEFAULT 'trading'
+  )`, 'table: achievements');
+  safeExec(`CREATE TABLE IF NOT EXISTS user_achievements (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    achievement_key TEXT NOT NULL,
+    earned_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(user_id, achievement_key)
+  )`, 'table: user_achievements');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_user_achievements_user ON user_achievements(user_id)`, 'index: user_achievements');
+
+  // Corporate Actions
+  safeExec(`CREATE TABLE IF NOT EXISTS corporate_actions (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol        TEXT NOT NULL,
+    action_type   TEXT NOT NULL CHECK(action_type IN ('BONUS','SPLIT','DIVIDEND')),
+    ratio         TEXT,
+    amount        REAL,
+    ex_date       TEXT NOT NULL,
+    applied       INTEGER NOT NULL DEFAULT 0,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  )`, 'table: corporate_actions');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_corporate_actions_symbol ON corporate_actions(symbol)`, 'index: corporate_actions');
+
+  // Seed default achievements
+  const defaultAchievements = [
+    ['first_trade',      'First Trade',          'Placed your very first trade',                    '🚀', 'trading'],
+    ['first_profit',     'First Profit',          'Closed a trade in profit',                        '💰', 'trading'],
+    ['ten_trades',       '10 Trades',             'Completed 10 trades',                             '📈', 'trading'],
+    ['fifty_trades',     '50 Trades',             'Completed 50 trades',                             '⚡', 'trading'],
+    ['diversified',      'Diversified Portfolio', 'Hold stocks in 5+ different sectors',             '🌐', 'portfolio'],
+    ['ten_bagger',       '10-Bagger Club',        'A holding gained 1000%+ from buy price',          '🔥', 'portfolio'],
+    ['loss_recovered',   'Comeback Kid',          'Portfolio recovered after a 10%+ drawdown',       '💪', 'portfolio'],
+    ['analyst',          'Market Analyst',        'Set 10+ price alerts',                            '🔔', 'alerts'],
+    ['big_balance',      'High Roller',           'Portfolio total value exceeded ₹5,00,000',        '🏆', 'portfolio'],
+    ['no_loss_week',     'Green Week',            'All holdings in profit for a full week',          '🌱', 'portfolio'],
+    ['sector_master',    'Sector Master',         'Traded in all 10 sectors',                        '🗂️', 'trading'],
+    ['patient_investor', 'Patient Investor',      'Held a stock for 30+ days',                       '⏳', 'portfolio'],
+  ];
+  for (const [key, name, description, icon, category] of defaultAchievements) {
+    safeExec(
+      `INSERT OR IGNORE INTO achievements (key, name, description, icon, category) VALUES ('${key}', '${name}', '${description}', '${icon}', '${category}')`,
+      `achievement: ${key}`
+    );
+  }
+
   // ── Phase 3: updated_at triggers ──
   // Drop-and-recreate so any older incompatible trigger definition (e.g.
   // from a previous Postgres-flavoured deploy) is replaced cleanly.

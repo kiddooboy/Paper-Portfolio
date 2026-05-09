@@ -2,6 +2,26 @@ import { Router } from 'express';
 import { db } from '../db/index.js';
 import { getCachedQuotes } from '../services/marketData.js';
 
+function xirrRate(cashflows: { amount: number; date: Date }[]): number | null {
+  try {
+    let rate = 0.1;
+    const t0 = cashflows[0].date.getTime();
+    for (let i = 0; i < 100; i++) {
+      let f = 0, df = 0;
+      for (const cf of cashflows) {
+        const t = (cf.date.getTime() - t0) / (365.25 * 24 * 3600 * 1000);
+        const d = Math.pow(1 + rate, t);
+        f += cf.amount / d;
+        df -= t * cf.amount / (d * (1 + rate));
+      }
+      const delta = f / df;
+      rate -= delta;
+      if (Math.abs(delta) < 1e-6) return rate;
+    }
+    return rate;
+  } catch { return null; }
+}
+
 const router = Router();
 
 router.get('/', async (req, res) => {
@@ -18,6 +38,16 @@ router.get('/', async (req, res) => {
     GROUP BY user_id
   `).all()) as any[];
   const realizedMap = new Map(realizedAll.map((r: any) => [r.user_id, { realized: Number(r.realized), closedTrades: Number(r.closed_trades) }]));
+
+  // Wallet deposits per user for XIRR
+  const walletAll = (await db.prepare(`
+    SELECT user_id, type, amount, created_at FROM wallet_transactions ORDER BY created_at ASC
+  `).all()) as any[];
+  const walletByUser = new Map<number, any[]>();
+  for (const w of walletAll) {
+    if (!walletByUser.has(w.user_id)) walletByUser.set(w.user_id, []);
+    walletByUser.get(w.user_id)!.push(w);
+  }
 
   // Net invested per user — used to derive true total capital regardless of admin adjustments.
   // total_capital = balance + net_buys, where net_buys = SUM(buys) - SUM(sells) from transactions.
@@ -65,6 +95,21 @@ router.get('/', async (req, res) => {
     const overallPnl = portfolioValue - totalCapital;
     const overallPnlPercent = totalCapital > 0 ? (overallPnl / totalCapital) * 100 : 0;
 
+    // XIRR
+    let xirr: number | null = null;
+    const wallets = walletByUser.get(u.id) || [];
+    if (wallets.length > 0) {
+      const cfs = wallets.map((w: any) => ({
+        amount: w.type === 'DEPOSIT' ? -Number(w.amount) : Number(w.amount),
+        date: new Date(w.created_at),
+      }));
+      cfs.push({ amount: portfolioValue, date: new Date() });
+      if (cfs.some((c: any) => c.amount < 0)) {
+        const r = xirrRate(cfs);
+        xirr = r !== null ? +(r * 100).toFixed(2) : null;
+      }
+    }
+
     return {
       userId: u.id,
       name: u.name,
@@ -79,6 +124,7 @@ router.get('/', async (req, res) => {
       closedTrades,
       totalTxns,
       totalCapital: +totalCapital.toFixed(2),
+      xirr,
     };
   });
 

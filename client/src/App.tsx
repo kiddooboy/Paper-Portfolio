@@ -30,6 +30,16 @@ const SectorsPage        = lazy(() => import('./pages/SectorsPage'));
 const NewsPage           = lazy(() => import('./pages/NewsPage'));
 const ScreenerPage       = lazy(() => import('./pages/ScreenerPage'));
 const CompanyPage        = lazy(() => import('./pages/CompanyPage'));
+const MarketOverviewPage = lazy(() => import('./pages/MarketOverviewPage'));
+const CollectionsPage    = lazy(() => import('./pages/CollectionsPage'));
+const ContestsPage       = lazy(() => import('./pages/ContestsPage'));
+const AchievementsPage   = lazy(() => import('./pages/AchievementsPage'));
+const SIPPage            = lazy(() => import('./pages/SIPPage'));
+const BasketPage         = lazy(() => import('./pages/BasketPage'));
+const StrategiesPage     = lazy(() => import('./pages/StrategiesPage'));
+const EarningsCalendarPage = lazy(() => import('./pages/EarningsCalendarPage'));
+const FIIDIIPage         = lazy(() => import('./pages/FIIDIIPage'));
+const BacktestPage       = lazy(() => import('./pages/BacktestPage'));
 
 function PageLoader() {
   return (
@@ -82,6 +92,16 @@ function App() {
           <Route path="/news"            element={<NewsPage />} />
           <Route path="/screener"        element={<ScreenerPage />} />
           <Route path="/company/:symbol" element={<CompanyPage />} />
+          <Route path="/market-overview" element={<MarketOverviewPage />} />
+          <Route path="/collections"     element={<CollectionsPage />} />
+          <Route path="/contests"        element={<ContestsPage />} />
+          <Route path="/achievements"    element={<AchievementsPage />} />
+          <Route path="/sip"             element={<SIPPage />} />
+          <Route path="/baskets"         element={<BasketPage />} />
+          <Route path="/strategies"      element={<StrategiesPage />} />
+          <Route path="/earnings"        element={<EarningsCalendarPage />} />
+          <Route path="/fii-dii"         element={<FIIDIIPage />} />
+          <Route path="/backtest"        element={<BacktestPage />} />
         </Route>
       </Routes>
     </Suspense>

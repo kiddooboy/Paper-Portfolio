@@ -45,6 +45,16 @@ import aiRoutes from './routes/ai.js';
 import walletRoutes from './routes/wallet.js';
 import monteCarloRoutes from './routes/monteCarlo.js';
 import newsRoutes from './routes/news.js';
+import marketRoutes from './routes/market.js';
+import gttRoutes from './routes/gtt.js';
+import collectionsRoutes from './routes/collections.js';
+import contestsRoutes from './routes/contests.js';
+import achievementsRoutes from './routes/achievements.js';
+import sipRoutes from './routes/sip.js';
+import basketsRoutes from './routes/baskets.js';
+import corporateActionsRoutes from './routes/corporateActions.js';
+import researchRoutes from './routes/research.js';
+import strategiesRoutes from './routes/strategies.js';
 
 const PORT = process.env.PORT || 5000;
 
@@ -80,6 +90,16 @@ async function main() {
   app.use('/api/wallet', walletRoutes);
   app.use('/api/monte-carlo', monteCarloRoutes);
   app.use('/api/news', newsRoutes);
+  app.use('/api/market', marketRoutes);
+  app.use('/api/gtt', gttRoutes);
+  app.use('/api/collections', collectionsRoutes);
+  app.use('/api/contests', contestsRoutes);
+  app.use('/api/achievements', achievementsRoutes);
+  app.use('/api/sip', sipRoutes);
+  app.use('/api/baskets', basketsRoutes);
+  app.use('/api/corporate-actions', corporateActionsRoutes);
+  app.use('/api/research', researchRoutes);
+  app.use('/api/strategies', strategiesRoutes);
 
   // Serve static client build and SPA fallback in production (registered AFTER api routes)
   if (process.env.NODE_ENV === 'production') {
