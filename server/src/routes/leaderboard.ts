@@ -4,8 +4,6 @@ import { getCachedQuotes } from '../services/marketData.js';
 
 const router = Router();
 
-const STARTING_CAPITAL = 100000; // ₹1,00,000 — every user starts here
-
 router.get('/', async (req, res) => {
   const users = (await db.prepare("SELECT id, name, balance FROM users WHERE role != 'admin' OR role IS NULL").all()) as any[];
   const holdings = (await db.prepare(`
@@ -21,13 +19,17 @@ router.get('/', async (req, res) => {
   `).all()) as any[];
   const realizedMap = new Map(realizedAll.map((r: any) => [r.user_id, { realized: Number(r.realized), closedTrades: Number(r.closed_trades) }]));
 
-  // Total trade count (all transactions for activity insight)
-  const txnCounts = (await db.prepare(`
-    SELECT user_id, COUNT(*) as total_txns
+  // Net invested per user — used to derive true total capital regardless of admin adjustments.
+  // total_capital = balance + net_buys, where net_buys = SUM(buys) - SUM(sells) from transactions.
+  // This identity always holds: balance = total_capital - net_buys.
+  const netBuysAll = (await db.prepare(`
+    SELECT user_id,
+           COALESCE(SUM(CASE WHEN type='BUY' THEN total_amount ELSE -total_amount END), 0) as net_buys,
+           COUNT(*) as total_txns
     FROM transactions
     GROUP BY user_id
   `).all()) as any[];
-  const txnCountMap = new Map(txnCounts.map((r: any) => [r.user_id, Number(r.total_txns)]));
+  const netBuysMap = new Map(netBuysAll.map((r: any) => [r.user_id, { netBuys: Number(r.net_buys), totalTxns: Number(r.total_txns) }]));
 
   // Quote map
   const uniqueSymbols = Array.from(new Set(holdings.map((h) => h.symbol)));
@@ -51,15 +53,17 @@ router.get('/', async (req, res) => {
     const portfolioValue = u.balance + current;
     const realizedTotal = realizedMap.get(u.id)?.realized ?? 0;
     const closedTrades = realizedMap.get(u.id)?.closedTrades ?? 0;
-    const totalTxns = txnCountMap.get(u.id) ?? 0;
+    const txData = netBuysMap.get(u.id);
+    const totalTxns = txData?.totalTxns ?? 0;
 
-    // Unrealized P&L (current holdings vs cost)
+    // Unrealized P&L (current holdings vs avg cost basis)
     const unrealizedPnl = current - invested;
 
-    // Overall P&L = current portfolio value minus starting capital.
-    // This is always correct regardless of how realized/unrealized are accounted.
-    const overallPnl = portfolioValue - STARTING_CAPITAL;
-    const overallPnlPercent = (overallPnl / STARTING_CAPITAL) * 100;
+    // True total capital = current cash + net amount invested in trades.
+    // Derives the actual capital given to this user without needing wallet history.
+    const totalCapital = u.balance + (txData?.netBuys ?? 0);
+    const overallPnl = portfolioValue - totalCapital;
+    const overallPnlPercent = totalCapital > 0 ? (overallPnl / totalCapital) * 100 : 0;
 
     return {
       userId: u.id,
@@ -74,6 +78,7 @@ router.get('/', async (req, res) => {
       holdingsCount: userHoldings.length,
       closedTrades,
       totalTxns,
+      totalCapital: +totalCapital.toFixed(2),
     };
   });
 

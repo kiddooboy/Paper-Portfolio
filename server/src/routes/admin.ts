@@ -121,11 +121,17 @@ router.post('/users/:id/reset-balance', async (req: AuthRequest, res) => {
     return res.status(400).json({ error: 'Invalid balance amount' });
   }
   try {
-    await db.prepare('UPDATE users SET balance = ? WHERE id = ?').run(balance, +req.params.id);
-    logActivity(req.user!.id, 'BALANCE_RESET', {
-      targetUserId: +req.params.id,
-      newBalance: balance,
-    }, getClientIp(req));
+    const targetId = +req.params.id;
+    const prev = (await db.prepare('SELECT balance FROM users WHERE id = ?').get(targetId)) as any;
+    const prevBalance = Number(prev?.balance ?? 0);
+    await db.prepare('UPDATE users SET balance = ? WHERE id = ?').run(balance, targetId);
+    // Record as wallet transaction so P&L capital basis stays accurate
+    const diff = balance - prevBalance;
+    if (diff !== 0) {
+      await db.prepare(`INSERT INTO wallet_transactions (user_id, type, amount) VALUES (?, ?, ?)`)
+        .run(targetId, diff > 0 ? 'DEPOSIT' : 'WITHDRAW', Math.abs(diff));
+    }
+    logActivity(req.user!.id, 'BALANCE_RESET', { targetUserId: targetId, prevBalance, newBalance: balance }, getClientIp(req));
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to reset balance' });
@@ -141,13 +147,12 @@ router.post('/users/:id/topup', async (req: AuthRequest, res) => {
     return res.status(400).json({ error: 'Invalid top-up amount' });
   }
   try {
-    await db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?').run(amount, +req.params.id);
-    const user = (await db.prepare('SELECT balance FROM users WHERE id = ?').get(+req.params.id)) as any;
-    logActivity(req.user!.id, 'BALANCE_RESET', {
-      targetUserId: +req.params.id,
-      topupAmount: amount,
-      newBalance: Number(user?.balance ?? 0),
-    }, getClientIp(req));
+    const targetId = +req.params.id;
+    await db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?').run(amount, targetId);
+    await db.prepare(`INSERT INTO wallet_transactions (user_id, type, amount) VALUES (?, 'DEPOSIT', ?)`)
+      .run(targetId, amount);
+    const user = (await db.prepare('SELECT balance FROM users WHERE id = ?').get(targetId)) as any;
+    logActivity(req.user!.id, 'BALANCE_TOPUP' as any, { targetUserId: targetId, topupAmount: amount, newBalance: Number(user?.balance ?? 0) }, getClientIp(req));
     res.json({ success: true, newBalance: Number(user?.balance ?? 0) });
   } catch (err) {
     res.status(500).json({ error: 'Failed to top up balance' });

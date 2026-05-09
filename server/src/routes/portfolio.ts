@@ -119,12 +119,18 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
   const worstPerformer = sorted[sorted.length - 1] || null;
   const biggestHolding = holdings[0] || null; // already sorted by value desc
 
-  const STARTING_CAPITAL = 100_000;
-
   // ── Realized P&L — from avg-cost trade_pnl records ──
   const pnlRow = (await db.prepare(`SELECT COALESCE(SUM(realized_pnl), 0) as total FROM trade_pnl WHERE user_id = ?`).get(userId)) as any;
   const realizedPnl = Number(pnlRow?.total || 0);
   const unrealizedPnl = totalPnl; // currentValue - investedValue (open holdings only)
+
+  // True total capital: derived from balance + net invested in transactions.
+  // Correctly handles admin topups / balance resets without needing wallet history.
+  const netBuysRow = (await db.prepare(`
+    SELECT COALESCE(SUM(CASE WHEN type='BUY' THEN total_amount ELSE -total_amount END), 0) as net_buys
+    FROM transactions WHERE user_id = ?
+  `).get(userId)) as any;
+  const totalCapital = user.balance + Number(netBuysRow?.net_buys || 0);
 
   // ── Transactions ──
   const transactions = await db.prepare(`
@@ -166,7 +172,8 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
     pnlBreakdown: {
       realized: +realizedPnl.toFixed(2),
       unrealized: +unrealizedPnl.toFixed(2),
-      total: +((user.balance + currentValue) - STARTING_CAPITAL).toFixed(2),
+      total: +((user.balance + currentValue) - totalCapital).toFixed(2),
+      totalCapital: +totalCapital.toFixed(2),
     },
     tradeStats: {
       totalBuys: buyStats.count,
