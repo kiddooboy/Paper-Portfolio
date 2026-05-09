@@ -82,7 +82,7 @@ export default function Layout() {
       </div>
 
       <div className="flex">
-        <aside className="hidden lg:block w-60 shrink-0 sticky top-[107px] h-[calc(100vh-107px)] border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-groww-dark overflow-y-auto pb-20">
+        <aside className="hidden lg:block w-60 shrink-0 sticky top-[107px] h-[calc(100vh-107px)] border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-groww-dark overflow-hidden">
           <Sidebar activePath={location.pathname} />
         </aside>
 
