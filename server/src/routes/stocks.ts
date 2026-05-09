@@ -637,6 +637,8 @@ router.get('/:symbol/depth', (req, res) => {
   const symbol = req.params.symbol.toUpperCase();
   const exchange = parseExchange(req.query.exchange);
 
+  if (!isMarketOpen()) return res.json({ closed: true });
+
   const q = getCachedQuote(symbol, exchange);
   if (!q || q.price <= 0) return res.status(404).json({ error: 'No price data' });
 

@@ -792,25 +792,53 @@ interface DepthData {
 function MarketDepth({ symbol, exchange }: { symbol: string; exchange: string }) {
   const [depth, setDepth] = useState<DepthData | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const marketStatus = useMarketStore((s) => s.status);
+  const isOpen = marketStatus?.isOpen ?? false;
 
   useEffect(() => {
+    setDepth(null);
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    if (!isOpen) return;
+
     let cancelled = false;
-    const fetch = () =>
+    const fetchDepth = () =>
       axios.get(`/api/stocks/${encodeURIComponent(symbol)}/depth`, { params: { exchange } })
         .then(r => { if (!cancelled) setDepth(r.data); })
         .catch(() => {});
 
-    fetch();
-    timerRef.current = setInterval(fetch, 2500);
+    fetchDepth();
+    timerRef.current = setInterval(fetchDepth, 2500);
     return () => {
       cancelled = true;
-      if (timerRef.current) clearInterval(timerRef.current);
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     };
-  }, [symbol, exchange]);
+  }, [symbol, exchange, isOpen]);
 
   const maxQty = depth
     ? Math.max(...depth.bids.map(b => b.qty), ...depth.asks.map(a => a.qty), 1)
     : 1;
+
+  if (!isOpen) {
+    return (
+      <div className="bg-white dark:bg-groww-card border-t border-gray-100 dark:border-gray-800 p-4 lg:border-r">
+        <h3 className="font-semibold text-sm mb-2">Market depth</h3>
+        <div className="flex flex-col items-center justify-center py-5 gap-1.5 text-center">
+          <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-1">
+            <Clock className="w-4 h-4 text-gray-400" />
+          </div>
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Market closed</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            Depth data is live only during trading hours
+            {marketStatus?.nextOpen && (
+              <span className="block mt-0.5 text-amber-500 font-medium">
+                Opens {new Date(marketStatus.nextOpen).toLocaleString('en-IN', { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: true })}
+              </span>
+            )}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white dark:bg-groww-card border-t border-gray-100 dark:border-gray-800 p-4 lg:border-r">
