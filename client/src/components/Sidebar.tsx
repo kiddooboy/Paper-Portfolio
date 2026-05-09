@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { LayoutDashboard, Search, ListOrdered, Bookmark, Trophy, TrendingUp, BarChart3, PieChart, Compass, Newspaper, SlidersHorizontal, Activity, Medal, Repeat, ShoppingBag, Calendar, ChevronDown, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Search, ListOrdered, Bookmark, Trophy, TrendingUp, BarChart3, PieChart, Compass, Newspaper, SlidersHorizontal, Activity, Medal, Calendar, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useState } from 'react';
 
@@ -26,8 +26,6 @@ const sections = [
   {
     label: 'Trading',
     items: [
-      { path: '/baskets', label: 'Basket Orders', icon: ShoppingBag },
-      { path: '/sip', label: 'SIP Simulation', icon: Repeat },
       { path: '/watchlist', label: 'Watchlist', icon: Bookmark },
       { path: '/screener', label: 'Screener', icon: SlidersHorizontal },
     ],
