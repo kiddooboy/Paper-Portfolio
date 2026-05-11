@@ -422,9 +422,16 @@ export async function initSchema() {
           ALTER TABLE orders_new RENAME TO orders;
           COMMIT;
         `);
+        // Recreate indexes dropped along with the old table
+        raw.exec(`
+          CREATE INDEX IF NOT EXISTS idx_orders_user_id     ON orders(user_id);
+          CREATE INDEX IF NOT EXISTS idx_orders_status      ON orders(status);
+          CREATE INDEX IF NOT EXISTS idx_orders_user_status ON orders(user_id, status);
+          CREATE INDEX IF NOT EXISTS idx_orders_created_at  ON orders(created_at);
+        `);
         console.log('[db] migration: orders table rebuilt successfully');
       } catch (err: any) {
-        raw.exec('ROLLBACK');
+        try { raw.exec('ROLLBACK'); } catch {}
         console.error('[db] migration: orders rebuild failed —', err?.message);
       }
     }

@@ -61,7 +61,11 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       effectiveLimitPrice = targetPrice;
     }
 
-    const orderPrice = effectiveType === 'MARKET' ? currentPrice : (effectiveLimitPrice || triggerPrice || currentPrice);
+    // For balance/holdings checks use market price for MARKET and SL-M BUYs
+    // (they fill at market price, not the trigger price).
+    const orderPrice = (effectiveType === 'MARKET' || effectiveType === 'SL-M')
+      ? currentPrice
+      : (effectiveLimitPrice || triggerPrice || currentPrice);
     const totalAmount = orderPrice * quantity;
     const marketOpen = isMarketOpen();
 
