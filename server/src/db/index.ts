@@ -376,6 +376,60 @@ export async function initSchema() {
   safeExec(`ALTER TABLE orders ADD COLUMN is_amo INTEGER NOT NULL DEFAULT 0`, 'migration: orders.is_amo');
   safeExec(`ALTER TABLE orders ADD COLUMN parent_order_id INTEGER`, 'migration: orders.parent_order_id');
 
+  // Fix orders.type CHECK constraint — tables created before SL/SL-M support only
+  // allow ('MARKET','LIMIT'). SQLite cannot ALTER a CHECK constraint, so rebuild
+  // the table atomically when the stale constraint is detected.
+  {
+    const orderTableSql = (raw.prepare(
+      `SELECT sql FROM sqlite_master WHERE type='table' AND name='orders'`
+    ).get() as any)?.sql ?? '';
+    if (!orderTableSql.includes("'SL'")) {
+      console.log('[db] migration: rebuilding orders table — adding SL/SL-M to type CHECK constraint');
+      try {
+        raw.exec(`
+          BEGIN;
+          CREATE TABLE orders_new (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            symbol            TEXT NOT NULL,
+            type              TEXT NOT NULL CHECK(type IN ('MARKET','LIMIT','SL','SL-M')),
+            transaction_type  TEXT NOT NULL CHECK(transaction_type IN ('BUY','SELL')),
+            quantity          INTEGER NOT NULL,
+            price             REAL NOT NULL,
+            limit_price       REAL,
+            trigger_price     REAL,
+            product_type      TEXT NOT NULL DEFAULT 'CNC' CHECK(product_type IN ('CNC','MIS')),
+            target_price      REAL,
+            status            TEXT NOT NULL DEFAULT 'PENDING'
+                                CHECK(status IN ('PENDING','FILLED','CANCELLED','EXPIRED','FAILED')),
+            created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+            filled_at         TEXT,
+            updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+            is_gtt            INTEGER NOT NULL DEFAULT 0,
+            gtt_valid_till    TEXT,
+            is_amo            INTEGER NOT NULL DEFAULT 0,
+            parent_order_id   INTEGER
+          );
+          INSERT INTO orders_new
+            SELECT id, user_id, symbol, type, transaction_type, quantity, price,
+                   limit_price, trigger_price,
+                   COALESCE(product_type, 'CNC'), target_price, status,
+                   created_at, filled_at, updated_at,
+                   COALESCE(is_gtt, 0), gtt_valid_till,
+                   COALESCE(is_amo, 0), parent_order_id
+            FROM orders;
+          DROP TABLE orders;
+          ALTER TABLE orders_new RENAME TO orders;
+          COMMIT;
+        `);
+        console.log('[db] migration: orders table rebuilt successfully');
+      } catch (err: any) {
+        raw.exec('ROLLBACK');
+        console.error('[db] migration: orders rebuild failed —', err?.message);
+      }
+    }
+  }
+
   // Basket orders
   safeExec(`CREATE TABLE IF NOT EXISTS baskets (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
