@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Bell, Check } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn, formatDbDate } from '../lib/utils';
 import { useNotificationsStore } from '../store/notificationsStore';
 
 export default function NotificationsPage() {
@@ -27,7 +27,7 @@ export default function NotificationsPage() {
             <div className="flex-1">
               <p className="text-sm font-medium">{n.title}</p>
               <p className="text-xs text-gray-500">{n.message}</p>
-              <p className="text-[10px] text-gray-400 mt-1">{new Date(n.created_at).toLocaleString()}</p>
+              <p className="text-[10px] text-gray-400 mt-1">{formatDbDate(n.created_at)}</p>
             </div>
             {!n.read && <button onClick={()=>markRead(n.id)} className="text-gray-400 hover:text-groww-primary"><Check className="w-4 h-4"/></button>}
           </div>

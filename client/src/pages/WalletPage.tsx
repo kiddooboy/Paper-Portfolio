@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
-import { formatCurrency, cn } from '../lib/utils';
+import { formatCurrency, cn, formatDbDate } from '../lib/utils';
 import { useAuthStore } from '../store/authStore';
 import { ArrowUpRight, ArrowDownRight, Wallet, History, Info, Settings } from 'lucide-react';
 
@@ -140,7 +140,7 @@ export default function WalletPage() {
                   <div>
                     <p className="font-medium">{tx.type}</p>
                     <p className="text-xs text-gray-500">
-                      {new Date(tx.created_at).toLocaleString('en-IN')}
+                      {formatDbDate(tx.created_at)}
                     </p>
                   </div>
                 </div>

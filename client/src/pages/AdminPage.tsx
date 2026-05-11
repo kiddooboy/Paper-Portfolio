@@ -2,7 +2,7 @@
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
-import { formatCurrency, cn } from '../lib/utils';
+import { formatCurrency, cn, formatDbDate } from '../lib/utils';
 import {
   Users, Activity, DollarSign, ShieldCheck, Trash2,
   RefreshCw, ChevronUp, Eye, List, Search, Lock
@@ -226,10 +226,10 @@ export default function AdminPage() {
                       </td>
                       <td className="px-3 py-3 text-center">{u.holdingsCount}</td>
                       <td className="px-3 py-3 text-[11px] text-gray-500 whitespace-nowrap">
-                        {u.last_login ? new Date(u.last_login).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Never'}
+                        {u.last_login ? formatDbDate(u.last_login, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Never'}
                       </td>
                       <td className="px-3 py-3 text-[11px] text-gray-500">
-                        {u.created_at ? new Date(u.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' }) : 'â€”'}
+                        {u.created_at ? formatDbDate(u.created_at, { day: 'numeric', month: 'short', year: '2-digit' }) : '—'}
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-1">
@@ -317,7 +317,7 @@ export default function AdminPage() {
                   activities.map((act) => (
                     <tr key={act.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition">
                       <td className="px-4 py-3 text-[11px] text-gray-500 whitespace-nowrap">
-                        {new Date(act.created_at).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        {formatDbDate(act.created_at, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                       </td>
                       <td className="px-4 py-3">
                         <div className="font-medium text-[13px]">{act.user_name}</div>

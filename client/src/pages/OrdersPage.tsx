@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { formatCurrency, cn } from '../lib/utils';
+import { formatCurrency, cn, formatDbDate } from '../lib/utils';
 import { XCircle, Clock, CheckCircle, AlertCircle, Edit2, X } from 'lucide-react';
 import { useOrdersStore } from '../store/ordersStore';
 import { usePortfolioStore } from '../store/portfolioStore';
@@ -144,8 +144,8 @@ export default function OrdersPage() {
         {o.is_gtt === 1 && o.gtt_valid_till && <p className="text-xs text-violet-500">GTT valid till: {o.gtt_valid_till}</p>}
         <p className="text-xs text-gray-400">
           {o.status === 'FILLED' && o.filled_at
-            ? `Filled: ${new Date(o.filled_at).toLocaleString()}`
-            : new Date(o.created_at).toLocaleString()}
+            ? `Filled: ${formatDbDate(o.filled_at)}`
+            : formatDbDate(o.created_at)}
         </p>
       </div>
       <div className="flex flex-col items-end gap-1.5 ml-3 flex-shrink-0">

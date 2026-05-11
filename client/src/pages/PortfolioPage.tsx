@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
-import { formatCurrency, formatPercent, cn } from '../lib/utils';
+import { formatCurrency, formatPercent, cn, formatDbDate } from '../lib/utils';
 import { useMarketStore } from '../store/marketStore';
 import { usePortfolioStore } from '../store/portfolioStore';
 import {
@@ -360,7 +360,7 @@ export default function PortfolioPage() {
                           </span>
                           <span className="font-medium text-sm">{t.symbol}</span>
                         </div>
-                        <p className="text-[11px] text-gray-500 mt-0.5">{t.quantity} × {formatCurrency(t.price)} · {new Date(t.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
+                        <p className="text-[11px] text-gray-500 mt-0.5">{t.quantity} × {formatCurrency(t.price)} · {formatDbDate(t.created_at, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
                       </div>
                     </div>
                     <span className="font-semibold text-sm tabular-nums">{formatCurrency(t.total_amount)}</span>
