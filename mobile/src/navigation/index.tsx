@@ -4,11 +4,18 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text } from 'react-native';
 import { useAuthStore } from '../store/authStore';
+
 import LoginScreen from '../screens/auth/LoginScreen';
 import RegisterScreen from '../screens/auth/RegisterScreen';
 import DashboardScreen from '../screens/DashboardScreen';
+import MarketScreen from '../screens/MarketScreen';
+import PortfolioScreen from '../screens/PortfolioScreen';
+import OrdersScreen from '../screens/OrdersScreen';
+import MoreScreen from '../screens/MoreScreen';
+import WatchlistScreen from '../screens/WatchlistScreen';
+import StockDetailScreen from '../screens/StockDetailScreen';
 
-const Stack = createNativeStackNavigator();
+const Root = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 function TabIcon({ label, focused }: { label: string; focused: boolean }) {
@@ -39,6 +46,10 @@ function MainTabs() {
       })}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
+      <Tab.Screen name="Market" component={MarketScreen} />
+      <Tab.Screen name="Portfolio" component={PortfolioScreen} />
+      <Tab.Screen name="Orders" component={OrdersScreen} />
+      <Tab.Screen name="More" component={MoreScreen} />
     </Tab.Navigator>
   );
 }
@@ -48,16 +59,28 @@ export default function RootNavigator() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Root.Navigator screenOptions={{ headerShown: false }}>
         {isAuthenticated ? (
-          <Stack.Screen name="Main" component={MainTabs} />
+          <>
+            <Root.Screen name="Main" component={MainTabs} />
+            <Root.Screen
+              name="StockDetail"
+              component={StockDetailScreen}
+              options={{ presentation: 'card', animation: 'slide_from_right' }}
+            />
+            <Root.Screen
+              name="Watchlist"
+              component={WatchlistScreen}
+              options={{ presentation: 'card', animation: 'slide_from_right' }}
+            />
+          </>
         ) : (
           <>
-            <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="Register" component={RegisterScreen} />
+            <Root.Screen name="Login" component={LoginScreen} />
+            <Root.Screen name="Register" component={RegisterScreen} />
           </>
         )}
-      </Stack.Navigator>
+      </Root.Navigator>
     </NavigationContainer>
   );
 }
