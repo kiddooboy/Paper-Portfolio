@@ -11,17 +11,9 @@
       "googleServicesFile": "./google-services.json"
     },
     "ios": {
-      "bundleIdentifier": "com.paperportfolio.app",
-      "googleServicesFile": "./GoogleService-Info.plist"
+      "bundleIdentifier": "com.paperportfolio.app"
     },
     "plugins": [
-      "@react-native-firebase/app",
-      [
-        "@react-native-google-signin/google-signin",
-        {
-          "iosUrlScheme": "com.googleusercontent.apps.563092918942-he30oi5oci40bhmveokcdb2g3phq7283"
-        }
-      ],
       [
         "expo-build-properties",
         {
@@ -32,7 +24,6 @@
       ]
     ],
     "extra": {
-      "apiBaseUrl": "http://65.2.45.191:5000",
       "eas": {
         "projectId": "c6b2608e-c63e-48a9-a10e-7a237a927fe8"
       }
