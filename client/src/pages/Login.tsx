@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { signInWithRedirect, getRedirectResult } from 'firebase/auth';
+import { signInWithPopup, signInWithRedirect, getRedirectResult } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
 import { useAuthStore } from '../store/authStore';
 import { bootstrap } from '../store/bootstrap';
@@ -20,7 +20,7 @@ export default function Login() {
   const hasRegisteredOnDevice =
     typeof window !== 'undefined' && !!localStorage.getItem('last_email');
 
-  // Handle the result when Google redirects back to this page
+  // Pick up the result if user came back from a Google redirect
   useEffect(() => {
     getRedirectResult(auth)
       .then(async (result) => {
@@ -40,18 +40,46 @@ export default function Login() {
         }
       })
       .catch((err: any) => {
-        if (err?.code && err.code !== 'auth/no-redirect-result') {
+        const code: string = err?.code || '';
+        if (code && code !== 'auth/no-redirect-result') {
+          console.error('[google-auth redirect-result]', code, err.message);
           toast.error('Google sign-in failed. Please try again.');
-          console.error('[google-auth]', err.code, err.message);
         }
       });
   }, []);
 
   const handleGoogleSignIn = async () => {
+    setLoading(true);
     try {
-      await signInWithRedirect(auth, googleProvider);
+      // Popup is instant and works on most browsers
+      const result = await signInWithPopup(auth, googleProvider);
+      const idToken = await result.user.getIdToken();
+      const res = await axios.post('/api/auth/firebase', { idToken });
+      login(res.data.user);
+      await bootstrap();
+      toast.success('Welcome back!');
+      navigate('/dashboard');
     } catch (err: any) {
-      toast.error('Could not start Google sign-in. Please try again.');
+      const code: string = err?.code || '';
+      console.error('[google-auth popup]', code, err?.message);
+
+      if (code === 'auth/popup-blocked' || code === 'auth/popup-closed-by-user') {
+        // Popup was blocked — fall back to redirect flow
+        try {
+          await signInWithRedirect(auth, googleProvider);
+          return; // page navigates away, loading stays true
+        } catch (redirectErr: any) {
+          console.error('[google-auth redirect]', redirectErr?.code, redirectErr?.message);
+          toast.error('Google sign-in failed. Try allowing popups or use a different browser.');
+        }
+      } else if (code === 'auth/unauthorized-domain') {
+        toast.error('This site is not authorized for Google sign-in. Contact your admin.');
+      } else if (err?.response?.data?.error) {
+        toast.error(err.response.data.error);
+      } else {
+        toast.error('Google sign-in failed. Please try again.');
+      }
+      setLoading(false);
     }
   };
 
