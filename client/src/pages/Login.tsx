@@ -73,7 +73,9 @@ export default function Login() {
           toast.error('Google sign-in failed. Try allowing popups or use a different browser.');
         }
       } else if (code === 'auth/unauthorized-domain') {
-        toast.error('This site is not authorized for Google sign-in. Contact your admin.');
+        const host = window.location.hostname;
+        console.error('[google-auth] unauthorized domain:', host, '— add this to Firebase Console → Authentication → Authorized domains');
+        toast.error(`Domain "${host}" is not authorized. Admin: add it to Firebase → Authentication → Authorized domains.`);
       } else if (err?.response?.data?.error) {
         toast.error(err.response.data.error);
       } else {
