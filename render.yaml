@@ -21,3 +21,30 @@ services:
         generateValue: true
       - key: DB_PATH
         value: /var/data/papertrading.db
+
+      # ── Firebase / Google sign-in ──
+      # Paste the full service account JSON from Firebase Console →
+      # Project Settings → Service Accounts → Generate new private key.
+      # Keep it as a single-line JSON string (do NOT expand \n to real newlines).
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false
+
+      # ── Admin account bootstrap ──
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_NAME
+        sync: false
+
+      # ── SMTP (for forgot-password OTP emails) ──
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false

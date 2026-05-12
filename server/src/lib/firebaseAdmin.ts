@@ -11,10 +11,15 @@ export function getFirebaseAdmin(): admin.app.App {
     if (credPath) {
       admin.initializeApp({ credential: admin.credential.applicationDefault() });
     } else if (credJson) {
-      const serviceAccount = JSON.parse(credJson);
-      admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+      let serviceAccount: object;
+      try {
+        serviceAccount = JSON.parse(credJson);
+      } catch {
+        throw new Error('FIREBASE_NOT_CONFIGURED');
+      }
+      admin.initializeApp({ credential: admin.credential.cert(serviceAccount as admin.ServiceAccount) });
     } else {
-      throw new Error('Firebase credentials not configured. Set GOOGLE_APPLICATION_CREDENTIALS (file path) or FIREBASE_SERVICE_ACCOUNT (JSON string).');
+      throw new Error('FIREBASE_NOT_CONFIGURED');
     }
     initialized = true;
   }

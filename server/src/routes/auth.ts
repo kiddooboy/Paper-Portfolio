@@ -193,7 +193,11 @@ router.post('/firebase', async (req, res) => {
     res.cookie('auth_token', token, { httpOnly: true, secure: req.secure || req.headers['x-forwarded-proto'] === 'https', sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 });
     res.json({ token, user: { id: fresh.id, name: fresh.name, email: fresh.email, role: fresh.role, balance: fresh.balance, has_mpin: !!fresh.mpin_hash } });
   } catch (err: any) {
-    res.status(401).json({ error: err.message || 'Firebase authentication failed' });
+    const msg: string = err?.message || '';
+    if (msg === 'FIREBASE_NOT_CONFIGURED') {
+      return res.status(503).json({ error: 'Google sign-in is not available. Please use email/password to sign in.' });
+    }
+    res.status(401).json({ error: 'Google sign-in failed. Please try again.' });
   }
 });
 
