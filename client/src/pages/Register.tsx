@@ -1,7 +1,7 @@
-﻿import { useState } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { signInWithPopup } from 'firebase/auth';
+import { signInWithRedirect, getRedirectResult } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
 import { useAuthStore } from '../store/authStore';
 import { bootstrap } from '../store/bootstrap';
@@ -18,20 +18,38 @@ export default function Register() {
   const navigate = useNavigate();
   const login = useAuthStore((s) => s.login);
 
+  // Handle the result when Google redirects back to this page
+  useEffect(() => {
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (!result) return;
+        setLoading(true);
+        try {
+          const idToken = await result.user.getIdToken();
+          const res = await axios.post('/api/auth/firebase', { idToken });
+          login(res.data.user);
+          await bootstrap();
+          toast.success('Account created! You got ₹1,00,000 virtual balance.');
+          navigate('/dashboard');
+        } catch (err: any) {
+          toast.error(err?.response?.data?.error || 'Google sign-in failed. Please try again.');
+        } finally {
+          setLoading(false);
+        }
+      })
+      .catch((err: any) => {
+        if (err?.code && err.code !== 'auth/no-redirect-result') {
+          toast.error('Google sign-in failed. Please try again.');
+          console.error('[google-auth]', err.code, err.message);
+        }
+      });
+  }, []);
+
   const handleGoogleSignIn = async () => {
-    setLoading(true);
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const idToken = await result.user.getIdToken();
-      const res = await axios.post('/api/auth/firebase', { idToken });
-      login(res.data.user);
-      await bootstrap();
-      toast.success('Account created! You got ₹1,00,000 virtual balance.');
-      navigate('/dashboard');
+      await signInWithRedirect(auth, googleProvider);
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Google sign-in failed');
-    } finally {
-      setLoading(false);
+      toast.error('Could not start Google sign-in. Please try again.');
     }
   };
 
