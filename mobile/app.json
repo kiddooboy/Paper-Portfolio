@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "Paper Portfolio",
+    "slug": "paper-portfolio",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "paperportfolio",
+    "android": {
+      "package": "com.sccl.paperportfolio",
+      "googleServicesFile": "./google-services.json"
+    },
+    "ios": {
+      "bundleIdentifier": "com.paperportfolio.app",
+      "googleServicesFile": "./GoogleService-Info.plist"
+    },
+    "plugins": [
+      "@react-native-firebase/app",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.563092918942-he30oi5oci40bhmveokcdb2g3phq7283"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ],
+    "extra": {
+      "apiBaseUrl": "http://65.2.45.191:5000",
+      "eas": {
+        "projectId": "c6b2608e-c63e-48a9-a10e-7a237a927fe8"
+      }
+    }
+  }
+}
