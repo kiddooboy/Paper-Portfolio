@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 import { cn } from '../lib/utils';
@@ -222,9 +222,9 @@ function ComposeModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
 
 // ── Comment Thread ─────────────────────────────────────────────────────────
 function CommentItem({
-  comment, userId, onVote,
+  comment, onVote,
 }: {
-  comment: Comment; userId: number;
+  comment: Comment;
   onVote: (id: number, v: 1 | -1) => void;
 }) {
   return (
@@ -400,7 +400,7 @@ function PostCard({
           ) : (
             <div className="divide-y divide-gray-100 dark:divide-gray-800">
               {comments.map(c => (
-                <CommentItem key={c.id} comment={c} userId={userId} onVote={voteComment} />
+                <CommentItem key={c.id} comment={c} onVote={voteComment} />
               ))}
             </div>
           )}
