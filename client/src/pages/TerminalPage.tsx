@@ -2,13 +2,22 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { ArrowLeft, TrendingUp, TrendingDown, Bell, Bookmark, BookmarkCheck, Clock, Zap, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Bell, Bookmark, BookmarkCheck, Clock, Zap, Plus, Trash2, ArrowDownUp, AlertTriangle } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
 import { useAuthStore } from '../store/authStore';
 import { useMarketStore } from '../store/marketStore';
 import StockLogo from '../components/StockLogo';
 import StockChart from '../components/StockChart';
 import SellConfirmModal from '../components/SellConfirmModal';
+
+type MisShort = {
+  id: number;
+  symbol: string;
+  quantity: number;
+  avg_entry_price: number;
+  margin_blocked: number;
+  opened_at: string;
+};
 
 type Exchange = 'NSE' | 'BSE';
 
@@ -43,6 +52,7 @@ export default function TerminalPage() {
   const [alertCond, setAlertCond] = useState<'above' | 'below'>('above');
 
   const [holding, setHolding] = useState<{ quantity: number; avg_buy_price: number } | null>(null);
+  const [misShort, setMisShort] = useState<MisShort | null>(null);
 
   const [bookmarked, setBookmarked] = useState(false);
   const [bookmarkBusy, setBookmarkBusy] = useState(false);
@@ -62,19 +72,20 @@ export default function TerminalPage() {
     };
   }, [symbol]);
 
+  const refreshPositions = (sym: string) => {
+    axios.get('/api/portfolio').then((res) => {
+      const h = (res.data.holdings || []).find((h: any) => h.symbol === sym.toUpperCase());
+      setHolding(h ? { quantity: Number(h.quantity), avg_buy_price: Number(h.avg_buy_price) } : null);
+    }).catch(() => {});
+    axios.get('/api/orders/mis-shorts').then((res) => {
+      const s = (res.data as MisShort[]).find(x => x.symbol === sym.toUpperCase());
+      setMisShort(s ?? null);
+    }).catch(() => {});
+  };
+
   useEffect(() => {
     if (!symbol) return;
-    let abort = false;
-    axios.get('/api/portfolio')
-      .then((res) => {
-        if (abort) return;
-        const h = (res.data.holdings || []).find(
-          (h: any) => h.symbol === symbol.toUpperCase()
-        );
-        setHolding(h ? { quantity: Number(h.quantity), avg_buy_price: Number(h.avg_buy_price) } : null);
-      })
-      .catch(() => {});
-    return () => { abort = true; };
+    refreshPositions(symbol);
   }, [symbol]);
 
   const toggleBookmark = async () => {
@@ -183,11 +194,10 @@ export default function TerminalPage() {
         toast.success(`${tab.toUpperCase()} order ${res.data.status === 'FILLED' ? 'filled' : 'placed'} successfully!`);
       }
       setQty('');
-      // Refresh balance and holding
+      // Refresh balance, holding, and MIS shorts
       const p = await axios.get('/api/portfolio');
       if (p.data.balance !== undefined) updateBalance(p.data.balance);
-      const h = (p.data.holdings || []).find((h: any) => h.symbol === symbol.toUpperCase());
-      setHolding(h ? { quantity: Number(h.quantity), avg_buy_price: Number(h.avg_buy_price) } : null);
+      refreshPositions(symbol);
     } catch (e: any) {
       toast.error(e?.response?.data?.error || 'Order failed');
     } finally {
@@ -230,8 +240,22 @@ export default function TerminalPage() {
   }
 
   const price = quote.price ?? 0;
-  const margin = totalValue; // no leverage in paper trading
-  const affordable = tab === 'buy' ? (user?.balance ?? 0) >= margin : true;
+  const margin = totalValue;
+
+  // MIS short sell: user sells without holdings (intraday short)
+  const isMisShortSell = tab === 'sell' && productType === 'MIS'
+    && (!holding || holding.quantity < qtyNum);
+
+  // MIS cover buy: user has an open short and is buying to close it
+  const isMisCoverBuy = tab === 'buy' && productType === 'MIS'
+    && !!misShort && misShort.quantity > 0 && qtyNum > 0 && qtyNum <= misShort.quantity;
+
+  // Cover needs no balance; short sell needs margin; normal buy needs balance
+  const affordable = isMisCoverBuy
+    ? true
+    : (tab === 'buy' || isMisShortSell)
+      ? (user?.balance ?? 0) >= margin
+      : true;
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-gray-50 dark:bg-black">
@@ -393,10 +417,18 @@ export default function TerminalPage() {
               </button>
             </div>
             {productType === 'MIS' && (
-              <p className="text-[10px] text-amber-600 dark:text-amber-400 -mt-2 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
-                Auto square-off at 3:20 PM IST
-              </p>
+              <div className="-mt-2 flex items-center justify-between">
+                <p className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
+                  Auto square-off at 3:20 PM IST
+                </p>
+                {misShort && (
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 flex items-center gap-1">
+                    <ArrowDownUp className="w-2.5 h-2.5" />
+                    Short {misShort.quantity} @ {formatCurrency(misShort.avg_entry_price)}
+                  </span>
+                )}
+              </div>
             )}
             {productType === 'CNC' && (
               <p className="text-[10px] text-gray-400 -mt-2">Holds overnight · full margin required</p>
@@ -421,6 +453,49 @@ export default function TerminalPage() {
               ))}
             </div>
 
+            {/* MIS Cover Buy banner */}
+            {isMisCoverBuy && misShort && (
+              <div className="rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 px-3.5 py-3 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <ArrowDownUp className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">Cover Short Position</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-[11px]">
+                  <div>
+                    <p className="text-gray-400">Short qty</p>
+                    <p className="font-semibold">{misShort.quantity}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400">Entry price</p>
+                    <p className="font-semibold tabular-nums">{formatCurrency(misShort.avg_entry_price)}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400">Est. P&amp;L</p>
+                    <p className={cn('font-semibold tabular-nums', price < misShort.avg_entry_price ? 'text-gain' : 'text-loss')}>
+                      {price < misShort.avg_entry_price ? '+' : ''}
+                      {formatCurrency((misShort.avg_entry_price - price) * (qtyNum || misShort.quantity))}
+                    </p>
+                  </div>
+                </div>
+                <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                  No cash deducted — margin is returned on cover.
+                </p>
+              </div>
+            )}
+
+            {/* MIS Short Sell banner */}
+            {isMisShortSell && (
+              <div className="rounded-xl border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30 px-3.5 py-3 space-y-1">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+                  <span className="text-xs font-semibold text-red-700 dark:text-red-400">Intraday Short Sell</span>
+                </div>
+                <p className="text-[11px] text-red-600 dark:text-red-400">
+                  Selling shares you don't own. Full margin of {formatCurrency(margin)} will be blocked. Must cover before 3:20 PM.
+                </p>
+              </div>
+            )}
+
             {/* Quantity */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
@@ -432,6 +507,15 @@ export default function TerminalPage() {
                     className="text-[11px] font-medium text-groww-primary hover:underline"
                   >
                     Max: {holding.quantity}
+                  </button>
+                )}
+                {isMisCoverBuy && misShort && (
+                  <button
+                    type="button"
+                    onClick={() => setQty(String(misShort.quantity))}
+                    className="text-[11px] font-medium text-amber-600 dark:text-amber-400 hover:underline"
+                  >
+                    Cover all: {misShort.quantity}
                   </button>
                 )}
               </div>
@@ -450,8 +534,13 @@ export default function TerminalPage() {
                   Avg <span className="font-semibold text-gray-600 dark:text-gray-300 tabular-nums">{formatCurrency(holding.avg_buy_price)}</span>
                 </p>
               )}
-              {tab === 'sell' && (!holding || holding.quantity === 0) && (
+              {tab === 'sell' && productType === 'CNC' && (!holding || holding.quantity === 0) && (
                 <p className="mt-1.5 text-[11px] text-loss">You don't hold any {symbol} shares.</p>
+              )}
+              {isMisCoverBuy && misShort && qtyNum > misShort.quantity && (
+                <p className="mt-1.5 text-[11px] text-loss">
+                  Max cover qty is {misShort.quantity} (your open short).
+                </p>
               )}
             </div>
 
@@ -559,34 +648,53 @@ export default function TerminalPage() {
               <Row label="LTP" value={formatCurrency(price)} />
               <Row label={baseOrderType === 'LIMIT' ? 'Limit Price' : 'Market Price'} value={formatCurrency(executionPrice)} />
               <Row label="Quantity" value={String(qtyNum)} />
-              <Row
-                label={tab === 'buy' ? 'Amount Required' : 'Expected Proceeds'}
-                value={formatCurrency(totalValue)}
-                highlight
-              />
+              {isMisCoverBuy ? (
+                <Row label="Margin Returned" value={formatCurrency(misShort ? (misShort.margin_blocked / misShort.quantity) * qtyNum : 0)} highlight />
+              ) : isMisShortSell ? (
+                <Row label="Margin Blocked" value={formatCurrency(totalValue)} highlight />
+              ) : (
+                <Row
+                  label={tab === 'buy' ? 'Amount Required' : 'Expected Proceeds'}
+                  value={formatCurrency(totalValue)}
+                  highlight
+                />
+              )}
               <Row label="Available Cash" value={formatCurrency(user?.balance ?? 0)} />
             </div>
 
-            {tab === 'buy' && !affordable && (
+            {(tab === 'buy' && !isMisCoverBuy && !affordable) && (
               <p className="text-xs text-loss">Insufficient balance.</p>
+            )}
+            {isMisShortSell && !affordable && (
+              <p className="text-xs text-loss">Insufficient balance for short margin.</p>
             )}
           </div>
 
           <div className="p-4 border-t border-gray-100 dark:border-gray-800">
             <button
               onClick={handleOrderClick}
-              disabled={placing || (tab === 'buy' && !affordable)}
+              disabled={placing || !affordable}
               className={cn(
                 'w-full py-3 rounded-xl font-semibold text-white transition',
-                tab === 'buy' ? 'bg-gain hover:brightness-110' : 'bg-loss hover:brightness-110',
-                (placing || (tab === 'buy' && !affordable)) && 'opacity-60 cursor-not-allowed'
+                isMisCoverBuy
+                  ? 'bg-amber-500 hover:brightness-110'
+                  : isMisShortSell
+                    ? 'bg-red-600 hover:brightness-110'
+                    : tab === 'buy' ? 'bg-gain hover:brightness-110' : 'bg-loss hover:brightness-110',
+                (placing || !affordable) && 'opacity-60 cursor-not-allowed'
               )}
             >
               {placing
                 ? 'Placing…'
-                : isMarketClosed
-                  ? `🕐 Queue ${tab === 'buy' ? 'BUY' : 'SELL'} ${qtyNum} ${symbol}`
-                  : `${tab === 'buy' ? 'BUY' : 'SELL'} ${qtyNum} ${symbol}`}
+                : isMisCoverBuy
+                  ? `COVER SHORT ${qtyNum} ${symbol}`
+                  : isMisShortSell
+                    ? isMarketClosed
+                      ? `🕐 Queue SHORT SELL ${qtyNum} ${symbol}`
+                      : `SHORT SELL ${qtyNum} ${symbol}`
+                    : isMarketClosed
+                      ? `🕐 Queue ${tab === 'buy' ? 'BUY' : 'SELL'} ${qtyNum} ${symbol}`
+                      : `${tab === 'buy' ? 'BUY' : 'SELL'} ${qtyNum} ${symbol}`}
             </button>
             <Link
               to={`/orders`}

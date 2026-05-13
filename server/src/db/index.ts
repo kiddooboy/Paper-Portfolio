@@ -658,6 +658,19 @@ export async function initSchema() {
   )`, 'table: fo_orders');
   safeExec(`CREATE INDEX IF NOT EXISTS idx_fo_orders_user ON fo_orders(user_id)`, 'index: fo_orders');
 
+  // MIS intraday short positions (Sell Now, Buy Later)
+  safeExec(`CREATE TABLE IF NOT EXISTS mis_shorts (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    symbol            TEXT NOT NULL,
+    quantity          INTEGER NOT NULL,
+    avg_entry_price   REAL NOT NULL,
+    margin_blocked    REAL NOT NULL,
+    opened_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(user_id, symbol)
+  )`, 'table: mis_shorts');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_mis_shorts_user ON mis_shorts(user_id)`, 'index: mis_shorts');
+
   // ── Phase 3: updated_at triggers ──
   // Drop-and-recreate so any older incompatible trigger definition (e.g.
   // from a previous Postgres-flavoured deploy) is replaced cleanly.

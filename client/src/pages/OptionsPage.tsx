@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { cn } from '../lib/utils';
 import {
-  ArrowUp, ArrowDown, X, Search, ChevronDown,
+  X, Search, ChevronDown,
   TrendingUp, TrendingDown, Minus, Info, RefreshCw,
 } from 'lucide-react';
 

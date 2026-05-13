@@ -16,7 +16,7 @@ const orderSchema = z.object({
   limitPrice: z.number().positive().optional(),
   triggerPrice: z.number().positive().optional(),
   targetPrice: z.number().positive().optional(),
-  stopLossPrice: z.number().positive().optional(), // bracket order SL leg
+  stopLossPrice: z.number().positive().optional(),
   productType: z.enum(['CNC', 'MIS']).optional().default('CNC'),
   is_amo: z.boolean().optional().default(false),
 });
@@ -27,6 +27,14 @@ const modifySchema = z.object({
   triggerPrice: z.number().optional(),
 });
 
+// ── GET /api/orders/mis-shorts ── open MIS short positions ────────────────
+router.get('/mis-shorts', authMiddleware, (req: AuthRequest, res) => {
+  const shorts = db.prepare(
+    `SELECT * FROM mis_shorts WHERE user_id = ? ORDER BY opened_at DESC`
+  ).all(req.user!.id);
+  res.json(shorts);
+});
+
 router.post('/', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { symbol, exchange, type, transactionType, quantity, limitPrice, triggerPrice, targetPrice, stopLossPrice, productType, is_amo } = orderSchema.parse(req.body);
@@ -34,13 +42,11 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     const ex = exchange ?? 'NSE';
     const upperSymbol = symbol.toUpperCase();
 
-    // Guard: only allow trading known NSE stocks
     const known = await db
       .prepare(`SELECT 1 FROM stocks WHERE symbol = ? AND exchange = 'NSE' LIMIT 1`)
       .get(upperSymbol);
     if (!known) return res.status(400).json({ error: 'Trading restricted to NSE-listed stocks only' });
 
-    // SL/SL-M require a trigger price
     if ((type === 'SL' || type === 'SL-M') && !triggerPrice) {
       return res.status(400).json({ error: 'Trigger price required for SL/SL-M orders' });
     }
@@ -50,10 +56,6 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
 
     const currentPrice = quote.price;
 
-    // ── Target price semantics ──
-    // SELL + target (no SL trigger): treat as a LIMIT SELL at target price.
-    //   User wants to sell only when price rises to target — hold the order until then.
-    // BUY + target: buy normally; on fill a child SELL LIMIT at target is auto-created (take-profit).
     let effectiveType = type;
     let effectiveLimitPrice = limitPrice;
     if (transactionType === 'SELL' && targetPrice && !triggerPrice) {
@@ -61,29 +63,65 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       effectiveLimitPrice = targetPrice;
     }
 
-    // For balance/holdings checks use market price for MARKET and SL-M BUYs
-    // (they fill at market price, not the trigger price).
     const orderPrice = (effectiveType === 'MARKET' || effectiveType === 'SL-M')
       ? currentPrice
       : (effectiveLimitPrice || triggerPrice || currentPrice);
     const totalAmount = orderPrice * quantity;
     const marketOpen = isMarketOpen();
 
+    // ── Pre-flight: determine if this is a MIS short sell or cover ──────────
+    // Computed outside transaction so flags are available in the fill phase.
+
+    // MIS SHORT SELL: user sells without sufficient holdings
+    let isMisShortSell = false;
+    if (transactionType === 'SELL' && productType === 'MIS') {
+      const holding = db.prepare(
+        'SELECT quantity FROM holdings WHERE user_id = ? AND symbol = ?'
+      ).get(userId, upperSymbol) as any;
+      const holdingQty = holding ? Number(holding.quantity) : 0;
+      if (holdingQty < quantity) {
+        isMisShortSell = true;
+      }
+    }
+
+    // MIS COVER BUY: user buys to close an open short position
+    let isMisCoverBuy = false;
+    let existingShort: any = null;
+    if (transactionType === 'BUY' && productType === 'MIS') {
+      existingShort = db.prepare(
+        'SELECT * FROM mis_shorts WHERE user_id = ? AND symbol = ?'
+      ).get(userId, upperSymbol) as any;
+      if (existingShort && existingShort.quantity >= quantity) {
+        isMisCoverBuy = true;
+      }
+    }
+
     let orderId = 0;
     let queued = false;
     let filledNow = false;
     try {
       await db.transaction(async () => {
-        if (transactionType === 'BUY') {
+        // ── Balance / holdings checks ──────────────────────────────────────
+        if (transactionType === 'BUY' && !isMisCoverBuy) {
           const user = (await db.prepare('SELECT balance FROM users WHERE id = ?').get(userId)) as any;
           if (!user) throw new Error('User not found');
           if (Number(user.balance) < totalAmount) throw new Error('Insufficient balance');
         }
 
-        if (transactionType === 'SELL') {
-          const holding = (await db.prepare('SELECT quantity FROM holdings WHERE user_id = ? AND symbol = ?').get(userId, upperSymbol)) as any;
+        if (transactionType === 'SELL' && !isMisShortSell) {
+          const holding = (await db.prepare(
+            'SELECT quantity FROM holdings WHERE user_id = ? AND symbol = ?'
+          ).get(userId, upperSymbol)) as any;
           if (!holding || Number(holding.quantity) < quantity) {
             throw new Error(`You don't own enough shares of ${upperSymbol} to sell`);
+          }
+        }
+
+        if (isMisShortSell) {
+          const user = (await db.prepare('SELECT balance FROM users WHERE id = ?').get(userId)) as any;
+          if (!user) throw new Error('User not found');
+          if (Number(user.balance) < totalAmount) {
+            throw new Error(`Insufficient balance for short margin. Need ₹${totalAmount.toFixed(2)}`);
           }
         }
 
@@ -95,34 +133,53 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
 
         orderId = result.lastInsertRowid as number;
 
-        if (marketOpen && effectiveType === 'MARKET') {
-          // MARKET orders: fill immediately at current price
-          await fillOrder(orderId, userId, upperSymbol, transactionType, quantity, currentPrice);
-          filledNow = true;
-        } else if (marketOpen && (effectiveType === 'LIMIT' || effectiveType === 'SL' || effectiveType === 'SL-M')) {
-          // LIMIT/SL orders: check if condition is already met; fill now if so, otherwise leave PENDING for sweep
-          const conditionMet = checkFillCondition(effectiveType, transactionType, currentPrice, effectiveLimitPrice || null, triggerPrice || null);
-          if (conditionMet) {
-            await fillOrder(orderId, userId, upperSymbol, transactionType, quantity, currentPrice);
-            filledNow = true;
-          }
-        } else if (!marketOpen) {
+        if (!marketOpen) {
           queued = true;
           await db.prepare(`INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, 'order')`).run(
             userId,
             `Order Queued: ${transactionType} ${upperSymbol}`,
             `Markets are closed. Your ${effectiveType} ${transactionType} order for ${quantity} ${upperSymbol} share(s) will execute at next market open (9:15 AM IST).`,
           );
+          return;
+        }
+
+        // ── Fill logic ─────────────────────────────────────────────────────
+        if (isMisShortSell && effectiveType === 'MARKET') {
+          await fillMisShort(orderId, userId, upperSymbol, quantity, currentPrice);
+          filledNow = true;
+        } else if (isMisCoverBuy && effectiveType === 'MARKET') {
+          await fillMisCover(orderId, userId, upperSymbol, quantity, currentPrice, existingShort);
+          filledNow = true;
+        } else if (effectiveType === 'MARKET') {
+          await fillOrder(orderId, userId, upperSymbol, transactionType, quantity, currentPrice);
+          filledNow = true;
+        } else {
+          // LIMIT/SL orders — check if condition already met
+          const conditionMet = checkFillCondition(effectiveType, transactionType, currentPrice, effectiveLimitPrice || null, triggerPrice || null);
+          if (conditionMet) {
+            if (isMisShortSell) {
+              await fillMisShort(orderId, userId, upperSymbol, quantity, currentPrice);
+            } else if (isMisCoverBuy) {
+              await fillMisCover(orderId, userId, upperSymbol, quantity, currentPrice, existingShort);
+            } else {
+              await fillOrder(orderId, userId, upperSymbol, transactionType, quantity, currentPrice);
+            }
+            filledNow = true;
+          }
         }
       });
     } catch (e: any) {
       return res.status(400).json({ error: e?.message || 'Order failed' });
     }
 
+    const orderSubtype = isMisShortSell ? 'SHORT_SELL' : isMisCoverBuy ? 'COVER_BUY' : transactionType;
+
     res.json({
       success: true,
       orderId,
       queued,
+      isMisShortSell,
+      isMisCoverBuy,
       status: queued ? 'PENDING' : (filledNow ? 'FILLED' : 'PENDING'),
       message: queued
         ? 'Markets are closed. Order queued for execution at next market open (9:15 AM IST).'
@@ -131,14 +188,13 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
 
     logActivity(userId, transactionType === 'BUY' ? 'BUY_ORDER' : 'SELL_ORDER' as any, {
       orderId, symbol: upperSymbol, type: effectiveType, quantity, price: orderPrice,
-      total: totalAmount, queued, productType, targetPrice,
+      total: totalAmount, queued, productType, targetPrice, orderSubtype,
     }, getClientIp(req));
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Invalid data' });
   }
 });
 
-// Pure function: returns true if a LIMIT/SL/SL-M order's fill condition is already met at currentPrice
 function checkFillCondition(
   type: string,
   transactionType: string,
@@ -162,7 +218,100 @@ function checkFillCondition(
   return false;
 }
 
-// PUT /api/orders/:id — modify a PENDING order
+// ── MIS Short Sell fill ────────────────────────────────────────────────────
+async function fillMisShort(
+  orderId: number,
+  userId: number,
+  symbol: string,
+  quantity: number,
+  price: number,
+) {
+  const totalAmount = price * quantity;
+
+  // Block margin from balance
+  db.prepare('UPDATE users SET balance = balance - ? WHERE id = ?').run(totalAmount, userId);
+
+  // Create or add to existing short position
+  const existing = db.prepare(
+    'SELECT * FROM mis_shorts WHERE user_id = ? AND symbol = ?'
+  ).get(userId, symbol) as any;
+
+  if (existing) {
+    const newQty = existing.quantity + quantity;
+    const newAvg = (existing.avg_entry_price * existing.quantity + price * quantity) / newQty;
+    const newMargin = existing.margin_blocked + totalAmount;
+    db.prepare(
+      'UPDATE mis_shorts SET quantity = ?, avg_entry_price = ?, margin_blocked = ? WHERE id = ?'
+    ).run(newQty, newAvg, newMargin, existing.id);
+  } else {
+    db.prepare(
+      'INSERT INTO mis_shorts (user_id, symbol, quantity, avg_entry_price, margin_blocked) VALUES (?, ?, ?, ?, ?)'
+    ).run(userId, symbol, quantity, price, totalAmount);
+  }
+
+  db.prepare(`UPDATE orders SET status = 'FILLED', filled_at = CURRENT_TIMESTAMP WHERE id = ?`).run(orderId);
+
+  db.prepare(
+    'INSERT INTO transactions (user_id, order_id, symbol, type, quantity, price, total_amount) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(userId, orderId, symbol, 'SELL', quantity, price, totalAmount);
+
+  try {
+    db.prepare(`INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, 'order')`).run(
+      userId,
+      `MIS Short Sell: ${symbol}`,
+      `Shorted ${quantity} ${symbol} @ ₹${price.toFixed(2)}. Margin blocked: ₹${totalAmount.toFixed(2)}. Cover before 3:20 PM.`,
+    );
+  } catch {}
+}
+
+// ── MIS Cover Buy fill ─────────────────────────────────────────────────────
+async function fillMisCover(
+  orderId: number,
+  userId: number,
+  symbol: string,
+  quantity: number,
+  coverPrice: number,
+  short: any,
+) {
+  const proRataMargin = (short.margin_blocked / short.quantity) * quantity;
+  // P&L: positive when covered lower than entry (price fell as expected)
+  const pnl = (short.avg_entry_price - coverPrice) * quantity;
+  const creditToBalance = proRataMargin + pnl;
+
+  db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?').run(creditToBalance, userId);
+
+  if (short.quantity === quantity) {
+    db.prepare('DELETE FROM mis_shorts WHERE id = ?').run(short.id);
+  } else {
+    const newQty = short.quantity - quantity;
+    const newMargin = short.margin_blocked - proRataMargin;
+    db.prepare(
+      'UPDATE mis_shorts SET quantity = ?, margin_blocked = ? WHERE id = ?'
+    ).run(newQty, newMargin, short.id);
+  }
+
+  // Record realized P&L (buy_price = cover price, sell_price = entry price for shorts)
+  db.prepare(
+    `INSERT INTO trade_pnl (user_id, symbol, sell_order_id, quantity, buy_price, sell_price, realized_pnl)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(userId, symbol, orderId, quantity, coverPrice, short.avg_entry_price, pnl);
+
+  db.prepare(`UPDATE orders SET status = 'FILLED', filled_at = CURRENT_TIMESTAMP WHERE id = ?`).run(orderId);
+
+  db.prepare(
+    'INSERT INTO transactions (user_id, order_id, symbol, type, quantity, price, total_amount) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(userId, orderId, symbol, 'BUY', quantity, coverPrice, coverPrice * quantity);
+
+  const pnlStr = pnl >= 0 ? `+₹${pnl.toFixed(2)}` : `-₹${Math.abs(pnl).toFixed(2)}`;
+  try {
+    db.prepare(`INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, 'order')`).run(
+      userId,
+      `Short Covered: ${symbol}`,
+      `Covered ${quantity} ${symbol} @ ₹${coverPrice.toFixed(2)}. Realized P&L: ${pnlStr}`,
+    );
+  } catch {}
+}
+
 router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const orderId = parseInt(req.params.id);
@@ -178,7 +327,6 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
     const newTriggerPrice = updates.triggerPrice ?? order.trigger_price;
     const newPrice = newLimitPrice || newTriggerPrice || order.price;
 
-    // Re-validate balance/holdings if quantity changed
     if (updates.quantity) {
       if (order.transaction_type === 'BUY') {
         const user = (await db.prepare('SELECT balance FROM users WHERE id = ?').get(userId)) as any;
@@ -201,8 +349,6 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
   }
 });
 
-// Avg-cost P&L helper — records realized P&L using the holding's weighted average buy price.
-// This keeps realized + unrealized consistent (both use avg_buy_price as cost basis).
 async function recordAvgCostPnl(userId: number, sellOrderId: number, symbol: string, quantity: number, avgBuyPrice: number, sellPrice: number) {
   const pnl = (sellPrice - avgBuyPrice) * quantity;
   await db.prepare(`
@@ -245,7 +391,6 @@ export async function fillOrder(orderId: number, userId: number, symbolRaw: stri
 
     await db.prepare(`UPDATE orders SET status = 'FILLED', filled_at = CURRENT_TIMESTAMP WHERE id = ?`).run(orderId);
 
-    // Auto-create take-profit and/or stop-loss child orders when a BUY fills (bracket order)
     let targetNote = '';
     if (transactionType === 'BUY') {
       const parentOrder = db.prepare('SELECT target_price, trigger_price, product_type FROM orders WHERE id = ?').get(orderId) as any;
@@ -256,10 +401,7 @@ export async function fillOrder(orderId: number, userId: number, symbolRaw: stri
         `).run(userId, symbol, quantity, parentOrder.target_price, parentOrder.target_price, parentOrder.product_type || 'CNC', orderId);
         targetNote += ` · Take-profit SELL @ ₹${Number(parentOrder.target_price).toFixed(2)}`;
       }
-      // Bracket SL leg: if a stop_loss_price was stored via trigger_price on the parent BUY LIMIT/MARKET
-      // We use a second trigger_price field as the SL for bracket. Stored in parent as trigger_price when type is MARKET/LIMIT (unusual - indicates bracket).
       if (parentOrder?.trigger_price && parentOrder.target_price) {
-        // Both target AND trigger present on a BUY = bracket order
         db.prepare(`
           INSERT INTO orders (user_id, symbol, type, transaction_type, quantity, price, trigger_price, product_type, parent_order_id, status)
           VALUES (?, ?, 'SL-M', 'SELL', ?, ?, ?, ?, ?, 'PENDING')
