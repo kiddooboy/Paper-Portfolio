@@ -32,6 +32,7 @@ const ScreenerPage       = lazy(() => import('./pages/ScreenerPage'));
 const CompanyPage        = lazy(() => import('./pages/CompanyPage'));
 const AchievementsPage   = lazy(() => import('./pages/AchievementsPage'));
 const CommunityPage      = lazy(() => import('./pages/CommunityPage'));
+const OptionsPage        = lazy(() => import('./pages/OptionsPage'));
 
 function PageLoader() {
   return (
@@ -86,6 +87,8 @@ function App() {
           <Route path="/company/:symbol" element={<CompanyPage />} />
           <Route path="/achievements"    element={<AchievementsPage />} />
           <Route path="/community"       element={<CommunityPage />} />
+          <Route path="/options"         element={<OptionsPage />} />
+          <Route path="/options/:symbol" element={<OptionsPage />} />
         </Route>
       </Routes>
     </Suspense>

@@ -625,6 +625,39 @@ export async function initSchema() {
     UNIQUE(user_id, comment_id)
   )`, 'table: community_votes');
 
+  // F&O positions (open option / futures positions)
+  safeExec(`CREATE TABLE IF NOT EXISTS fo_positions (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    symbol          TEXT NOT NULL,
+    instrument_type TEXT NOT NULL CHECK(instrument_type IN ('CE','PE','FUT')),
+    strike_price    REAL,
+    expiry_date     TEXT NOT NULL,
+    lot_size        INTEGER NOT NULL,
+    quantity_lots   INTEGER NOT NULL DEFAULT 1,
+    avg_buy_price   REAL NOT NULL,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  )`, 'table: fo_positions');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_fo_positions_user ON fo_positions(user_id)`, 'index: fo_positions');
+
+  // F&O order history
+  safeExec(`CREATE TABLE IF NOT EXISTS fo_orders (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    symbol          TEXT NOT NULL,
+    instrument_type TEXT NOT NULL CHECK(instrument_type IN ('CE','PE','FUT')),
+    strike_price    REAL,
+    expiry_date     TEXT NOT NULL,
+    lot_size        INTEGER NOT NULL,
+    quantity_lots   INTEGER NOT NULL,
+    transaction_type TEXT NOT NULL CHECK(transaction_type IN ('BUY','SELL')),
+    price           REAL NOT NULL,
+    total_premium   REAL NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'EXECUTED',
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  )`, 'table: fo_orders');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_fo_orders_user ON fo_orders(user_id)`, 'index: fo_orders');
+
   // ── Phase 3: updated_at triggers ──
   // Drop-and-recreate so any older incompatible trigger definition (e.g.
   // from a previous Postgres-flavoured deploy) is replaced cleanly.
