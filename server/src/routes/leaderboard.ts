@@ -131,7 +131,7 @@ router.get('/', async (req, res) => {
   // Rank by overall % return (the fair competition metric on equal starting capital)
   leaderboard.sort((a, b) => b.pnlPercent - a.pnlPercent);
   const ranked = leaderboard.map((entry, index) => ({ rank: index + 1, ...entry }));
-  res.json(ranked.slice(0, 10));
+  res.json(ranked);
 });
 
 // Public holdings + summary for a leaderboard user
