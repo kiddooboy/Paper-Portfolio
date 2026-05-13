@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -6,7 +6,7 @@ import { useAuthStore } from '../store/authStore';
 import { cn } from '../lib/utils';
 import {
   ArrowUp, ArrowDown, MessageCircle, Plus, X,
-  Flame, Clock, TrendingUp, Trash2, Send, Users,
+  Flame, Clock, TrendingUp, Trash2, Send, Users, ImagePlus, AtSign,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -34,6 +34,8 @@ type Comment = {
   parent_id: number | null;
   created_at: string;
 };
+
+type MentionUser = { id: number; name: string };
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const CATEGORIES = [
@@ -85,6 +87,7 @@ function stripMarkdown(text: string) {
     .replace(/\*(.*?)\*/g, '$1')
     .replace(/`{1,3}(.*?)`{1,3}/g, '$1')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, '')
     .replace(/^[-*+]\s+/gm, '')
     .replace(/^\d+\.\s+/gm, '')
     .replace(/^>\s+/gm, '')
@@ -105,21 +108,58 @@ function Avatar({ name, size = 36 }: { name: string; size?: number }) {
   );
 }
 
-// ── Markdown body ──────────────────────────────────────────────────────────
+// ── Render text with clickable links and @mentions ─────────────────────────
+function RichText({ text }: { text: string }) {
+  const URL_RE = /(https?:\/\/[^\s]+)/g;
+  const MENTION_RE = /@([\w ]+?)(?=\s|$|[^a-zA-Z0-9 ])/g;
+
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  const combined = new RegExp(`${URL_RE.source}|${MENTION_RE.source}`, 'g');
+  let m: RegExpExecArray | null;
+  let key = 0;
+
+  while ((m = combined.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    if (m[1]) {
+      // URL
+      parts.push(
+        <a key={key++} href={m[1]} target="_blank" rel="noopener noreferrer"
+          className="text-groww-primary underline underline-offset-2 break-all hover:text-green-600 transition-colors"
+          onClick={e => e.stopPropagation()}
+        >
+          {m[1]}
+        </a>
+      );
+    } else if (m[2]) {
+      // @mention
+      parts.push(
+        <span key={key++} className="text-groww-primary font-semibold">
+          @{m[2]}
+        </span>
+      );
+    }
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return <>{parts}</>;
+}
+
+// ── Markdown body (for expanded post bodies) ───────────────────────────────
 function MarkdownBody({ children }: { children: string }) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
-        p:      ({ children }) => <p className="mb-3 last:mb-0 text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{children}</p>,
+        p: ({ children }) => <p className="mb-3 last:mb-0 text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{children}</p>,
         strong: ({ children }) => <strong className="font-semibold text-gray-900 dark:text-gray-100">{children}</strong>,
-        em:     ({ children }) => <em className="italic">{children}</em>,
-        h1:     ({ children }) => <h1 className="text-base font-bold text-gray-900 dark:text-white mb-2 mt-3">{children}</h1>,
-        h2:     ({ children }) => <h2 className="text-sm font-bold text-gray-900 dark:text-white mb-2 mt-3">{children}</h2>,
-        h3:     ({ children }) => <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-1.5 mt-2">{children}</h3>,
-        ul:     ({ children }) => <ul className="list-disc list-inside space-y-1 mb-3 text-sm text-gray-700 dark:text-gray-300">{children}</ul>,
-        ol:     ({ children }) => <ol className="list-decimal list-inside space-y-1 mb-3 text-sm text-gray-700 dark:text-gray-300">{children}</ol>,
-        li:     ({ children }) => <li className="leading-relaxed">{children}</li>,
+        em: ({ children }) => <em className="italic">{children}</em>,
+        h1: ({ children }) => <h1 className="text-base font-bold text-gray-900 dark:text-white mb-2 mt-3">{children}</h1>,
+        h2: ({ children }) => <h2 className="text-sm font-bold text-gray-900 dark:text-white mb-2 mt-3">{children}</h2>,
+        h3: ({ children }) => <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-1.5 mt-2">{children}</h3>,
+        ul: ({ children }) => <ul className="list-disc list-inside space-y-1 mb-3 text-sm text-gray-700 dark:text-gray-300">{children}</ul>,
+        ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 mb-3 text-sm text-gray-700 dark:text-gray-300">{children}</ol>,
+        li: ({ children }) => <li className="leading-relaxed">{children}</li>,
         blockquote: ({ children }) => (
           <blockquote className="border-l-2 border-groww-primary pl-3 my-2 text-gray-600 dark:text-gray-400 italic text-sm">
             {children}
@@ -130,11 +170,150 @@ function MarkdownBody({ children }: { children: string }) {
             {children}
           </code>
         ),
+        img: ({ src, alt }) => (
+          <img
+            src={src} alt={alt || ''}
+            className="max-w-full rounded-xl my-2 border border-gray-100 dark:border-gray-800 cursor-pointer"
+            style={{ maxHeight: 400, objectFit: 'contain' }}
+            onClick={() => window.open(src, '_blank')}
+          />
+        ),
+        a: ({ href, children }) => (
+          <a href={href} target="_blank" rel="noopener noreferrer"
+            className="text-groww-primary underline underline-offset-2 hover:text-green-600 transition-colors"
+          >
+            {children}
+          </a>
+        ),
         hr: () => <hr className="my-3 border-gray-200 dark:border-gray-700" />,
       }}
     >
       {children}
     </ReactMarkdown>
+  );
+}
+
+// ── Smart @mention textarea ────────────────────────────────────────────────
+function MentionTextarea({
+  value, onChange, placeholder, rows, className, onSubmit,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  rows?: number;
+  className?: string;
+  onSubmit?: () => void;
+}) {
+  const [suggestions, setSuggestions] = useState<MentionUser[]>([]);
+  const [, setMentionQuery] = useState('');
+  const [mentionStart, setMentionStart] = useState(-1);
+  const [activeIdx, setActiveIdx] = useState(0);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const dropRef = useRef<HTMLDivElement>(null);
+
+  const fetchSuggestions = useCallback(async (q: string) => {
+    try {
+      const res = await axios.get('/api/community/users', { params: { q } });
+      setSuggestions(res.data);
+      setActiveIdx(0);
+    } catch {}
+  }, []);
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const text = e.target.value;
+    onChange(text);
+
+    // Detect @mention trigger
+    const cursor = e.target.selectionStart ?? text.length;
+    const before = text.slice(0, cursor);
+    const match = before.match(/@([\w ]*)$/);
+    if (match) {
+      setMentionStart(cursor - match[0].length);
+      setMentionQuery(match[1]);
+      fetchSuggestions(match[1]);
+    } else {
+      setSuggestions([]);
+      setMentionStart(-1);
+    }
+  };
+
+  const insertMention = (user: MentionUser) => {
+    if (!taRef.current) return;
+    const cursor = taRef.current.selectionStart ?? value.length;
+    const before = value.slice(0, mentionStart);
+    const after = value.slice(cursor);
+    const inserted = `@${user.name} `;
+    const newVal = before + inserted + after;
+    onChange(newVal);
+    setSuggestions([]);
+    setMentionStart(-1);
+    // Restore focus
+    requestAnimationFrame(() => {
+      if (taRef.current) {
+        taRef.current.focus();
+        const pos = before.length + inserted.length;
+        taRef.current.setSelectionRange(pos, pos);
+      }
+    });
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (suggestions.length > 0) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx(i => Math.min(i + 1, suggestions.length - 1)); return; }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); setActiveIdx(i => Math.max(i - 1, 0)); return; }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); insertMention(suggestions[activeIdx]); return; }
+      if (e.key === 'Escape')    { setSuggestions([]); return; }
+    }
+    if (onSubmit && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) onSubmit();
+  };
+
+  // Close suggestions on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropRef.current && !dropRef.current.contains(e.target as Node)
+       && taRef.current && !taRef.current.contains(e.target as Node)) {
+        setSuggestions([]);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  return (
+    <div className="relative flex-1">
+      <textarea
+        ref={taRef}
+        value={value}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        placeholder={placeholder}
+        rows={rows}
+        className={className}
+      />
+      {suggestions.length > 0 && (
+        <div
+          ref={dropRef}
+          className="absolute z-50 mt-1 w-56 bg-white dark:bg-groww-card border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl overflow-hidden"
+          style={{ top: '100%', left: 0 }}
+        >
+          {suggestions.map((u, i) => (
+            <button
+              key={u.id}
+              onMouseDown={e => { e.preventDefault(); insertMention(u); }}
+              className={cn(
+                'w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition',
+                i === activeIdx
+                  ? 'bg-groww-primary/10 text-groww-primary'
+                  : 'hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
+              )}
+            >
+              <Avatar name={u.name} size={22} />
+              <span className="truncate font-medium">{u.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -145,6 +324,33 @@ function ComposeModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
   const [category, setCategory] = useState('general');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [images, setImages] = useState<string[]>([]);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const uploadImage = async (file: File) => {
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('image', file);
+      const res = await axios.post('/api/community/upload', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const url: string = res.data.url;
+      setImages(imgs => [...imgs, url]);
+      setBody(b => b + (b && !b.endsWith('\n') ? '\n' : '') + `![image](${url})\n`);
+    } catch (e: any) {
+      setError(e.response?.data?.error || 'Image upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) uploadImage(file);
+    e.target.value = '';
+  };
 
   const submit = async () => {
     if (!title.trim() || !body.trim()) return setError('Title and body are required');
@@ -205,23 +411,58 @@ function ComposeModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
             />
           </div>
 
-          {/* Body */}
+          {/* Body with @mention support */}
           <div>
-            <label className="text-xs font-semibold text-gray-400 mb-1.5 block uppercase tracking-wider">Details</label>
-            <textarea
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 px-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-groww-primary focus:border-transparent resize-none transition"
-              placeholder="Share your analysis, strategy, or question…"
-              rows={5}
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Details</label>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-gray-400 flex items-center gap-1">
+                  <AtSign className="w-3 h-3" /> to mention
+                </span>
+                <button
+                  type="button"
+                  disabled={uploading}
+                  onClick={() => fileRef.current?.click()}
+                  className="flex items-center gap-1 text-[11px] text-gray-500 hover:text-groww-primary transition disabled:opacity-50"
+                  title="Upload image"
+                >
+                  <ImagePlus className="w-3.5 h-3.5" />
+                  {uploading ? 'Uploading…' : 'Add image'}
+                </button>
+                <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={handleFilePick} />
+              </div>
+            </div>
+            <MentionTextarea
               value={body}
-              onChange={e => setBody(e.target.value)}
+              onChange={setBody}
+              placeholder="Share your analysis, strategy, or question… Use @Name to mention someone, paste URLs to auto-link."
+              rows={6}
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 px-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-groww-primary focus:border-transparent resize-none transition"
             />
+            {/* Image preview strip */}
+            {images.length > 0 && (
+              <div className="flex gap-2 mt-2 flex-wrap">
+                {images.map((url, i) => (
+                  <div key={i} className="relative group">
+                    <img src={url} alt="" className="w-16 h-16 object-cover rounded-lg border border-gray-200 dark:border-gray-700" />
+                    <button
+                      onClick={() => {
+                        setImages(imgs => imgs.filter((_, j) => j !== i));
+                        setBody(b => b.replace(`![image](${url})\n`, ''));
+                      }}
+                      className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition"
+                    >×</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {error && <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg">{error}</p>}
 
           <button
             onClick={submit}
-            disabled={loading}
+            disabled={loading || uploading}
             className="w-full py-2.5 rounded-xl bg-groww-primary text-white font-bold text-sm hover:bg-green-600 active:scale-[0.98] transition disabled:opacity-50"
           >
             {loading ? 'Posting…' : 'Post to Community'}
@@ -242,7 +483,9 @@ function CommentItem({ comment, onVote }: { comment: Comment; onVote: (id: numbe
           <span className="text-xs font-bold text-gray-800 dark:text-gray-200">{comment.author_name}</span>
           <span className="text-[10px] text-gray-400 dark:text-gray-500">{timeAgo(comment.created_at)}</span>
         </div>
-        <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-wrap">{comment.body}</p>
+        <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-wrap break-words">
+          <RichText text={comment.body} />
+        </p>
         <button
           onClick={() => onVote(comment.id, 1)}
           className={cn(
@@ -352,7 +595,7 @@ function PostCard({
           </div>
         ) : (
           <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
-            {isLong ? preview.slice(0, 240) + '…' : preview}
+            {isLong ? preview.slice(0, 240) + '…' : <RichText text={preview} />}
           </p>
         )}
 
@@ -368,7 +611,6 @@ function PostCard({
 
       {/* Action bar */}
       <div className="flex items-center gap-1 px-4 pb-3 pt-0">
-        {/* Upvote */}
         <button
           onClick={() => onVote(post.id, 1)}
           className={cn(
@@ -382,7 +624,6 @@ function PostCard({
           <span>{score}</span>
         </button>
 
-        {/* Downvote */}
         <button
           onClick={() => onVote(post.id, -1)}
           className={cn(
@@ -395,7 +636,6 @@ function PostCard({
           <ArrowDown className="w-3.5 h-3.5" />
         </button>
 
-        {/* Comments */}
         <button
           onClick={toggleExpand}
           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-300 transition ml-1"
@@ -410,13 +650,13 @@ function PostCard({
         <div className="border-t border-gray-100 dark:border-gray-800 px-4 pb-4">
           {/* Comment input */}
           <div className="flex gap-2 pt-3 pb-1">
-            <textarea
-              className="flex-1 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-groww-primary resize-none transition"
-              placeholder="Write a comment… (Ctrl+Enter to send)"
-              rows={2}
+            <MentionTextarea
               value={commentBody}
-              onChange={e => setCommentBody(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) submitComment(); }}
+              onChange={setCommentBody}
+              placeholder="Write a comment… @mention someone, paste a link (Ctrl+Enter to send)"
+              rows={2}
+              className="flex-1 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-groww-primary resize-none transition"
+              onSubmit={submitComment}
             />
             <button
               onClick={submitComment}
@@ -536,7 +776,7 @@ export default function CommunityPage() {
           </button>
         </div>
 
-        {/* ── Category pills (horizontal scroll, all screen sizes) ── */}
+        {/* ── Category pills ── */}
         <div className="flex gap-2 overflow-x-auto pb-1 mb-4 scrollbar-hide -mx-4 px-4">
           {CATEGORIES.map(c => (
             <button
@@ -591,7 +831,7 @@ export default function CommunityPage() {
                 <div className="text-5xl mb-3">💬</div>
                 <p className="text-base font-bold text-gray-800 dark:text-gray-200 mb-1">No posts yet</p>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                  {category === 'all' ? 'Be the first to start a discussion!' : `No posts in this category yet.`}
+                  {category === 'all' ? 'Be the first to start a discussion!' : 'No posts in this category yet.'}
                 </p>
                 <button
                   onClick={() => setCompose(true)}
@@ -617,7 +857,6 @@ export default function CommunityPage() {
 
           {/* ── Right sidebar ── */}
           <aside className="hidden xl:flex flex-col gap-4 w-56 shrink-0">
-            {/* About */}
             <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
               <div className="bg-groww-primary/10 dark:bg-groww-primary/5 px-4 py-3">
                 <h3 className="text-xs font-bold uppercase tracking-widest text-groww-primary">About Community</h3>
@@ -642,7 +881,6 @@ export default function CommunityPage() {
               </div>
             </div>
 
-            {/* Rules */}
             <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
               <div className="bg-amber-50 dark:bg-amber-900/10 px-4 py-3">
                 <h3 className="text-xs font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400">Community Rules</h3>
@@ -663,7 +901,6 @@ export default function CommunityPage() {
               </ol>
             </div>
 
-            {/* PaperBot tip */}
             <div className="bg-green-50 dark:bg-green-900/10 rounded-xl border border-green-100 dark:border-green-900/30 p-4">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-base">🤖</span>

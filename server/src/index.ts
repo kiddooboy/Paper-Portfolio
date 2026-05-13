@@ -82,6 +82,11 @@ async function main() {
   app.use(cookieParser());
   app.use(express.json());
 
+  // Serve uploaded community images (always, not just in production)
+  const uploadsDir = path.join(__dirname, '..', 'uploads');
+  fs.mkdirSync(path.join(uploadsDir, 'community'), { recursive: true });
+  app.use('/uploads', express.static(uploadsDir, { maxAge: '7d' }));
+
   // API routes
   app.use('/api/auth', authRoutes);
   app.use('/api/stocks', stockRoutes);
