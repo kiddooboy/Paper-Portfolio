@@ -280,7 +280,7 @@ function MentionTextarea({
   }, []);
 
   return (
-    <div className="relative flex-1">
+    <div className="relative flex-1 min-w-0">
       <textarea
         ref={taRef}
         value={value}
@@ -288,7 +288,7 @@ function MentionTextarea({
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         rows={rows}
-        className={className}
+        className={cn('w-full', className)}
       />
       {suggestions.length > 0 && (
         <div
@@ -653,9 +653,9 @@ function PostCard({
             <MentionTextarea
               value={commentBody}
               onChange={setCommentBody}
-              placeholder="Write a comment… @mention someone, paste a link (Ctrl+Enter to send)"
+              placeholder="Add a comment… type @ to mention"
               rows={2}
-              className="flex-1 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-groww-primary resize-none transition"
+              className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-groww-primary resize-none overflow-hidden transition"
               onSubmit={submitComment}
             />
             <button
