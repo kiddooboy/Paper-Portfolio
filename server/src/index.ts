@@ -30,6 +30,7 @@ import cron from 'node-cron';
 import { getQuote, getQuotes, getIndices, isMarketOpen, NIFTY50 } from './services/marketData.js';
 import { ingestSymbols } from './services/symbolIngest.js';
 import { startOrderExecutionScheduler } from './services/orderExecution.js';
+import { postDailyStrategy, seedCommunityIfEmpty } from './services/communityBot.js';
 import { logActivity } from './services/activityLogger.js';
 
 import authRoutes from './routes/auth.js';
@@ -64,6 +65,9 @@ async function main() {
 
   // Kick off symbol ingestion in background; don't block server start.
   ingestSymbols().catch((e) => console.warn('[symbols] ingest failed:', e?.message || e));
+
+  // Seed community with initial posts if empty, then schedule daily strategy posts at 8:00 AM IST
+  seedCommunityIfEmpty().catch((e) => console.warn('[communityBot] seed failed:', e?.message || e));
 
   // Start order execution scheduler for end-of-day order processing
   startOrderExecutionScheduler();
@@ -184,6 +188,11 @@ async function main() {
       ).run(user.id, totalValue, user.balance);
     }
   }
+
+  // Daily 8:00 AM IST (2:30 AM UTC) — post AI-generated trading strategy to community
+  cron.schedule('30 2 * * *', () => {
+    postDailyStrategy().catch(err => console.error('[cron] communityBot error:', err));
+  });
 
   // Every minute during market hours: check price alerts.
   // Pending order sweeps (MARKET + LIMIT) are handled by the orderExecution scheduler.
