@@ -31,6 +31,7 @@ const NewsPage           = lazy(() => import('./pages/NewsPage'));
 const ScreenerPage       = lazy(() => import('./pages/ScreenerPage'));
 const CompanyPage        = lazy(() => import('./pages/CompanyPage'));
 const AchievementsPage   = lazy(() => import('./pages/AchievementsPage'));
+const CommunityPage      = lazy(() => import('./pages/CommunityPage'));
 
 function PageLoader() {
   return (
@@ -84,6 +85,7 @@ function App() {
           <Route path="/screener"        element={<ScreenerPage />} />
           <Route path="/company/:symbol" element={<CompanyPage />} />
           <Route path="/achievements"    element={<AchievementsPage />} />
+          <Route path="/community"       element={<CommunityPage />} />
         </Route>
       </Routes>
     </Suspense>

@@ -588,6 +588,43 @@ export async function initSchema() {
     );
   }
 
+  // Community
+  safeExec(`CREATE TABLE IF NOT EXISTS community_posts (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    category    TEXT NOT NULL DEFAULT 'general',
+    title       TEXT NOT NULL,
+    body        TEXT NOT NULL,
+    upvotes     INTEGER NOT NULL DEFAULT 0,
+    downvotes   INTEGER NOT NULL DEFAULT 0,
+    comments_count INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  )`, 'table: community_posts');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_community_posts_user ON community_posts(user_id)`, 'index: community_posts_user');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_community_posts_cat  ON community_posts(category)`, 'index: community_posts_cat');
+
+  safeExec(`CREATE TABLE IF NOT EXISTS community_comments (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    post_id     INTEGER NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    parent_id   INTEGER REFERENCES community_comments(id) ON DELETE CASCADE,
+    body        TEXT NOT NULL,
+    upvotes     INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  )`, 'table: community_comments');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_community_comments_post ON community_comments(post_id)`, 'index: community_comments_post');
+
+  safeExec(`CREATE TABLE IF NOT EXISTS community_votes (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    post_id     INTEGER REFERENCES community_posts(id) ON DELETE CASCADE,
+    comment_id  INTEGER REFERENCES community_comments(id) ON DELETE CASCADE,
+    vote        INTEGER NOT NULL CHECK(vote IN (1, -1)),
+    UNIQUE(user_id, post_id),
+    UNIQUE(user_id, comment_id)
+  )`, 'table: community_votes');
+
   // ── Phase 3: updated_at triggers ──
   // Drop-and-recreate so any older incompatible trigger definition (e.g.
   // from a previous Postgres-flavoured deploy) is replaced cleanly.

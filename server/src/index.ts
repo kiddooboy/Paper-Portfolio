@@ -55,6 +55,7 @@ import basketsRoutes from './routes/baskets.js';
 import corporateActionsRoutes from './routes/corporateActions.js';
 import researchRoutes from './routes/research.js';
 import strategiesRoutes from './routes/strategies.js';
+import communityRoutes from './routes/community.js';
 
 const PORT = process.env.PORT || 5000;
 
@@ -100,6 +101,7 @@ async function main() {
   app.use('/api/corporate-actions', corporateActionsRoutes);
   app.use('/api/research', researchRoutes);
   app.use('/api/strategies', strategiesRoutes);
+  app.use('/api/community', communityRoutes);
 
   // Serve static client build and SPA fallback in production (registered AFTER api routes)
   if (process.env.NODE_ENV === 'production') {

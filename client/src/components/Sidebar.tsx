@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { LayoutDashboard, Search, ListOrdered, Bookmark, Trophy, TrendingUp, BarChart3, PieChart, Compass, Newspaper, SlidersHorizontal, Medal, ChevronDown, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Search, ListOrdered, Bookmark, Trophy, TrendingUp, BarChart3, PieChart, Compass, Newspaper, SlidersHorizontal, Medal, ChevronDown, ChevronRight, Users } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useState } from 'react';
 
@@ -31,6 +31,7 @@ const sections = [
   {
     label: 'Social',
     items: [
+      { path: '/community',    label: 'Community',    icon: Users },
       { path: '/leaderboard', label: 'Leaderboard', icon: Trophy },
       { path: '/achievements', label: 'Achievements', icon: Medal },
     ],
