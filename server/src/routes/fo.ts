@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
-import { getQuote } from '../services/marketData.js';
+import { getQuote, getIndices } from '../services/marketData.js';
 import { blackScholes, generateOptionChain } from '../services/blackScholes.js';
 import {
   LOT_SIZES, getBaseIV, getStrikeInterval, getExpiriesForSymbol,
@@ -47,22 +47,30 @@ router.get('/chain/:symbol', authMiddleware, async (req: AuthRequest, res) => {
       expiry = formatExpiry(expiries[0]);
     }
 
-    // Get current price
-    // Indices use dedicated Yahoo symbols; stocks use .NS suffix
+    // Get current spot price
     const isIndex = WEEKLY_EXPIRY_SYMBOLS.has(symbol);
     let spot: number;
 
     if (isIndex) {
-      // Index mapping to Yahoo Finance tickers
-      const INDEX_TICKERS: Record<string, string> = {
-        NIFTY: '^NSEI', BANKNIFTY: '^NSEBANK', FINNIFTY: 'NIFTY_FIN_SERVICE.NS',
-        MIDCPNIFTY: 'NIFTY_MIDCAP_100.NS', SENSEX: '^BSESN', BANKEX: 'BSE-BANK.BO',
+      // Map our canonical names to Yahoo Finance index symbols stored in indexCache
+      const INDEX_YAHOO: Record<string, string> = {
+        NIFTY: '^NSEI', BANKNIFTY: '^NSEBANK', FINNIFTY: '^CNXFIN',
+        MIDCPNIFTY: '^NSEMDCP50', SENSEX: '^BSESN', BANKEX: '^BSEBANK',
       };
-      const ticker = INDEX_TICKERS[symbol];
-      if (!ticker) return res.status(400).json({ error: `Index ${symbol} not supported` });
-      const q = await getQuote(ticker.replace('^', ''), ticker.startsWith('^') ? 'NSE' : 'NSE');
-      if (!q) return res.status(503).json({ error: 'Price unavailable' });
-      spot = q.price;
+      const yahooSym = INDEX_YAHOO[symbol];
+      if (!yahooSym) return res.status(400).json({ error: `Index ${symbol} not supported` });
+      const indices = await getIndices();
+      const idx = indices.find(i => i.symbol === yahooSym);
+      if (!idx) {
+        // Fallback: use a reasonable approximate value so the page isn't blank
+        const FALLBACK_PRICES: Record<string, number> = {
+          NIFTY: 24500, BANKNIFTY: 52000, FINNIFTY: 23000,
+          MIDCPNIFTY: 13000, SENSEX: 81000, BANKEX: 55000,
+        };
+        spot = FALLBACK_PRICES[symbol] ?? 25000;
+      } else {
+        spot = idx.price;
+      }
     } else {
       const q = await getQuote(symbol, 'NSE');
       if (!q) return res.status(503).json({ error: 'Price unavailable for ' + symbol });

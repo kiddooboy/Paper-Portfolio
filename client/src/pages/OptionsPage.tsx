@@ -372,11 +372,12 @@ export default function OptionsPage() {
   const [symbol, setSymbol] = useState(routeSymbol?.toUpperCase() || 'NIFTY');
   const [chainData, setChainData] = useState<ChainData | null>(null);
   const [selectedExpiry, setSelectedExpiry] = useState<string>('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'chain' | 'positions'>('chain');
   const [positions, setPositions] = useState<FoPosition[]>([]);
   const [tradeModal, setTradeModal] = useState<{ strike: number; type: 'CE' | 'PE'; price: number } | null>(null);
   const [strikeFilter, setStrikeFilter] = useState<5 | 10 | 15 | 20>(10);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     axios.get('/api/fo/eligible').then(r => setEligible(r.data));
@@ -384,6 +385,7 @@ export default function OptionsPage() {
 
   const fetchChain = useCallback(async (sym: string, expiry?: string) => {
     setLoading(true);
+    setError(null);
     try {
       const params: any = { strikes: strikeFilter };
       if (expiry) params.expiry = expiry;
@@ -391,7 +393,9 @@ export default function OptionsPage() {
       setChainData(res.data);
       setSelectedExpiry(res.data.expiry);
     } catch (e: any) {
-      console.error('Chain fetch failed', e.message);
+      const msg = e.response?.data?.error || e.message || 'Failed to load option chain';
+      setError(msg);
+      console.error('[options] chain fetch failed:', msg);
     } finally {
       setLoading(false);
     }
@@ -530,6 +534,18 @@ export default function OptionsPage() {
               <div className="flex items-center justify-center h-40">
                 <div className="w-8 h-8 border-4 border-groww-primary border-t-transparent rounded-full animate-spin" />
               </div>
+            ) : error ? (
+              <div className="text-center py-16 bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800">
+                <p className="text-3xl mb-3">⚠️</p>
+                <p className="text-sm font-bold text-gray-800 dark:text-gray-200 mb-1">Could not load option chain</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">{error}</p>
+                <button
+                  onClick={() => fetchChain(symbol, selectedExpiry || undefined)}
+                  className="px-4 py-2 bg-groww-primary text-white rounded-xl text-sm font-semibold hover:bg-green-600 transition"
+                >
+                  Retry
+                </button>
+              </div>
             ) : chainData ? (
               <>
                 {/* ── Legend ── */}
@@ -615,9 +631,8 @@ export default function OptionsPage() {
                   </div>
                 </div>
               </>
-            ) : (
-              <div className="text-center py-20 text-gray-400">Select a symbol to view the option chain</div>
-            )}
+            ) : null}
+
           </>
         )}
       </div>
