@@ -1,4 +1,4 @@
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useMarketStore } from '../store/marketStore';
 import { useNotificationsStore } from '../store/notificationsStore';
@@ -16,6 +16,8 @@ export default function Layout() {
   const { isAuthenticated, isInitializing, user } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const isFullscreen = location.pathname.startsWith('/terminal') && searchParams.get('fullscreen') === '1';
   const [dark, setDark] = useState(() => {
     try { return localStorage.getItem('theme') === 'dark'; } catch { return false; }
   });
@@ -92,9 +94,11 @@ export default function Layout() {
       </div>
 
       <div className="flex">
-        <aside className="hidden lg:block w-60 shrink-0 sticky top-[107px] h-[calc(100vh-107px)] border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-groww-dark overflow-hidden">
-          <Sidebar activePath={location.pathname} />
-        </aside>
+        {!isFullscreen && (
+          <aside className="hidden lg:block w-60 shrink-0 sticky top-[107px] h-[calc(100vh-107px)] border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-groww-dark overflow-hidden">
+            <Sidebar activePath={location.pathname} />
+          </aside>
+        )}
 
         <main className={cn(
           'flex-1 w-full min-w-0',
@@ -108,7 +112,7 @@ export default function Layout() {
 
       {isAuthenticated && user?.has_mpin === false && <SetMpinModal />}
       <IdleLock />
-      <MobileNav activePath={location.pathname} />
+      {!isFullscreen && <MobileNav activePath={location.pathname} />}
 
     </div>
   );

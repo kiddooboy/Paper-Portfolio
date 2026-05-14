@@ -5,7 +5,11 @@ import {
 } from 'lightweight-charts';
 import axios from 'axios';
 import { cn } from '../lib/utils';
-import { MousePointer2, Minus, TrendingUp, Trash2 } from 'lucide-react';
+import {
+  MousePointer2, Minus, TrendingUp, Trash2,
+  ChevronDown, X, Check,
+  AlignCenter, Type, Smile, Maximize2, ZoomIn, Crosshair,
+} from 'lucide-react';
 
 interface Bar { date: string; open: number; high: number; low: number; close: number; volume: number }
 
@@ -105,25 +109,40 @@ function calcVWAP(bars: Bar[]): (number | null)[] {
 
 // ── Indicator definitions ─────────────────────────────────────────────────────
 const IND_DEFS = [
-  { key: 'ma20',  label: 'MA20',  color: '#f59e0b', sub: false },
-  { key: 'ma50',  label: 'MA50',  color: '#3b82f6', sub: false },
-  { key: 'ma200', label: 'MA200', color: '#ec4899', sub: false },
-  { key: 'ema9',  label: 'EMA9',  color: '#8b5cf6', sub: false },
-  { key: 'ema21', label: 'EMA21', color: '#06b6d4', sub: false },
-  { key: 'bb',    label: 'BB',    color: '#94a3b8', sub: false },
+  { key: 'ma20',  label: 'MA 20',  color: '#f59e0b', sub: false },
+  { key: 'ma50',  label: 'MA 50',  color: '#3b82f6', sub: false },
+  { key: 'ma200', label: 'MA 200', color: '#ec4899', sub: false },
+  { key: 'ema9',  label: 'EMA 9',  color: '#8b5cf6', sub: false },
+  { key: 'ema21', label: 'EMA 21', color: '#06b6d4', sub: false },
+  { key: 'bb',    label: 'Bollinger Bands', color: '#94a3b8', sub: false },
   { key: 'vwap',  label: 'VWAP',  color: '#10b981', sub: false },
-  { key: 'rsi',   label: 'RSI',   color: '#a855f7', sub: true  },
-  { key: 'macd',  label: 'MACD',  color: '#f97316', sub: true  },
+  { key: 'rsi',   label: 'RSI 14', color: '#a855f7', sub: true  },
+  { key: 'macd',  label: 'MACD',   color: '#f97316', sub: true  },
 ] as const;
 type IndKey = typeof IND_DEFS[number]['key'];
 type Indicators = Record<IndKey, boolean>;
 
 // ── Drawing tools ─────────────────────────────────────────────────────────────
-type DrawTool = 'cursor' | 'hline' | 'trendline';
-const TOOLS: { id: DrawTool; title: string; Icon: any }[] = [
-  { id: 'cursor',    title: 'Cursor',          Icon: MousePointer2 },
-  { id: 'hline',     title: 'Horizontal line', Icon: Minus         },
-  { id: 'trendline', title: 'Trend line',      Icon: TrendingUp    },
+type DrawTool = 'cursor' | 'trendline' | 'hline' | 'channel' | 'text' | 'emoji' | 'measure' | 'zoom' | 'magnet';
+
+const TOOL_GROUPS: { id: DrawTool; title: string; Icon: any }[][] = [
+  [
+    { id: 'cursor',   title: 'Cursor',           Icon: MousePointer2 },
+  ],
+  [
+    { id: 'trendline', title: 'Trend Line',       Icon: TrendingUp },
+    { id: 'hline',     title: 'Horizontal Line',  Icon: Minus },
+    { id: 'channel',   title: 'Parallel Channel', Icon: AlignCenter },
+  ],
+  [
+    { id: 'text',  title: 'Text',  Icon: Type },
+    { id: 'emoji', title: 'Emoji', Icon: Smile },
+  ],
+  [
+    { id: 'measure', title: 'Measure', Icon: Maximize2 },
+    { id: 'zoom',    title: 'Zoom',    Icon: ZoomIn },
+    { id: 'magnet',  title: 'Magnet Snap', Icon: Crosshair },
+  ],
 ];
 
 // ── Scale margins helper ──────────────────────────────────────────────────────
@@ -167,8 +186,9 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
   const indSerRef    = useRef<Map<string, any[]>>(new Map());
   const plinesRef    = useRef<Array<{ series: any; line: any }>>([]);
   const trendRef     = useRef<{ time: any; price: number } | null>(null);
+  const indRef       = useRef<HTMLDivElement>(null);
 
-  const [activeRange, setActiveRange] = useState<typeof RANGES[number]>(RANGES[2]);
+  const [activeRange, setActiveRange] = useState<typeof RANGES[number]>(RANGES[0]);
   const [chartType,   setChartType]   = useState<'candle' | 'line'>('candle');
   const [bars,        setBars]        = useState<Bar[]>([]);
   const [loading,     setLoading]     = useState(true);
@@ -178,7 +198,18 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
     ma20: false, ma50: false, ma200: false, ema9: false, ema21: false,
     bb: false, vwap: false, rsi: false, macd: false,
   });
-  const [activeTool, setActiveTool] = useState<DrawTool>('cursor');
+  const [activeTool,  setActiveTool]  = useState<DrawTool>('cursor');
+  const [indOpen,     setIndOpen]     = useState(false);
+  const [indSearch,   setIndSearch]   = useState('');
+
+  // Close indicator dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (indRef.current && !indRef.current.contains(e.target as Node)) setIndOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -288,7 +319,6 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
 
     const chart = chartRef.current;
 
-    // Remove old indicator series
     for (const arr of indSerRef.current.values())
       arr.forEach(s => { try { chart.removeSeries(s); } catch {} });
     indSerRef.current.clear();
@@ -346,7 +376,6 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
       });
       s.setData(rsiData);
       chart.priceScale('rsi').applyOptions({ scaleMargins: margins.rsi, borderVisible: true, alignLabels: true });
-      // Reference lines at 70 and 30
       s.createPriceLine({ price: 70, color: '#ef444460', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: '70' });
       s.createPriceLine({ price: 30, color: '#22c55e60', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: '30' });
       indSerRef.current.set('rsi', [s]);
@@ -426,6 +455,14 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
 
   const lastBar = bars.length > 0 ? bars[bars.length - 1] : null;
   const displayBar = crosshair ?? lastBar;
+  const activeCount = Object.values(indicators).filter(Boolean).length;
+
+  const filteredInds = IND_DEFS.filter(d =>
+    d.label.toLowerCase().includes(indSearch.toLowerCase()) ||
+    d.key.toLowerCase().includes(indSearch.toLowerCase())
+  );
+  const overlayInds     = filteredInds.filter(d => !d.sub);
+  const oscillatorInds  = filteredInds.filter(d => d.sub);
 
   return (
     <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-3 space-y-2">
@@ -440,36 +477,101 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
             </button>
           ))}
         </div>
-        <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
-          {(['candle', 'line'] as const).map(t => (
-            <button key={t} onClick={() => setChartType(t)}
-              className={cn('px-2.5 py-1 rounded-md text-xs font-semibold transition capitalize',
-                chartType === t ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400')}>
-              {t}
+        <div className="flex items-center gap-2">
+          {/* Indicators dropdown */}
+          <div className="relative" ref={indRef}>
+            <button
+              onClick={() => { setIndOpen(o => !o); setIndSearch(''); }}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition',
+                indOpen || activeCount > 0
+                  ? 'border-groww-primary text-groww-primary bg-groww-primary/5 dark:bg-groww-primary/10'
+                  : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'
+              )}
+            >
+              Indicators
+              {activeCount > 0 && (
+                <span className="w-4 h-4 rounded-full bg-groww-primary text-white text-[9px] flex items-center justify-center font-bold">{activeCount}</span>
+              )}
+              <ChevronDown className={cn('w-3 h-3 opacity-60 transition-transform', indOpen && 'rotate-180')} />
             </button>
-          ))}
+
+            {indOpen && (
+              <div className="absolute left-0 top-full mt-1.5 w-60 bg-white dark:bg-groww-card border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl z-50 overflow-hidden">
+                <div className="p-2 border-b border-gray-100 dark:border-gray-800">
+                  <input
+                    autoFocus
+                    placeholder="Search indicators…"
+                    value={indSearch}
+                    onChange={e => setIndSearch(e.target.value)}
+                    className="w-full px-2.5 py-1.5 text-xs bg-gray-100 dark:bg-gray-800 rounded-lg outline-none placeholder-gray-400"
+                  />
+                </div>
+                {overlayInds.length > 0 && (
+                  <>
+                    <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">Overlay</div>
+                    {overlayInds.map(({ key, label, color }) => (
+                      <button key={key} onClick={() => toggleIndicator(key as IndKey)}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-xs hover:bg-gray-50 dark:hover:bg-gray-800/60 transition text-left">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                        <span className={indicators[key as IndKey] ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}>{label}</span>
+                        {indicators[key as IndKey] && <Check className="w-3 h-3 ml-auto text-groww-primary shrink-0" />}
+                      </button>
+                    ))}
+                  </>
+                )}
+                {oscillatorInds.length > 0 && (
+                  <>
+                    <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-gray-400 border-t border-gray-100 dark:border-gray-800">Oscillators</div>
+                    {oscillatorInds.map(({ key, label, color }) => (
+                      <button key={key} onClick={() => toggleIndicator(key as IndKey)}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-xs hover:bg-gray-50 dark:hover:bg-gray-800/60 transition text-left">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                        <span className={indicators[key as IndKey] ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}>{label}</span>
+                        <span className="text-[9px] text-gray-400 ml-1">sub-pane</span>
+                        {indicators[key as IndKey] && <Check className="w-3 h-3 ml-auto text-groww-primary shrink-0" />}
+                      </button>
+                    ))}
+                  </>
+                )}
+                {filteredInds.length === 0 && (
+                  <div className="px-3 py-4 text-xs text-gray-400 text-center">No indicators found</div>
+                )}
+                <div className="h-2" />
+              </div>
+            )}
+          </div>
+
+          {/* Chart type toggle */}
+          <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+            {(['candle', 'line'] as const).map(t => (
+              <button key={t} onClick={() => setChartType(t)}
+                className={cn('px-2.5 py-1 rounded-md text-xs font-semibold transition capitalize',
+                  chartType === t ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400')}>
+                {t}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Indicator chips */}
-      <div className="flex items-center gap-1 flex-wrap">
-        {IND_DEFS.map(({ key, label, color, sub }) => (
-          <button
-            key={key}
-            onClick={() => toggleIndicator(key)}
-            className={cn(
-              'flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border transition',
-              indicators[key]
-                ? 'bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 border-transparent'
-                : 'bg-transparent border-gray-200 dark:border-gray-700 text-gray-500 hover:border-gray-400'
-            )}
-          >
-            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
-            {label}
-            {sub && <span className="text-[9px] opacity-60 ml-0.5">↓</span>}
-          </button>
-        ))}
-      </div>
+      {/* Active indicator pills */}
+      {activeCount > 0 && (
+        <div className="flex items-center gap-1 flex-wrap">
+          {IND_DEFS.filter(d => indicators[d.key as IndKey]).map(({ key, label, color }) => (
+            <span key={key} className="flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+              {label}
+              <button
+                onClick={() => toggleIndicator(key as IndKey)}
+                className="ml-0.5 p-0.5 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600 transition text-gray-400 hover:text-red-500"
+              >
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* OHLCV readout */}
       {displayBar && chartType === 'candle' && (
@@ -485,15 +587,22 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
       {/* Chart + left toolbar */}
       <div className="flex gap-2 items-start">
         {/* Left drawing toolbar */}
-        <div className="flex flex-col gap-0.5 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-lg p-1 shrink-0">
-          {TOOLS.map(({ id, title, Icon }) => (
-            <button key={id} onClick={() => setActiveTool(id)} title={title}
-              className={cn('p-1.5 rounded transition',
-                activeTool === id ? 'bg-groww-primary text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700')}>
-              <Icon className="w-3.5 h-3.5" />
-            </button>
+        <div className="flex flex-col bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-lg p-1 shrink-0">
+          {TOOL_GROUPS.map((group, gi) => (
+            <div key={gi}>
+              {gi > 0 && <div className="border-t border-gray-200 dark:border-gray-700 my-1" />}
+              {group.map(({ id, title, Icon }) => (
+                <button key={id} onClick={() => setActiveTool(id)} title={title}
+                  className={cn('p-1.5 rounded transition block w-full',
+                    activeTool === id
+                      ? 'bg-groww-primary text-white'
+                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700')}>
+                  <Icon className="w-3.5 h-3.5" />
+                </button>
+              ))}
+            </div>
           ))}
-          <div className="border-t border-gray-200 dark:border-gray-700 my-0.5" />
+          <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
           <button onClick={clearDrawings} title="Clear drawings"
             className="p-1.5 rounded transition text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20">
             <Trash2 className="w-3.5 h-3.5" />
@@ -509,7 +618,14 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
           )}
           {activeTool !== 'cursor' && (
             <div className="absolute top-1 left-1 z-10 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-[10px] font-semibold px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
-              {activeTool === 'hline' ? 'Click chart to draw horizontal line' : 'Click two points for trend line'}
+              {activeTool === 'hline'     && 'Click chart to draw horizontal line'}
+              {activeTool === 'trendline' && 'Click two points for trend line'}
+              {activeTool === 'channel'   && 'Parallel channel — coming soon'}
+              {activeTool === 'text'      && 'Text annotation — coming soon'}
+              {activeTool === 'emoji'     && 'Emoji marker — coming soon'}
+              {activeTool === 'measure'   && 'Click two points to measure'}
+              {activeTool === 'zoom'      && 'Zoom — coming soon'}
+              {activeTool === 'magnet'    && 'Magnet snap — coming soon'}
             </div>
           )}
           <div ref={containerRef} className="w-full rounded-xl overflow-hidden" />

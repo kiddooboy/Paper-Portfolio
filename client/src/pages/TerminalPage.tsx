@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { ArrowLeft, TrendingUp, TrendingDown, Bell, Bookmark, BookmarkCheck, Clock, Zap, Plus, Trash2, ArrowDownUp, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Bell, Bookmark, BookmarkCheck, Clock, Zap, Plus, Trash2, ArrowDownUp, AlertTriangle, Maximize2 } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
 import { useAuthStore } from '../store/authStore';
 import { useMarketStore } from '../store/marketStore';
@@ -342,6 +342,13 @@ export default function TerminalPage() {
             title="Set price alert"
           >
             <Bell className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => window.open(`/terminal/${symbol}?exchange=${exchange}&fullscreen=1`, '_blank')}
+            className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+            title="Open fullscreen chart"
+          >
+            <Maximize2 className="w-4 h-4" />
           </button>
         </div>
       </div>

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import axios from 'axios';
 import StockLogo from './StockLogo';
@@ -19,7 +18,6 @@ export default function GlobalSearch({ onStockSelect }: GlobalSearchProps = {}) 
   const [open, setOpen] = useState(false);
   const [results, setResults] = useState<Result[]>([]);
   const [active, setActive] = useState(0);
-  const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -73,7 +71,7 @@ export default function GlobalSearch({ onStockSelect }: GlobalSearchProps = {}) 
       setOpen(false);
       setQ('');
     } else {
-      navigate(`/terminal/${r.symbol}?exchange=${r.exchange}`);
+      window.open(`/terminal/${r.symbol}?exchange=${r.exchange}&fullscreen=1`, '_blank');
       setOpen(false);
       setQ('');
     }
