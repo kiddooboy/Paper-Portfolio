@@ -5,6 +5,9 @@ import { getQuote, isMarketOpen } from '../services/marketData.js';
 import { z } from 'zod';
 import { logActivity, getClientIp } from '../services/activityLogger.js';
 
+// SEBI intraday margin approximation: 20% of trade value (5× leverage)
+const MIS_MARGIN_RATE = 0.20;
+
 const router = Router();
 
 const orderSchema = z.object({
@@ -27,12 +30,26 @@ const modifySchema = z.object({
   triggerPrice: z.number().optional(),
 });
 
-// ── GET /api/orders/mis-shorts ── open MIS short positions ────────────────
-router.get('/mis-shorts', authMiddleware, (req: AuthRequest, res) => {
+// ── GET /api/orders/mis-shorts ── open MIS short positions with live P&L ──
+router.get('/mis-shorts', authMiddleware, async (req: AuthRequest, res) => {
   const shorts = db.prepare(
     `SELECT * FROM mis_shorts WHERE user_id = ? ORDER BY opened_at DESC`
-  ).all(req.user!.id);
-  res.json(shorts);
+  ).all(req.user!.id) as any[];
+
+  const enriched = await Promise.all(shorts.map(async (s) => {
+    try {
+      const q = await getQuote(s.symbol, 'NSE');
+      const currentPrice = q?.price ?? s.avg_entry_price;
+      const positionValue  = s.avg_entry_price * s.quantity;
+      const unrealizedPnl  = (s.avg_entry_price - currentPrice) * s.quantity;
+      const unrealizedPct  = positionValue > 0 ? (unrealizedPnl / positionValue) * 100 : 0;
+      return { ...s, current_price: currentPrice, unrealized_pnl: unrealizedPnl, unrealized_pnl_pct: unrealizedPct };
+    } catch {
+      return { ...s, current_price: s.avg_entry_price, unrealized_pnl: 0, unrealized_pnl_pct: 0 };
+    }
+  }));
+
+  res.json(enriched);
 });
 
 router.post('/', authMiddleware, async (req: AuthRequest, res) => {
@@ -120,8 +137,9 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
         if (isMisShortSell) {
           const user = (await db.prepare('SELECT balance FROM users WHERE id = ?').get(userId)) as any;
           if (!user) throw new Error('User not found');
-          if (Number(user.balance) < totalAmount) {
-            throw new Error(`Insufficient balance for short margin. Need ₹${totalAmount.toFixed(2)}`);
+          const marginRequired = totalAmount * MIS_MARGIN_RATE;
+          if (Number(user.balance) < marginRequired) {
+            throw new Error(`Insufficient margin. Required: ₹${marginRequired.toFixed(2)} (20% of ₹${totalAmount.toFixed(2)})`);
           }
         }
 
@@ -226,40 +244,39 @@ async function fillMisShort(
   quantity: number,
   price: number,
 ) {
-  const totalAmount = price * quantity;
+  const positionValue  = price * quantity;
+  const marginToBlock  = positionValue * MIS_MARGIN_RATE; // 20% — Groww-style SEBI intraday margin
 
-  // Block margin from balance
-  db.prepare('UPDATE users SET balance = balance - ? WHERE id = ?').run(totalAmount, userId);
+  db.prepare('UPDATE users SET balance = balance - ? WHERE id = ?').run(marginToBlock, userId);
 
-  // Create or add to existing short position
   const existing = db.prepare(
     'SELECT * FROM mis_shorts WHERE user_id = ? AND symbol = ?'
   ).get(userId, symbol) as any;
 
   if (existing) {
-    const newQty = existing.quantity + quantity;
-    const newAvg = (existing.avg_entry_price * existing.quantity + price * quantity) / newQty;
-    const newMargin = existing.margin_blocked + totalAmount;
+    const newQty    = existing.quantity + quantity;
+    const newAvg    = (existing.avg_entry_price * existing.quantity + price * quantity) / newQty;
+    const newMargin = existing.margin_blocked + marginToBlock;
     db.prepare(
       'UPDATE mis_shorts SET quantity = ?, avg_entry_price = ?, margin_blocked = ? WHERE id = ?'
     ).run(newQty, newAvg, newMargin, existing.id);
   } else {
     db.prepare(
       'INSERT INTO mis_shorts (user_id, symbol, quantity, avg_entry_price, margin_blocked) VALUES (?, ?, ?, ?, ?)'
-    ).run(userId, symbol, quantity, price, totalAmount);
+    ).run(userId, symbol, quantity, price, marginToBlock);
   }
 
   db.prepare(`UPDATE orders SET status = 'FILLED', filled_at = CURRENT_TIMESTAMP WHERE id = ?`).run(orderId);
 
   db.prepare(
     'INSERT INTO transactions (user_id, order_id, symbol, type, quantity, price, total_amount) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).run(userId, orderId, symbol, 'SELL', quantity, price, totalAmount);
+  ).run(userId, orderId, symbol, 'SELL', quantity, price, positionValue);
 
   try {
     db.prepare(`INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, 'order')`).run(
       userId,
       `MIS Short Sell: ${symbol}`,
-      `Shorted ${quantity} ${symbol} @ ₹${price.toFixed(2)}. Margin blocked: ₹${totalAmount.toFixed(2)}. Cover before 3:20 PM.`,
+      `Shorted ${quantity} ${symbol} @ ₹${price.toFixed(2)}. Margin blocked: ₹${marginToBlock.toFixed(2)} (20%). Square off before 3:20 PM.`,
     );
   } catch {}
 }

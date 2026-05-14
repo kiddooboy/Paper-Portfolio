@@ -5,13 +5,27 @@ import { formatCurrency, formatPercent, cn } from '../lib/utils';
 import { useMarketStore } from '../store/marketStore';
 import StockLogo from '../components/StockLogo';
 import DatePicker from '../components/DatePicker';
-import { TrendingUp, TrendingDown, ArrowUpRight, Search } from 'lucide-react';
+import { TrendingUp, TrendingDown, ArrowUpRight, Search, ArrowDownUp } from 'lucide-react';
 
 type SortKey = 'symbol' | 'qty' | 'invested' | 'avg' | 'current' | 'pnl' | 'pnl_pct' | 'day_change';
 type SortDir = 'asc' | 'desc';
 
+type MisShort = {
+  id: number;
+  symbol: string;
+  quantity: number;
+  avg_entry_price: number;
+  margin_blocked: number;
+  opened_at: string;
+  current_price?: number;
+  unrealized_pnl?: number;
+  unrealized_pnl_pct?: number;
+};
+
 export default function PositionsPage() {
+  const [activeTab, setActiveTab] = useState<'holdings' | 'day'>('holdings');
   const [holdings, setHoldings] = useState<any[]>([]);
+  const [misShorts, setMisShorts] = useState<MisShort[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>('pnl');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
@@ -23,8 +37,12 @@ export default function PositionsPage() {
   useEffect(() => {
     async function fetchPositions() {
       try {
-        const res = await axios.get('/api/portfolio');
-        setHoldings(res.data.holdings || []);
+        const [portfolioRes, shortsRes] = await Promise.all([
+          axios.get('/api/portfolio'),
+          axios.get('/api/orders/mis-shorts'),
+        ]);
+        setHoldings(portfolioRes.data.holdings || []);
+        setMisShorts(shortsRes.data || []);
       } catch (error) {
         console.error('Error fetching positions:', error);
       } finally {
@@ -161,6 +179,43 @@ export default function PositionsPage() {
 
   return (
     <div className="space-y-3">
+      {/* Tab switcher */}
+      <div className="flex gap-1 bg-gray-100 dark:bg-gray-800/60 p-1 rounded-xl w-fit">
+        <button
+          onClick={() => setActiveTab('holdings')}
+          className={cn(
+            'px-4 py-1.5 text-sm font-semibold rounded-lg transition',
+            activeTab === 'holdings'
+              ? 'bg-white dark:bg-groww-card shadow text-gray-900 dark:text-white'
+              : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+          )}
+        >
+          Holdings
+        </button>
+        <button
+          onClick={() => setActiveTab('day')}
+          className={cn(
+            'px-4 py-1.5 text-sm font-semibold rounded-lg transition flex items-center gap-1.5',
+            activeTab === 'day'
+              ? 'bg-white dark:bg-groww-card shadow text-gray-900 dark:text-white'
+              : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+          )}
+        >
+          <ArrowDownUp className="w-3.5 h-3.5" />
+          Day Positions
+          {misShorts.length > 0 && (
+            <span className="text-[10px] bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 font-bold px-1.5 py-0.5 rounded-full">
+              {misShorts.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {activeTab === 'day' ? (
+        <DayPositionsPanel misShorts={misShorts} />
+      ) : (
+      <>
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -305,6 +360,107 @@ export default function PositionsPage() {
           </table>
         </div>
       </div>
+      </>
+      )}
+    </div>
+  );
+}
+
+/* ── Day Positions (MIS open shorts) ── */
+
+function DayPositionsPanel({ misShorts }: { misShorts: MisShort[] }) {
+  const totalPnl = misShorts.reduce((acc, s) => acc + (s.unrealized_pnl ?? 0), 0);
+  const totalMargin = misShorts.reduce((acc, s) => acc + s.margin_blocked, 0);
+
+  if (misShorts.length === 0) {
+    return (
+      <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 flex flex-col items-center justify-center py-16 gap-3">
+        <ArrowDownUp className="w-8 h-8 text-gray-300 dark:text-gray-600" />
+        <p className="font-semibold text-gray-500">No open intraday positions</p>
+        <p className="text-sm text-gray-400">MIS short positions you open today will appear here.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Summary strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div className="bg-white dark:bg-groww-card rounded-xl p-4 border border-gray-100 dark:border-gray-800">
+          <p className="text-xs text-gray-500 mb-1">Open Shorts</p>
+          <p className="text-xl font-bold">{misShorts.length}</p>
+        </div>
+        <div className="bg-white dark:bg-groww-card rounded-xl p-4 border border-gray-100 dark:border-gray-800">
+          <p className="text-xs text-gray-500 mb-1">Margin Blocked</p>
+          <p className="text-xl font-bold">{formatCurrency(totalMargin)}</p>
+        </div>
+        <div className="bg-white dark:bg-groww-card rounded-xl p-4 border border-gray-100 dark:border-gray-800 col-span-2 sm:col-span-1">
+          <p className="text-xs text-gray-500 mb-1">Unrealised P&L</p>
+          <p className={cn('text-xl font-bold', totalPnl >= 0 ? 'text-gain' : 'text-loss')}>
+            {totalPnl >= 0 ? '+' : ''}{formatCurrency(totalPnl)}
+          </p>
+        </div>
+      </div>
+
+      {/* Shorts table */}
+      <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-100 dark:border-gray-800">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Stock</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Qty</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Avg Sold</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">LTP</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">P&L</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {misShorts.map((s) => (
+                <tr key={s.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <StockLogo symbol={s.symbol} size={36} />
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <p className="font-medium text-sm">{s.symbol}</p>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 font-bold">SELL</span>
+                        </div>
+                        <p className="text-[10px] text-gray-400">MIS · Auto sq-off 3:20 PM</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-right font-medium">{s.quantity}</td>
+                  <td className="px-4 py-3 text-right font-medium tabular-nums">{formatCurrency(s.avg_entry_price)}</td>
+                  <td className="px-4 py-3 text-right font-medium tabular-nums">
+                    {s.current_price != null ? formatCurrency(s.current_price) : '—'}
+                  </td>
+                  <td className={cn('px-4 py-3 text-right font-semibold tabular-nums', (s.unrealized_pnl ?? 0) >= 0 ? 'text-gain' : 'text-loss')}>
+                    {(s.unrealized_pnl ?? 0) >= 0 ? '+' : ''}{formatCurrency(s.unrealized_pnl ?? 0)}
+                    <span className="block text-[10px] font-normal opacity-70">
+                      {(s.unrealized_pnl_pct ?? 0) >= 0 ? '+' : ''}{(s.unrealized_pnl_pct ?? 0).toFixed(2)}%
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <Link
+                      to={`/terminal/${s.symbol}?tab=buy&productType=MIS`}
+                      className="text-xs font-semibold text-amber-600 dark:text-amber-400 hover:underline"
+                    >
+                      Exit →
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
+        All MIS positions are auto square-off at 3:20 PM IST. Exit before then to avoid forced closure.
+      </p>
     </div>
   );
 }

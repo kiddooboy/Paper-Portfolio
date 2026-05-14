@@ -16,7 +16,9 @@ export default function Layout() {
   const { isAuthenticated, isInitializing, user } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
-  const [dark, setDark] = useState(true);
+  const [dark, setDark] = useState(() => {
+    try { return localStorage.getItem('theme') === 'dark'; } catch { return false; }
+  });
   const fetchNotifications = useNotificationsStore((s) => s.fetch);
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -25,10 +27,11 @@ export default function Layout() {
   }, [isInitializing, isAuthenticated, navigate]);
 
   useEffect(() => {
-    if (!dark) {
-      document.documentElement.classList.remove('dark');
-    } else {
+    try { localStorage.setItem('theme', dark ? 'dark' : 'light'); } catch {}
+    if (dark) {
       document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
     }
   }, [dark]);
 
@@ -74,6 +77,13 @@ export default function Layout() {
               <span className="font-mono">{currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</span>
               <span className="text-[10px] uppercase tracking-wide">IST</span>
             </div>
+            <button
+              onClick={() => setDark(!dark)}
+              className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-600 dark:text-gray-300"
+              title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
             <NotificationDropdown />
             <ProfileMenu dark={dark} onToggleDark={() => setDark(!dark)} />
           </div>

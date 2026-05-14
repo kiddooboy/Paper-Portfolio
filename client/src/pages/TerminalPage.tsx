@@ -17,7 +17,13 @@ type MisShort = {
   avg_entry_price: number;
   margin_blocked: number;
   opened_at: string;
+  // enriched by server
+  current_price?: number;
+  unrealized_pnl?: number;
+  unrealized_pnl_pct?: number;
 };
+
+const MIS_MARGIN_RATE = 0.20; // mirrors server constant
 
 type Exchange = 'NSE' | 'BSE';
 
@@ -32,7 +38,9 @@ export default function TerminalPage() {
 
   const [tab, setTab] = useState<'buy' | 'sell'>((searchParams.get('tab') as 'buy' | 'sell') || 'buy');
   const [baseOrderType, setBaseOrderType] = useState<'MARKET' | 'LIMIT'>('MARKET');
-  const [productType, setProductType] = useState<'CNC' | 'MIS'>('CNC');
+  const [productType, setProductType] = useState<'CNC' | 'MIS'>(
+    (searchParams.get('productType') as 'CNC' | 'MIS') === 'MIS' ? 'MIS' : 'CNC'
+  );
   const [qty, setQty] = useState('');
   const [limitPrice, setLimitPrice] = useState('');
   const [slEnabled, setSlEnabled] = useState(false);
@@ -240,22 +248,34 @@ export default function TerminalPage() {
   }
 
   const price = quote.price ?? 0;
-  const margin = totalValue;
 
-  // MIS short sell: user sells without holdings (intraday short)
+  // MIS short sell: selling without sufficient holdings in intraday mode
   const isMisShortSell = tab === 'sell' && productType === 'MIS'
     && (!holding || holding.quantity < qtyNum);
 
-  // MIS cover buy: user has an open short and is buying to close it
+  // MIS cover buy: closing an existing short position
   const isMisCoverBuy = tab === 'buy' && productType === 'MIS'
     && !!misShort && misShort.quantity > 0 && qtyNum > 0 && qtyNum <= misShort.quantity;
 
-  // Cover needs no balance; short sell needs margin; normal buy needs balance
+  // Required margin for a new short = 20% of position value (Groww / SEBI intraday)
+  const requiredMargin = totalValue * MIS_MARGIN_RATE;
+
+  // Margin released when covering: pro-rata of what was blocked at entry
+  const marginReleased = misShort
+    ? (misShort.margin_blocked / misShort.quantity) * qtyNum
+    : 0;
+  // Estimated P&L for covering qtyNum shares
+  const estCoverPnl = misShort
+    ? (misShort.avg_entry_price - executionPrice) * qtyNum
+    : 0;
+
   const affordable = isMisCoverBuy
-    ? true
-    : (tab === 'buy' || isMisShortSell)
-      ? (user?.balance ?? 0) >= margin
-      : true;
+    ? true // no cash needed — margin was pre-blocked
+    : isMisShortSell
+      ? (user?.balance ?? 0) >= requiredMargin
+      : tab === 'buy'
+        ? (user?.balance ?? 0) >= totalValue
+        : true;
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-gray-50 dark:bg-black">
@@ -417,15 +437,21 @@ export default function TerminalPage() {
               </button>
             </div>
             {productType === 'MIS' && (
-              <div className="-mt-2 flex items-center justify-between">
+              <div className="-mt-2 flex items-center justify-between gap-2">
                 <p className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
-                  Auto square-off at 3:20 PM IST
+                  Auto square-off at 3:20 PM · 5× leverage
                 </p>
                 {misShort && (
-                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 flex items-center gap-1">
+                  <span className={cn(
+                    'text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-1',
+                    (misShort.unrealized_pnl ?? 0) >= 0
+                      ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                      : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                  )}>
                     <ArrowDownUp className="w-2.5 h-2.5" />
-                    Short {misShort.quantity} @ {formatCurrency(misShort.avg_entry_price)}
+                    S {misShort.quantity} · {(misShort.unrealized_pnl ?? 0) >= 0 ? '+' : ''}
+                    {formatCurrency(misShort.unrealized_pnl ?? 0)}
                   </span>
                 )}
               </div>
@@ -453,45 +479,62 @@ export default function TerminalPage() {
               ))}
             </div>
 
-            {/* MIS Cover Buy banner */}
-            {isMisCoverBuy && misShort && (
-              <div className="rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 px-3.5 py-3 space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <ArrowDownUp className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                  <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">Cover Short Position</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-[11px]">
-                  <div>
-                    <p className="text-gray-400">Short qty</p>
-                    <p className="font-semibold">{misShort.quantity}</p>
+            {/* ── Groww-style: Open short position card (BUY tab) ── */}
+            {productType === 'MIS' && tab === 'buy' && misShort && misShort.quantity > 0 && (
+              <div className={cn(
+                'rounded-xl border px-3.5 py-3 space-y-2',
+                (misShort.unrealized_pnl ?? 0) >= 0
+                  ? 'border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-950/20'
+                  : 'border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/20'
+              )}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ArrowDownUp className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
+                    <span className="text-xs font-bold text-gray-800 dark:text-gray-200">Open Short · {symbol}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 font-bold">SELL</span>
                   </div>
+                  <span className="text-[10px] text-gray-400">Qty: {misShort.quantity}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-x-3 gap-y-1 text-[11px]">
                   <div>
-                    <p className="text-gray-400">Entry price</p>
+                    <p className="text-gray-400">Avg. sold</p>
                     <p className="font-semibold tabular-nums">{formatCurrency(misShort.avg_entry_price)}</p>
                   </div>
                   <div>
-                    <p className="text-gray-400">Est. P&amp;L</p>
-                    <p className={cn('font-semibold tabular-nums', price < misShort.avg_entry_price ? 'text-gain' : 'text-loss')}>
-                      {price < misShort.avg_entry_price ? '+' : ''}
-                      {formatCurrency((misShort.avg_entry_price - price) * (qtyNum || misShort.quantity))}
+                    <p className="text-gray-400">LTP</p>
+                    <p className="font-semibold tabular-nums">{formatCurrency(misShort.current_price ?? price)}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400">P&amp;L</p>
+                    <p className={cn('font-bold tabular-nums', (misShort.unrealized_pnl ?? 0) >= 0 ? 'text-gain' : 'text-loss')}>
+                      {(misShort.unrealized_pnl ?? 0) >= 0 ? '+' : ''}
+                      {formatCurrency(misShort.unrealized_pnl ?? 0)}
+                      <span className="text-[10px] ml-0.5 opacity-70">
+                        ({(misShort.unrealized_pnl_pct ?? 0) >= 0 ? '+' : ''}
+                        {(misShort.unrealized_pnl_pct ?? 0).toFixed(2)}%)
+                      </span>
                     </p>
                   </div>
                 </div>
-                <p className="text-[10px] text-amber-600 dark:text-amber-400">
-                  No cash deducted — margin is returned on cover.
+                <p className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  Square off before 3:20 PM — margin returns on exit.
                 </p>
               </div>
             )}
 
-            {/* MIS Short Sell banner */}
+            {/* ── Short sell info (SELL tab, MIS, no holdings) ── */}
             {isMisShortSell && (
-              <div className="rounded-xl border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30 px-3.5 py-3 space-y-1">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
-                  <span className="text-xs font-semibold text-red-700 dark:text-red-400">Intraday Short Sell</span>
+              <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40 px-3.5 py-3 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ArrowDownUp className="w-3.5 h-3.5 text-gray-500" />
+                    <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Intraday Short Sell</span>
+                  </div>
+                  <span className="text-[10px] font-bold text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/30 px-1.5 py-0.5 rounded">5× leverage</span>
                 </div>
-                <p className="text-[11px] text-red-600 dark:text-red-400">
-                  Selling shares you don't own. Full margin of {formatCurrency(margin)} will be blocked. Must cover before 3:20 PM.
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
+                  Sell first, buy back later. Profit if price falls. Only {formatCurrency(requiredMargin)} margin blocked (20% of ₹{totalValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })} position).
                 </p>
               </div>
             )}
@@ -645,21 +688,39 @@ export default function TerminalPage() {
 
             {/* Order summary */}
             <div className="space-y-1.5 text-sm pt-2 border-t border-gray-100 dark:border-gray-800">
-              <Row label="LTP" value={formatCurrency(price)} />
-              <Row label={baseOrderType === 'LIMIT' ? 'Limit Price' : 'Market Price'} value={formatCurrency(executionPrice)} />
-              <Row label="Quantity" value={String(qtyNum)} />
-              {isMisCoverBuy ? (
-                <Row label="Margin Returned" value={formatCurrency(misShort ? (misShort.margin_blocked / misShort.quantity) * qtyNum : 0)} highlight />
-              ) : isMisShortSell ? (
-                <Row label="Margin Blocked" value={formatCurrency(totalValue)} highlight />
+              {isMisShortSell ? (
+                <>
+                  <Row label="Quantity" value={String(qtyNum)} />
+                  <Row label="Position Value" value={formatCurrency(totalValue)} />
+                  <Row label="Req. Margin (20%)" value={formatCurrency(requiredMargin)} highlight />
+                  <Row label="Available Cash" value={formatCurrency(user?.balance ?? 0)} />
+                </>
+              ) : isMisCoverBuy ? (
+                <>
+                  <Row label="Avg. sold" value={formatCurrency(misShort?.avg_entry_price ?? 0)} />
+                  <Row label="Cover price" value={formatCurrency(executionPrice)} />
+                  <Row label="Qty" value={String(qtyNum)} />
+                  <Row label="Margin released" value={formatCurrency(marginReleased)} />
+                  <Row
+                    label="Est. P&L"
+                    value={`${estCoverPnl >= 0 ? '+' : ''}${formatCurrency(estCoverPnl)}`}
+                    pnl={estCoverPnl}
+                  />
+                  <Row label="Net credit" value={formatCurrency(marginReleased + estCoverPnl)} highlight />
+                </>
               ) : (
-                <Row
-                  label={tab === 'buy' ? 'Amount Required' : 'Expected Proceeds'}
-                  value={formatCurrency(totalValue)}
-                  highlight
-                />
+                <>
+                  <Row label="LTP" value={formatCurrency(price)} />
+                  <Row label={baseOrderType === 'LIMIT' ? 'Limit Price' : 'Market Price'} value={formatCurrency(executionPrice)} />
+                  <Row label="Quantity" value={String(qtyNum)} />
+                  <Row
+                    label={tab === 'buy' ? 'Amount Required' : 'Expected Proceeds'}
+                    value={formatCurrency(totalValue)}
+                    highlight
+                  />
+                  <Row label="Available Cash" value={formatCurrency(user?.balance ?? 0)} />
+                </>
               )}
-              <Row label="Available Cash" value={formatCurrency(user?.balance ?? 0)} />
             </div>
 
             {(tab === 'buy' && !isMisCoverBuy && !affordable) && (
@@ -687,7 +748,7 @@ export default function TerminalPage() {
               {placing
                 ? 'Placing…'
                 : isMisCoverBuy
-                  ? `COVER SHORT ${qtyNum} ${symbol}`
+                  ? `BUY TO COVER ${qtyNum} ${symbol}`
                   : isMisShortSell
                     ? isMarketClosed
                       ? `🕐 Queue SHORT SELL ${qtyNum} ${symbol}`
@@ -1051,13 +1112,14 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Row({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+function Row({ label, value, highlight, pnl }: { label: string; value: string; highlight?: boolean; pnl?: number }) {
+  const valueClass = pnl !== undefined
+    ? cn('tabular-nums font-semibold', pnl >= 0 ? 'text-gain' : 'text-loss')
+    : cn('tabular-nums', highlight ? 'font-semibold' : 'text-gray-700 dark:text-gray-300');
   return (
     <div className="flex justify-between items-center">
       <span className="text-gray-500 text-xs">{label}</span>
-      <span className={cn('tabular-nums', highlight ? 'font-semibold' : 'text-gray-700 dark:text-gray-300')}>
-        {value}
-      </span>
+      <span className={valueClass}>{value}</span>
     </div>
   );
 }

@@ -658,6 +658,48 @@ export async function initSchema() {
   )`, 'table: fo_orders');
   safeExec(`CREATE INDEX IF NOT EXISTS idx_fo_orders_user ON fo_orders(user_id)`, 'index: fo_orders');
 
+  // Algo trading strategies
+  safeExec(`CREATE TABLE IF NOT EXISTS algo_strategies (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name              TEXT NOT NULL,
+    symbol            TEXT NOT NULL,
+    product_type      TEXT NOT NULL DEFAULT 'CNC',
+    entry_conditions  TEXT NOT NULL DEFAULT '[]',
+    exit_conditions   TEXT NOT NULL DEFAULT '{}',
+    quantity          INTEGER NOT NULL DEFAULT 1,
+    is_active         INTEGER NOT NULL DEFAULT 0,
+    trades_count      INTEGER NOT NULL DEFAULT 0,
+    pnl               REAL NOT NULL DEFAULT 0,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    last_triggered_at TEXT
+  )`, 'table: algo_strategies');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_algo_strategies_user ON algo_strategies(user_id)`, 'index: algo_strategies');
+
+  safeExec(`CREATE TABLE IF NOT EXISTS ai_trader_config (
+    user_id       INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    is_enabled    INTEGER NOT NULL DEFAULT 0,
+    allocation_pct REAL NOT NULL DEFAULT 10,
+    risk_level    TEXT NOT NULL DEFAULT 'moderate',
+    max_positions INTEGER NOT NULL DEFAULT 5,
+    updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  )`, 'table: ai_trader_config');
+
+  safeExec(`CREATE TABLE IF NOT EXISTS algo_trades (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    strategy_id INTEGER REFERENCES algo_strategies(id) ON DELETE SET NULL,
+    symbol      TEXT NOT NULL,
+    action      TEXT NOT NULL CHECK(action IN ('BUY','SELL')),
+    quantity    INTEGER NOT NULL,
+    price       REAL NOT NULL,
+    pnl         REAL NOT NULL DEFAULT 0,
+    source      TEXT NOT NULL DEFAULT 'ai',
+    reason      TEXT,
+    executed_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`, 'table: algo_trades');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_algo_trades_user ON algo_trades(user_id)`, 'index: algo_trades');
+
   // MIS intraday short positions (Sell Now, Buy Later)
   safeExec(`CREATE TABLE IF NOT EXISTS mis_shorts (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
