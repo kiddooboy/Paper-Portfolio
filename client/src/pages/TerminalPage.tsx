@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { ArrowLeft, TrendingUp, TrendingDown, Bell, Bookmark, BookmarkCheck, Clock, Zap, Plus, Trash2, ArrowDownUp, AlertTriangle, Maximize2 } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Bell, Bookmark, BookmarkCheck, Clock, Zap, Plus, Trash2, ArrowDownUp, AlertTriangle, Maximize2, ChevronDown, BarChart2 } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
 import { useAuthStore } from '../store/authStore';
 import { useMarketStore } from '../store/marketStore';
@@ -354,27 +354,27 @@ export default function TerminalPage() {
       </div>
 
       {/* Body */}
-      <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-y-auto lg:overflow-hidden">
-        {/* Chart area */}
-        <div className="flex-1 flex flex-col min-h-0 lg:overflow-y-auto">
-          <div className="flex-1 min-h-[220px] lg:min-h-0 bg-white dark:bg-groww-card border-b lg:border-b-0 lg:border-r border-gray-100 dark:border-gray-800 p-3">
-            <StockChart symbol={symbol.toUpperCase()} exchange={exchange} />
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        {/* Chart + order row */}
+        <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-y-auto lg:overflow-hidden">
+          {/* Chart area */}
+          <div className="flex-1 flex flex-col min-h-0 lg:overflow-y-auto">
+            <div className="flex-1 min-h-[340px] lg:min-h-0 bg-white dark:bg-groww-card border-b lg:border-b-0 lg:border-r border-gray-100 dark:border-gray-800 p-3">
+              <StockChart symbol={symbol.toUpperCase()} exchange={exchange} />
+            </div>
+            {/* Key stats strip */}
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 p-3 bg-white dark:bg-groww-card border-t border-gray-100 dark:border-gray-800 text-xs">
+              <Stat label="Open" value={formatCurrency(quote.previous_close)} />
+              <Stat label="High" value={formatCurrency(quote.day_high)} />
+              <Stat label="Low" value={formatCurrency(quote.day_low)} />
+              <Stat label="52w High" value={quote.high_52w ? formatCurrency(quote.high_52w) : '—'} />
+              <Stat label="52w Low" value={quote.low_52w ? formatCurrency(quote.low_52w) : '—'} />
+              <Stat label="Volume" value={(quote.volume || 0).toLocaleString('en-IN')} />
+            </div>
           </div>
-          {/* Key stats strip */}
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 p-3 bg-white dark:bg-groww-card border-t border-gray-100 dark:border-gray-800 text-xs">
-            <Stat label="Open" value={formatCurrency(quote.previous_close)} />
-            <Stat label="High" value={formatCurrency(quote.day_high)} />
-            <Stat label="Low" value={formatCurrency(quote.day_low)} />
-            <Stat label="52w High" value={quote.high_52w ? formatCurrency(quote.high_52w) : '—'} />
-            <Stat label="52w Low" value={quote.low_52w ? formatCurrency(quote.low_52w) : '—'} />
-            <Stat label="Volume" value={(quote.volume || 0).toLocaleString('en-IN')} />
-          </div>
-          {/* Market Depth */}
-          <MarketDepth symbol={symbol.toUpperCase()} exchange={exchange} />
-        </div>
 
-        {/* Order panel */}
-        <aside className="w-full lg:w-[360px] shrink-0 bg-white dark:bg-groww-card flex flex-col min-h-0">
+          {/* Order panel */}
+          <aside className="w-full lg:w-[360px] shrink-0 bg-white dark:bg-groww-card flex flex-col min-h-0">
           {/* Buy/Sell tabs */}
           <div className="grid grid-cols-2 text-sm font-semibold">
             <button
@@ -777,6 +777,10 @@ export default function TerminalPage() {
         </aside>
       </div>
 
+      {/* Market Depth accordion — full width, below chart+order row */}
+      <MarketDepth symbol={symbol.toUpperCase()} exchange={exchange} />
+      </div>{/* end body wrapper */}
+
       {/* Price Alert popover */}
       {alertOpen && (
         <div className="fixed right-2 sm:right-4 top-20 z-50 bg-white dark:bg-groww-card border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-4 w-[calc(100vw-1rem)] max-w-[288px]">
@@ -966,6 +970,7 @@ interface DepthData {
 }
 
 function MarketDepth({ symbol, exchange }: { symbol: string; exchange: string }) {
+  const [expanded, setExpanded] = useState(false);
   const [depth, setDepth] = useState<DepthData | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const marketStatus = useMarketStore((s) => s.status);
@@ -974,7 +979,7 @@ function MarketDepth({ symbol, exchange }: { symbol: string; exchange: string })
   useEffect(() => {
     setDepth(null);
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-    if (!isOpen) return;
+    if (!expanded || !isOpen) return;
 
     let cancelled = false;
     const fetchDepth = () =>
@@ -988,124 +993,107 @@ function MarketDepth({ symbol, exchange }: { symbol: string; exchange: string })
       cancelled = true;
       if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     };
-  }, [symbol, exchange, isOpen]);
+  }, [symbol, exchange, isOpen, expanded]);
 
   const maxQty = depth
     ? Math.max(...depth.bids.map(b => b.qty), ...depth.asks.map(a => a.qty), 1)
     : 1;
 
-  if (!isOpen) {
-    return (
-      <div className="bg-white dark:bg-groww-card border-t border-gray-100 dark:border-gray-800 p-4 lg:border-r">
-        <h3 className="font-semibold text-sm mb-2">Market depth</h3>
-        <div className="flex flex-col items-center justify-center py-5 gap-1.5 text-center">
-          <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-1">
-            <Clock className="w-4 h-4 text-gray-400" />
-          </div>
-          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Market closed</p>
-          <p className="text-xs text-gray-400 dark:text-gray-500">
-            Depth data is live only during trading hours
-            {marketStatus?.nextOpen && (
-              <span className="block mt-0.5 text-amber-500 font-medium">
-                Opens {new Date(marketStatus.nextOpen).toLocaleString('en-IN', { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: true })}
-              </span>
-            )}
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="bg-white dark:bg-groww-card border-t border-gray-100 dark:border-gray-800 p-4 lg:border-r">
-      <h3 className="font-semibold text-sm mb-3">Market depth</h3>
+    <div className="bg-white dark:bg-groww-card border-t border-gray-100 dark:border-gray-800 shrink-0">
+      {/* Toggle header */}
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800/60 transition"
+      >
+        <div className="flex items-center gap-2">
+          <BarChart2 className="w-4 h-4 text-blue-500" />
+          <span>Market Depth</span>
+          {depth && expanded && (
+            <span className="text-[10px] text-gray-400 tabular-nums">{depth.buyPct}% buy · {depth.sellPct}% sell</span>
+          )}
+        </div>
+        <ChevronDown className={cn('w-4 h-4 text-gray-400 transition-transform duration-200', expanded && 'rotate-180')} />
+      </button>
 
-      {/* Buy / Sell % bar */}
-      <div className="flex justify-between text-xs mb-1">
-        <div>
-          <p className="text-gray-400">Buy orders</p>
-          <p className="font-bold text-gain">{depth ? `${depth.buyPct}%` : '—'}</p>
-        </div>
-        <div className="text-right">
-          <p className="text-gray-400">Sell orders</p>
-          <p className="font-bold text-loss">{depth ? `${depth.sellPct}%` : '—'}</p>
-        </div>
-      </div>
-      <div className="flex h-1 rounded-full overflow-hidden mb-4">
-        <div
-          className="bg-gain transition-all duration-700"
-          style={{ width: `${depth?.buyPct ?? 50}%` }}
-        />
-        <div
-          className="bg-loss transition-all duration-700"
-          style={{ width: `${depth?.sellPct ?? 50}%` }}
-        />
-      </div>
-
-      {/* Table */}
-      <div className="grid grid-cols-2 gap-x-4 text-xs">
-        {/* Headers */}
-        <div className="flex justify-between text-gray-400 uppercase tracking-wide text-[10px] pb-1.5 border-b border-gray-100 dark:border-gray-800">
-          <span>Bid Price</span>
-          <span>Qty</span>
-        </div>
-        <div className="flex justify-between text-gray-400 uppercase tracking-wide text-[10px] pb-1.5 border-b border-gray-100 dark:border-gray-800">
-          <span>Ask Price</span>
-          <span>Qty</span>
-        </div>
-
-        {/* Rows */}
-        {Array.from({ length: 5 }, (_, i) => {
-          const bid = depth?.bids[i];
-          const ask = depth?.asks[i];
-          const bidPct = bid ? (bid.qty / maxQty) * 100 : 0;
-          const askPct = ask ? (ask.qty / maxQty) * 100 : 0;
-          return (
-            <div key={i} className="contents">
-              {/* Bid row */}
-              <div className="relative flex justify-between items-center py-1.5">
-                <div
-                  className="absolute inset-y-0 right-0 bg-gain/10 transition-all duration-500"
-                  style={{ width: `${bidPct}%` }}
-                />
-                <span className="relative tabular-nums text-gray-700 dark:text-gray-300">
-                  {bid ? bid.price.toFixed(2) : '—'}
-                </span>
-                <span className="relative tabular-nums font-medium text-gain">
-                  {bid ? bid.qty.toLocaleString('en-IN') : '—'}
-                </span>
+      {expanded && (
+        <div className="px-4 pb-4 border-t border-gray-100 dark:border-gray-800">
+          {!isOpen ? (
+            <div className="flex flex-col items-center justify-center py-5 gap-1.5 text-center">
+              <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-1">
+                <Clock className="w-4 h-4 text-gray-400" />
               </div>
-              {/* Ask row */}
-              <div className="relative flex justify-between items-center py-1.5">
-                <div
-                  className="absolute inset-y-0 left-0 bg-loss/10 transition-all duration-500"
-                  style={{ width: `${askPct}%` }}
-                />
-                <span className="relative tabular-nums text-gray-700 dark:text-gray-300">
-                  {ask ? ask.price.toFixed(2) : '—'}
-                </span>
-                <span className="relative tabular-nums font-medium text-loss">
-                  {ask ? ask.qty.toLocaleString('en-IN') : '—'}
-                </span>
-              </div>
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Market closed</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                Depth data is live only during trading hours
+                {marketStatus?.nextOpen && (
+                  <span className="block mt-0.5 text-amber-500 font-medium">
+                    Opens {new Date(marketStatus.nextOpen).toLocaleString('en-IN', { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: true })}
+                  </span>
+                )}
+              </p>
             </div>
-          );
-        })}
+          ) : (
+            <>
+              {/* Buy / Sell % bar */}
+              <div className="flex justify-between text-xs mb-1 mt-3">
+                <div>
+                  <p className="text-gray-400">Buy orders</p>
+                  <p className="font-bold text-gain">{depth ? `${depth.buyPct}%` : '—'}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-gray-400">Sell orders</p>
+                  <p className="font-bold text-loss">{depth ? `${depth.sellPct}%` : '—'}</p>
+                </div>
+              </div>
+              <div className="flex h-1 rounded-full overflow-hidden mb-4">
+                <div className="bg-gain transition-all duration-700" style={{ width: `${depth?.buyPct ?? 50}%` }} />
+                <div className="bg-loss transition-all duration-700" style={{ width: `${depth?.sellPct ?? 50}%` }} />
+              </div>
 
-        {/* Totals */}
-        <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-gray-800 font-semibold">
-          <span className="text-gray-500">Bid Total</span>
-          <span className="tabular-nums text-gray-800 dark:text-gray-100">
-            {depth ? depth.bidTotal.toLocaleString('en-IN') : '—'}
-          </span>
+              {/* Table */}
+              <div className="grid grid-cols-2 gap-x-4 text-xs">
+                <div className="flex justify-between text-gray-400 uppercase tracking-wide text-[10px] pb-1.5 border-b border-gray-100 dark:border-gray-800">
+                  <span>Bid Price</span><span>Qty</span>
+                </div>
+                <div className="flex justify-between text-gray-400 uppercase tracking-wide text-[10px] pb-1.5 border-b border-gray-100 dark:border-gray-800">
+                  <span>Ask Price</span><span>Qty</span>
+                </div>
+
+                {Array.from({ length: 5 }, (_, i) => {
+                  const bid = depth?.bids[i];
+                  const ask = depth?.asks[i];
+                  const bidPct = bid ? (bid.qty / maxQty) * 100 : 0;
+                  const askPct = ask ? (ask.qty / maxQty) * 100 : 0;
+                  return (
+                    <div key={i} className="contents">
+                      <div className="relative flex justify-between items-center py-1.5">
+                        <div className="absolute inset-y-0 right-0 bg-gain/10 transition-all duration-500" style={{ width: `${bidPct}%` }} />
+                        <span className="relative tabular-nums text-gray-700 dark:text-gray-300">{bid ? bid.price.toFixed(2) : '—'}</span>
+                        <span className="relative tabular-nums font-medium text-gain">{bid ? bid.qty.toLocaleString('en-IN') : '—'}</span>
+                      </div>
+                      <div className="relative flex justify-between items-center py-1.5">
+                        <div className="absolute inset-y-0 left-0 bg-loss/10 transition-all duration-500" style={{ width: `${askPct}%` }} />
+                        <span className="relative tabular-nums text-gray-700 dark:text-gray-300">{ask ? ask.price.toFixed(2) : '—'}</span>
+                        <span className="relative tabular-nums font-medium text-loss">{ask ? ask.qty.toLocaleString('en-IN') : '—'}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-gray-800 font-semibold">
+                  <span className="text-gray-500">Bid Total</span>
+                  <span className="tabular-nums text-gray-800 dark:text-gray-100">{depth ? depth.bidTotal.toLocaleString('en-IN') : '—'}</span>
+                </div>
+                <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-gray-800 font-semibold">
+                  <span className="text-gray-500">Ask Total</span>
+                  <span className="tabular-nums text-gray-800 dark:text-gray-100">{depth ? depth.askTotal.toLocaleString('en-IN') : '—'}</span>
+                </div>
+              </div>
+            </>
+          )}
         </div>
-        <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-gray-800 font-semibold">
-          <span className="text-gray-500">Ask Total</span>
-          <span className="tabular-nums text-gray-800 dark:text-gray-100">
-            {depth ? depth.askTotal.toLocaleString('en-IN') : '—'}
-          </span>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
