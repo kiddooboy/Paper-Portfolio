@@ -5,7 +5,8 @@
       "Read(//c/ProgramData/chocolatey/**)",
       "Read(//c/Users/kiddo/.volta/**)",
       "Bash(ssh -i \"C:\\\\Users\\\\kiddo\\\\Downloads\\\\paperportfolio.pem\" -o StrictHostKeyChecking=no ubuntu@65.2.45.191 \"cd ~/Paper-Portfolio && git reset --hard origin/main && sudo docker compose down && sudo docker compose up --build -d 2>&1 | tail -4\")",
-      "Bash(ssh -i \"C:\\\\Users\\\\kiddo\\\\Downloads\\\\paperportfolio.pem\" -o StrictHostKeyChecking=no ubuntu@65.2.45.191 \"GIT_TERMINAL_PROMPT=0 git -C ~/Paper-Portfolio fetch origin 2>&1; echo exitcode=$?\")"
+      "Bash(ssh -i \"C:\\\\Users\\\\kiddo\\\\Downloads\\\\paperportfolio.pem\" -o StrictHostKeyChecking=no ubuntu@65.2.45.191 \"GIT_TERMINAL_PROMPT=0 git -C ~/Paper-Portfolio fetch origin 2>&1; echo exitcode=$?\")",
+      "Bash(git push *)"
     ]
   }
 }

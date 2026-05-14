@@ -191,7 +191,7 @@ export default function PortfolioPage() {
           {/* ═══════════ PERFORMANCE HIGHLIGHTS ═══════════ */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {hl.bestPerformer && (
-              <Link to={`/terminal/${hl.bestPerformer.symbol}?exchange=NSE`} className="bg-white dark:bg-groww-card rounded-xl p-4 border border-gray-100 dark:border-gray-800 hover:shadow-md transition">
+              <Link to={`/terminal/${hl.bestPerformer.symbol}?exchange=NSE&fullscreen=1`} target="_blank" rel="noopener noreferrer" className="bg-white dark:bg-groww-card rounded-xl p-4 border border-gray-100 dark:border-gray-800 hover:shadow-md transition">
                 <div className="flex items-center gap-2 mb-2">
                   <Award className="w-4 h-4 text-gain" />
                   <span className="text-xs font-medium text-gray-500 uppercase">Best Performer</span>
@@ -206,7 +206,7 @@ export default function PortfolioPage() {
               </Link>
             )}
             {hl.worstPerformer && (
-              <Link to={`/terminal/${hl.worstPerformer.symbol}?exchange=NSE`} className="bg-white dark:bg-groww-card rounded-xl p-4 border border-gray-100 dark:border-gray-800 hover:shadow-md transition">
+              <Link to={`/terminal/${hl.worstPerformer.symbol}?exchange=NSE&fullscreen=1`} target="_blank" rel="noopener noreferrer" className="bg-white dark:bg-groww-card rounded-xl p-4 border border-gray-100 dark:border-gray-800 hover:shadow-md transition">
                 <div className="flex items-center gap-2 mb-2">
                   <AlertTriangle className="w-4 h-4 text-loss" />
                   <span className="text-xs font-medium text-gray-500 uppercase">Worst Performer</span>
@@ -221,7 +221,7 @@ export default function PortfolioPage() {
               </Link>
             )}
             {hl.biggestHolding && (
-              <Link to={`/terminal/${hl.biggestHolding.symbol}?exchange=NSE`} className="bg-white dark:bg-groww-card rounded-xl p-4 border border-gray-100 dark:border-gray-800 hover:shadow-md transition">
+              <Link to={`/terminal/${hl.biggestHolding.symbol}?exchange=NSE&fullscreen=1`} target="_blank" rel="noopener noreferrer" className="bg-white dark:bg-groww-card rounded-xl p-4 border border-gray-100 dark:border-gray-800 hover:shadow-md transition">
                 <div className="flex items-center gap-2 mb-2">
                   <TrendingUp className="w-4 h-4 text-indigo-500" />
                   <span className="text-xs font-medium text-gray-500 uppercase">Biggest Position</span>
@@ -318,7 +318,7 @@ export default function PortfolioPage() {
                     {sortedHoldings.map((h: any) => (
                       <tr key={h.symbol} className="border-t border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition">
                         <td className="px-4 py-3">
-                          <Link to={`/terminal/${h.symbol}?exchange=${h.exchange || 'NSE'}`} className="flex items-center gap-2.5">
+                          <Link to={`/terminal/${h.symbol}?exchange=${h.exchange || 'NSE'}&fullscreen=1`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5">
                             <StockLogo symbol={h.symbol} size={40} />
                             <div>
                               <p className="font-medium text-sm">{h.name}</p>
@@ -399,7 +399,7 @@ export default function PortfolioPage() {
                             {tradePnl.trades.map((t: any) => (
                               <tr key={t.id} className="border-t border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition">
                                 <td className="px-4 py-2.5">
-                                  <Link to={`/terminal/${t.symbol}?exchange=NSE`} className="font-medium hover:text-groww-primary">{t.symbol}</Link>
+                                  <Link to={`/terminal/${t.symbol}?exchange=NSE&fullscreen=1`} target="_blank" rel="noopener noreferrer" className="font-medium hover:text-groww-primary">{t.symbol}</Link>
                                 </td>
                                 <td className="px-3 py-2.5 tabular-nums text-gray-600 dark:text-gray-400">{t.quantity}</td>
                                 <td className="px-3 py-2.5 tabular-nums">{formatCurrency(t.buy_price)}</td>

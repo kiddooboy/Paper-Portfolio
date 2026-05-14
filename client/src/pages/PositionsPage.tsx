@@ -333,7 +333,7 @@ export default function PositionsPage() {
                 filteredPositions.map((position: any) => (
                   <tr key={position.symbol} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
                     <td className="px-4 py-3">
-                      <Link to={`/terminal/${position.symbol}`} className="flex items-center gap-3">
+                      <Link to={`/terminal/${position.symbol}?fullscreen=1`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3">
                         <StockLogo symbol={position.symbol} size={40} />
                         <div>
                           <p className="font-medium text-sm">{position.name || position.symbol}</p>
@@ -444,7 +444,7 @@ function DayPositionsPanel({ misShorts }: { misShorts: MisShort[] }) {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Link
-                      to={`/terminal/${s.symbol}?tab=buy&productType=MIS`}
+                      to={`/terminal/${s.symbol}?tab=buy&productType=MIS&fullscreen=1`} target="_blank" rel="noopener noreferrer"
                       className="text-xs font-semibold text-amber-600 dark:text-amber-400 hover:underline"
                     >
                       Exit →

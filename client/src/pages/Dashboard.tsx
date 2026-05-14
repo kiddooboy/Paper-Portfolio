@@ -239,7 +239,8 @@ export default function Dashboard() {
           <div className="flex-1 overflow-y-auto space-y-0.5">
             {mostBought.length === 0 && <p className="text-xs text-gray-400 py-3 text-center">No data yet</p>}
             {mostBought.map((s: any) => (
-              <Link key={s.symbol} to={`/terminal/${s.symbol}?exchange=${s.exchange || 'NSE'}`}
+              <Link key={s.symbol} to={`/terminal/${s.symbol}?exchange=${s.exchange || 'NSE'}&fullscreen=1`}
+                target="_blank" rel="noopener noreferrer"
                 className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
                 <span className="flex items-center gap-2 min-w-0">
                   <StockLogo symbol={s.symbol} size={28} />
@@ -274,7 +275,8 @@ export default function Dashboard() {
 function StockRow({ s, pctColor }: { s: any; pctColor: 'gain' | 'loss' }) {
   const pct = s.change_percent ?? 0;
   return (
-    <Link to={`/terminal/${s.symbol}?exchange=${s.exchange || 'NSE'}`}
+    <Link to={`/terminal/${s.symbol}?exchange=${s.exchange || 'NSE'}&fullscreen=1`}
+      target="_blank" rel="noopener noreferrer"
       className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
       <span className="flex items-center gap-2 min-w-0">
         <StockLogo symbol={s.symbol} size={28} />

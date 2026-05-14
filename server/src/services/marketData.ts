@@ -347,7 +347,7 @@ export async function getHistory(
   symbol: string,
   exchange: 'NSE' | 'BSE' = 'NSE',
   period1: Date = new Date(Date.now() - 90 * 24 * 3600 * 1000),
-  interval: '1d' | '1h' | '1wk' | '1mo' = '1d'
+  interval: '1m' | '2m' | '5m' | '15m' | '30m' | '60m' | '90m' | '1h' | '1d' | '5d' | '1wk' | '1mo' | '3mo' = '1d'
 ) {
   try {
     const res = (await yahooFinance.chart(yahooTicker(symbol, exchange), {

@@ -137,7 +137,8 @@ export default function MarketExplorer() {
             return (
               <Link
                 key={`${stock.symbol}:${ex}`}
-                to={`/terminal/${stock.symbol}?exchange=${ex}`}
+                to={`/terminal/${stock.symbol}?exchange=${ex}&fullscreen=1`}
+                target="_blank" rel="noopener noreferrer"
                 className="group relative bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-4 flex flex-col gap-3 hover:shadow-md hover:-translate-y-0.5 transition-all duration-150"
               >
                 {/* Bookmark button — visible on hover or if bookmarked */}

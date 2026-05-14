@@ -170,7 +170,7 @@ export default function SectorsPage() {
                 {sectorStocks.map((stock) => (
                   <tr key={stock.symbol} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
                     <td className="px-5 py-3.5">
-                      <Link to={`/terminal/${stock.symbol}?exchange=${stock.exchange}`} className="hover:underline">
+                      <Link to={`/terminal/${stock.symbol}?exchange=${stock.exchange}&fullscreen=1`} target="_blank" rel="noopener noreferrer" className="hover:underline">
                         <p className="font-semibold">{stock.symbol}</p>
                         <p className="text-[11px] text-gray-400 truncate max-w-[160px]">{stock.name}</p>
                       </Link>
@@ -198,7 +198,7 @@ export default function SectorsPage() {
                       {stock.volume != null ? stock.volume.toLocaleString('en-IN') : '—'}
                     </td>
                     <td className="px-4 py-3.5 hidden md:table-cell">
-                      <Link to={`/terminal/${stock.symbol}?exchange=${stock.exchange}`}>
+                      <Link to={`/terminal/${stock.symbol}?exchange=${stock.exchange}&fullscreen=1`} target="_blank" rel="noopener noreferrer">
                         <ChevronRight className="w-4 h-4 text-gray-400" />
                       </Link>
                     </td>

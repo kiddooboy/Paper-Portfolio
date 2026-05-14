@@ -692,17 +692,17 @@ router.get('/:symbol/history', async (req, res) => {
 
   const now = Date.now();
   const rangeMs: Record<string, number> = {
-    '1d': 1 * 24 * 3600 * 1000,
-    '5d': 5 * 24 * 3600 * 1000,
-    '1mo': 30 * 24 * 3600 * 1000,
-    '3mo': 90 * 24 * 3600 * 1000,
-    '6mo': 180 * 24 * 3600 * 1000,
-    '1y': 365 * 24 * 3600 * 1000,
-    '5y': 5 * 365 * 24 * 3600 * 1000,
+    '1d':  7  * 24 * 3600 * 1000,  // 7 days back so weekends/holidays always have data
+    '5d':  14 * 24 * 3600 * 1000,
+    '1mo': 35 * 24 * 3600 * 1000,
+    '3mo': 95 * 24 * 3600 * 1000,
+    '6mo': 185 * 24 * 3600 * 1000,
+    '1y':  370 * 24 * 3600 * 1000,
+    '5y':  5 * 370 * 24 * 3600 * 1000,
   };
   const period1 = new Date(now - (rangeMs[range] ?? rangeMs['3mo']));
 
-  const history = await getHistory(symbol, exchange, period1, interval);
+  const history = await getHistory(symbol, exchange, period1, interval as any);
   res.json(history);
 });
 

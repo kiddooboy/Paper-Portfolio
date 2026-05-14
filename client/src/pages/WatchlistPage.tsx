@@ -120,7 +120,7 @@ export default function WatchlistPage() {
           <div className="space-y-2">
             {wl.items?.map((item: any) => (
               <div key={item.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                <Link to={`/terminal/${item.symbol}`} className="flex-1 flex items-center gap-2">
+                <Link to={`/terminal/${item.symbol}?fullscreen=1`} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center gap-2">
                   <StockLogo symbol={item.symbol} size={40} />
                   <div>
                     <p className="font-medium text-sm">{item.name || item.symbol}</p>

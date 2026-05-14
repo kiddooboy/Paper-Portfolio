@@ -406,7 +406,7 @@ export default function AlgoTradePage() {
                       className={cn('p-2 rounded-lg transition', s.is_active ? 'text-amber-600 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100' : 'text-groww-primary bg-green-50 dark:bg-green-900/20 hover:bg-green-100')}>
                       {s.is_active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                     </button>
-                    <Link to={`/terminal/${s.symbol}`}
+                    <Link to={`/terminal/${s.symbol}?fullscreen=1`} target="_blank" rel="noopener noreferrer"
                       className="p-2 rounded-lg text-blue-500 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 transition">
                       <TrendingUp className="w-4 h-4" />
                     </Link>
@@ -554,7 +554,7 @@ export default function AlgoTradePage() {
                     <span className={cn('text-xs font-semibold tabular-nums', p.change_percent >= 0 ? 'text-gain' : 'text-loss')}>
                       {p.change_percent >= 0 ? '+' : ''}{p.change_percent.toFixed(2)}%
                     </span>
-                    <Link to={`/terminal/${p.symbol}`}
+                    <Link to={`/terminal/${p.symbol}?fullscreen=1`} target="_blank" rel="noopener noreferrer"
                       className="text-[11px] text-groww-primary hover:underline font-semibold whitespace-nowrap">
                       View →
                     </Link>
@@ -619,7 +619,7 @@ export default function AlgoTradePage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <StockLogo symbol={t.symbol} size={24} />
-                          <Link to={`/terminal/${t.symbol}`} className="font-semibold hover:text-groww-primary">{t.symbol}</Link>
+                          <Link to={`/terminal/${t.symbol}?fullscreen=1`} target="_blank" rel="noopener noreferrer" className="font-semibold hover:text-groww-primary">{t.symbol}</Link>
                         </div>
                       </td>
                       <td className="px-4 py-3">
