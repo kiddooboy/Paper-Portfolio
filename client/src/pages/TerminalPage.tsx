@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { ArrowLeft, TrendingUp, TrendingDown, Bell, Bookmark, BookmarkCheck, Clock, Zap, Plus, Trash2, ArrowDownUp, AlertTriangle, Maximize2, ChevronDown, BarChart2 } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Bell, Bookmark, BookmarkCheck, Clock, Zap, Plus, Trash2, ArrowDownUp, AlertTriangle, Maximize2, ChevronDown, BarChart2, X } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
 import { useAuthStore } from '../store/authStore';
 import { useMarketStore } from '../store/marketStore';
@@ -58,6 +58,7 @@ export default function TerminalPage() {
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertPrice, setAlertPrice] = useState('');
   const [alertCond, setAlertCond] = useState<'above' | 'below'>('above');
+  const [myAlerts, setMyAlerts] = useState<any[]>([]);
 
   const [holding, setHolding] = useState<{ quantity: number; avg_buy_price: number } | null>(null);
   const [misShort, setMisShort] = useState<MisShort | null>(null);
@@ -79,6 +80,11 @@ export default function TerminalPage() {
       abort = true;
     };
   }, [symbol]);
+
+  useEffect(() => {
+    if (alertOpen) fetchAlerts();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alertOpen, symbol]);
 
   const refreshPositions = (sym: string) => {
     axios.get('/api/portfolio').then((res) => {
@@ -213,6 +219,13 @@ export default function TerminalPage() {
     }
   };
 
+  const fetchAlerts = async () => {
+    try {
+      const res = await axios.get('/api/stocks/my-alerts');
+      setMyAlerts((res.data as any[]).filter((a) => a.symbol === symbol.toUpperCase()));
+    } catch {}
+  };
+
   const submitAlert = async () => {
     if (!alertPrice) return;
     try {
@@ -221,10 +234,19 @@ export default function TerminalPage() {
         condition: alertCond,
       });
       toast.success('Price alert set');
-      setAlertOpen(false);
       setAlertPrice('');
+      fetchAlerts();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || 'Failed to set alert');
+    }
+  };
+
+  const deleteAlert = async (id: number) => {
+    try {
+      await axios.delete(`/api/stocks/my-alerts/${id}`);
+      setMyAlerts((a) => a.filter((x) => x.id !== id));
     } catch {
-      toast.error('Failed to set alert');
+      toast.error('Failed to delete alert');
     }
   };
 
@@ -783,54 +805,64 @@ export default function TerminalPage() {
 
       {/* Price Alert popover */}
       {alertOpen && (
-        <div className="fixed right-2 sm:right-4 top-20 z-50 bg-white dark:bg-groww-card border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-4 w-[calc(100vw-1rem)] max-w-[288px]">
-          <h3 className="font-semibold text-sm mb-2">Set Price Alert — {symbol}</h3>
+        <div className="fixed right-2 sm:right-4 top-20 z-50 bg-white dark:bg-groww-card border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-4 w-[calc(100vw-1rem)] max-w-[300px]">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-sm">Price Alerts — {symbol}</h3>
+            <button onClick={() => setAlertOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Existing active alerts */}
+          {myAlerts.length > 0 && (
+            <div className="mb-3 space-y-1.5">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Active Alerts</p>
+              {myAlerts.map((a) => (
+                <div key={a.id} className="flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 rounded-lg px-2.5 py-1.5">
+                  <span className="text-xs">
+                    <span className={cn('font-semibold mr-1', a.condition === 'above' ? 'text-gain' : 'text-loss')}>
+                      {a.condition === 'above' ? '▲ Above' : '▼ Below'}
+                    </span>
+                    {formatCurrency(a.target_price)}
+                  </span>
+                  <button onClick={() => deleteAlert(a.id)} className="text-gray-400 hover:text-red-500 transition">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* New alert form */}
           <div className="space-y-2">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">New Alert</p>
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => setAlertCond('above')}
-                className={cn(
-                  'py-1.5 text-xs rounded-lg border',
-                  alertCond === 'above'
-                    ? 'border-gain text-gain'
-                    : 'border-gray-200 dark:border-gray-700 text-gray-500'
-                )}
+                className={cn('py-1.5 text-xs rounded-lg border font-medium', alertCond === 'above' ? 'border-gain text-gain bg-green-50 dark:bg-green-900/20' : 'border-gray-200 dark:border-gray-700 text-gray-500')}
               >
-                Above
+                ▲ Above
               </button>
               <button
                 onClick={() => setAlertCond('below')}
-                className={cn(
-                  'py-1.5 text-xs rounded-lg border',
-                  alertCond === 'below'
-                    ? 'border-loss text-loss'
-                    : 'border-gray-200 dark:border-gray-700 text-gray-500'
-                )}
+                className={cn('py-1.5 text-xs rounded-lg border font-medium', alertCond === 'below' ? 'border-loss text-loss bg-red-50 dark:bg-red-900/20' : 'border-gray-200 dark:border-gray-700 text-gray-500')}
               >
-                Below
+                ▼ Below
               </button>
             </div>
             <input
               type="number"
               value={alertPrice}
-              placeholder={String(price.toFixed(2))}
+              placeholder={`Target price (LTP: ${price.toFixed(2)})`}
               onChange={(e) => setAlertPrice(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm"
             />
-            <div className="flex gap-2">
-              <button
-                onClick={() => setAlertOpen(false)}
-                className="flex-1 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={submitAlert}
-                className="flex-1 py-2 text-xs rounded-lg bg-groww-primary text-white"
-              >
-                Set Alert
-              </button>
-            </div>
+            <button
+              onClick={submitAlert}
+              className="w-full py-2 text-xs font-semibold rounded-lg bg-groww-primary text-white hover:brightness-110 transition"
+            >
+              Set Alert
+            </button>
           </div>
         </div>
       )}

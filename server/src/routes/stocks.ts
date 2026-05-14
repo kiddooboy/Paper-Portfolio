@@ -576,6 +576,26 @@ router.get('/screener', async (req, res) => {
   }
 });
 
+// GET /api/stocks/my-alerts — list active (untriggered) alerts for current user
+router.get('/my-alerts', authMiddleware, (req: AuthRequest, res) => {
+  const userId = req.user!.id;
+  const alerts = db.prepare(
+    `SELECT id, symbol, target_price, condition, created_at
+     FROM price_alerts WHERE user_id = ? AND triggered = 0
+     ORDER BY created_at DESC`
+  ).all(userId) as any[];
+  res.json(alerts);
+});
+
+// DELETE /api/stocks/my-alerts/:id — cancel/delete an alert
+router.delete('/my-alerts/:id', authMiddleware, (req: AuthRequest, res) => {
+  const userId = req.user!.id;
+  const id = parseInt(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  db.prepare('DELETE FROM price_alerts WHERE id = ? AND user_id = ?').run(id, userId);
+  res.json({ success: true });
+});
+
 // GET /api/stocks/:symbol/fundamentals — screener.in-style deep fundamentals
 router.get('/:symbol/fundamentals', async (req, res) => {
   try {
@@ -706,19 +726,27 @@ router.get('/:symbol/history', async (req, res) => {
   res.json(history);
 });
 
-// POST /api/stocks/:symbol/alert — (unchanged)
-router.post('/:symbol/alert', authMiddleware, async (req: AuthRequest, res) => {
+// POST /api/stocks/:symbol/alert
+router.post('/:symbol/alert', authMiddleware, (req: AuthRequest, res) => {
   const { targetPrice, condition } = req.body;
   const symbol = req.params.symbol.toUpperCase();
   const userId = req.user!.id;
 
-  await db.prepare(
-    `INSERT INTO price_alerts (user_id, symbol, target_price, condition) VALUES (?, ?, ?, ?)`
-  ).run(userId, symbol, targetPrice, condition);
+  if (!targetPrice || !['above', 'below'].includes(condition)) {
+    return res.status(400).json({ error: 'Valid targetPrice and condition (above/below) required' });
+  }
 
-  logActivity(userId, 'PRICE_ALERT_SET', { symbol, targetPrice, condition }, getClientIp(req));
+  try {
+    db.prepare(
+      `INSERT INTO price_alerts (user_id, symbol, target_price, condition) VALUES (?, ?, ?, ?)`
+    ).run(userId, symbol, Number(targetPrice), condition);
 
-  res.json({ success: true, message: 'Price alert set' });
+    logActivity(userId, 'PRICE_ALERT_SET', { symbol, targetPrice, condition }, getClientIp(req));
+    res.json({ success: true, message: 'Price alert set' });
+  } catch (err: any) {
+    console.error('[alerts] insert error:', err);
+    res.status(500).json({ error: 'Failed to save alert' });
+  }
 });
 
 export default router;
