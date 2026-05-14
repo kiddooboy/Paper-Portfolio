@@ -161,9 +161,6 @@ function getMargins(showRsi: boolean, showMacd: boolean) {
   return { price: { top: 0.02, bottom: 0.54 }, volume: { top: 0.47, bottom: 0.42 }, rsi: { top: 0.59, bottom: 0.24 }, macd: { top: 0.77, bottom: 0.02 } };
 }
 
-function getChartHeight(showRsi: boolean, showMacd: boolean) {
-  return 310 + (showRsi ? 100 : 0) + (showMacd ? 100 : 0);
-}
 
 interface Props { symbol: string; exchange?: string }
 
@@ -247,9 +244,9 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
     trendRef.current = channelRef.current = measureRef.current = zoomRef.current = null;
 
     const margins = getMargins(indicators.rsi, indicators.macd);
-    const height  = getChartHeight(indicators.rsi, indicators.macd);
 
     const chart = createChart(containerRef.current, {
+      autoSize: true,
       layout: { background: { type: ColorType.Solid, color: bgColor }, textColor },
       grid:   { vertLines: { color: gridColor }, horzLines: { color: gridColor } },
       crosshair: { mode: CrosshairMode.Normal },
@@ -259,8 +256,6 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
         fixLeftEdge: false, fixRightEdge: true,
         rightOffset: 2, barSpacing: 8,
       },
-      width:  containerRef.current.clientWidth,
-      height,
     });
     chartRef.current = chart;
 
@@ -304,15 +299,8 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
 
     chart.timeScale().fitContent();
 
-    const ro = new ResizeObserver(() => {
-      if (containerRef.current && chartRef.current)
-        chartRef.current.applyOptions({ width: containerRef.current.clientWidth });
-    });
-    ro.observe(containerRef.current);
-
     setChartReady(true);
     return () => {
-      ro.disconnect();
       chart.remove();
       chartRef.current = null;
       mainSerRef.current = null;
@@ -337,7 +325,6 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
       vals.map((v, i) => v !== null ? { time: times[i], value: v } : null).filter(Boolean) as any[];
 
     const margins = getMargins(indicators.rsi, indicators.macd);
-    chart.applyOptions({ height: getChartHeight(indicators.rsi, indicators.macd) });
     chart.priceScale('right').applyOptions({ scaleMargins: margins.price });
     chart.priceScale('volume').applyOptions({ scaleMargins: margins.volume });
 
@@ -586,7 +573,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
   );
 
   return (
-    <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-3 space-y-2">
+    <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-3 flex flex-col h-full min-h-[320px] gap-2">
       {/* ── Top controls ── */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex gap-1">
@@ -699,7 +686,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
       )}
 
       {/* ── Chart + left toolbar ── */}
-      <div className="flex gap-2 items-start">
+      <div className="flex gap-2 flex-1 min-h-0 items-stretch">
         {/* Left drawing toolbar */}
         <div className="flex flex-col bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-lg p-1 shrink-0">
           {TOOL_GROUPS.map((group, gi) => (
@@ -724,7 +711,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
         </div>
 
         {/* Chart canvas */}
-        <div className="flex-1 relative min-w-0">
+        <div className="flex-1 relative min-w-0 h-full flex flex-col">
           {loading && (
             <div className="absolute inset-0 flex items-center justify-center bg-white/60 dark:bg-groww-card/60 rounded-xl z-10">
               <div className="w-5 h-5 border-2 border-groww-primary border-t-transparent rounded-full animate-spin" />
@@ -781,7 +768,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
             </div>
           )}
 
-          <div ref={containerRef} className="w-full rounded-xl overflow-hidden" />
+          <div ref={containerRef} className="w-full flex-1 min-h-0 rounded-xl overflow-hidden" />
         </div>
       </div>
 

@@ -359,7 +359,7 @@ export default function TerminalPage() {
         <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-y-auto lg:overflow-hidden">
           {/* Chart area */}
           <div className="flex-1 flex flex-col min-h-0 lg:overflow-y-auto">
-            <div className="flex-1 min-h-[340px] lg:min-h-0 bg-white dark:bg-groww-card border-b lg:border-b-0 lg:border-r border-gray-100 dark:border-gray-800 p-3">
+            <div className="flex-1 min-h-[400px] lg:min-h-0 bg-white dark:bg-groww-card border-b lg:border-b-0 lg:border-r border-gray-100 dark:border-gray-800 p-3 flex flex-col">
               <StockChart symbol={symbol.toUpperCase()} exchange={exchange} />
             </div>
             {/* Key stats strip */}
