@@ -125,6 +125,13 @@ router.get('/', async (req, res) => {
       totalTxns,
       totalCapital: +totalCapital.toFixed(2),
       xirr,
+      // Compact per-holding payload so the client can overlay live quotes
+      // and keep the leaderboard in sync with the portfolio page.
+      holdings: userHoldings.map((h: any) => ({
+        symbol: h.symbol,
+        quantity: h.quantity,
+        avgPrice: h.avg_buy_price,
+      })),
     };
   });
 

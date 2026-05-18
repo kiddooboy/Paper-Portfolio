@@ -66,7 +66,17 @@ export default function PortfolioPage() {
     const totalValue = (rawData.balance || 0) + currentValue;
     // Recalculate weights
     for (const h of holdings) { h.weight = totalValue > 0 ? (h.current_value / totalValue) * 100 : 0; }
-    return { ...rawData, holdings, investedValue, currentValue, totalPnl, totalPnlPercent: +totalPnlPercent.toFixed(2) };
+    // Recompute P&L breakdown with live prices so it stays consistent with the
+    // displayed portfolio value (and matches what the leaderboard computes).
+    // Identity: realized + unrealized === (balance + currentValue) - totalCapital
+    const realized = Number(rawData.pnlBreakdown?.realized || 0);
+    const pnlBreakdown = {
+      ...(rawData.pnlBreakdown || {}),
+      unrealized: +totalPnl.toFixed(2),
+      realized: +realized.toFixed(2),
+      total: +(totalPnl + realized).toFixed(2),
+    };
+    return { ...rawData, holdings, investedValue, currentValue, totalPnl, totalPnlPercent: +totalPnlPercent.toFixed(2), pnlBreakdown };
   }, [rawData, allQuotes]);
 
   const sortedHoldings = useMemo(() => {

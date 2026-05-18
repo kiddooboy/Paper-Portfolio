@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { Trophy, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Info, RefreshCw } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
+import { useMarketStore } from '../store/marketStore';
 
 const POLL_INTERVAL_MS = 10_000; // refresh every 10 s
 
@@ -19,6 +20,8 @@ interface LeaderEntry {
   holdingsCount: number;
   closedTrades: number;
   totalTxns: number;
+  totalCapital?: number;
+  holdings?: { symbol: string; quantity: number; avgPrice: number }[];
 }
 
 interface Holding {
@@ -70,8 +73,76 @@ export default function LeaderboardPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const expandedRef = useRef<number | null>(null);
+  const allQuotes = useMarketStore((s) => s.quotes);
+  const addSymbols = useMarketStore((s) => s.addSymbols);
 
   expandedRef.current = expanded;
+
+  // Subscribe the market-data poller to every symbol that appears on the
+  // leaderboard so the live overlay actually receives ticks for them.
+  useEffect(() => {
+    const symbols = new Set<string>();
+    for (const e of data) {
+      for (const h of e.holdings || []) symbols.add(h.symbol);
+    }
+    if (symbols.size) addSymbols(Array.from(symbols));
+  }, [data, addSymbols]);
+
+  // Overlay live quotes onto each entry's holdings and recompute the
+  // aggregate values so the leaderboard stays in sync with the portfolio
+  // page (which also uses live socket quotes).
+  const liveData = useMemo<LeaderEntry[]>(() => {
+    if (!data.length) return data;
+    const recomputed = data.map((entry) => {
+      const hs = entry.holdings;
+      if (!hs || hs.length === 0) return entry;
+      let liveHoldingsValue = 0;
+      let liveInvested = 0;
+      let touched = false;
+      for (const h of hs) {
+        const q = allQuotes[h.symbol];
+        const price = q?.price ?? h.avgPrice;
+        if (q?.price != null) touched = true;
+        liveHoldingsValue += price * h.quantity;
+        liveInvested += h.avgPrice * h.quantity;
+      }
+      if (!touched) return entry;
+      const livePortfolioValue = entry.cashBalance + liveHoldingsValue;
+      const liveUnrealized = liveHoldingsValue - liveInvested;
+      // Prefer server-provided totalCapital; fall back to (portfolioValue - totalPnl) which is algebraically equivalent.
+      const totalCapital = entry.totalCapital ?? (entry.portfolioValue - entry.totalPnl);
+      const liveTotalPnl = livePortfolioValue - totalCapital;
+      const livePnlPercent = totalCapital > 0 ? (liveTotalPnl / totalCapital) * 100 : 0;
+      return {
+        ...entry,
+        holdingsValue: +liveHoldingsValue.toFixed(2),
+        portfolioValue: +livePortfolioValue.toFixed(2),
+        unrealizedPnl: +liveUnrealized.toFixed(2),
+        totalPnl: +liveTotalPnl.toFixed(2),
+        pnlPercent: +livePnlPercent.toFixed(2),
+      };
+    });
+    // Re-rank by the freshly-computed % return so ranks stay accurate.
+    recomputed.sort((a, b) => b.pnlPercent - a.pnlPercent);
+    return recomputed.map((e, i) => ({ ...e, rank: i + 1 }));
+  }, [data, allQuotes]);
+
+  // Overlay live quotes onto expanded holdings rows too.
+  const liveHoldings = useMemo<Record<number, Holding[]>>(() => {
+    const out: Record<number, Holding[]> = {};
+    for (const [uidStr, hs] of Object.entries(holdings)) {
+      const uid = Number(uidStr);
+      out[uid] = hs.map((h) => {
+        const q = allQuotes[h.symbol];
+        if (q?.price == null) return h;
+        const ltp = q.price;
+        const pnl = (ltp - h.avgPrice) * h.quantity;
+        const pnlPct = h.avgPrice > 0 ? ((ltp - h.avgPrice) / h.avgPrice) * 100 : 0;
+        return { ...h, ltp: +ltp.toFixed(2), pnl: +pnl.toFixed(2), pnlPct: +pnlPct.toFixed(2) };
+      });
+    }
+    return out;
+  }, [holdings, allQuotes]);
 
   async function fetchLeaderboard(silent = false) {
     if (!silent) setRefreshing(true);
@@ -137,13 +208,13 @@ export default function LeaderboardPage() {
       </div>
 
       <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
-        {data.length === 0 && (
+        {liveData.length === 0 && (
           <div className="p-8 text-center text-sm text-gray-400">Loading leaderboard…</div>
         )}
 
-        {data.map((entry) => {
+        {liveData.map((entry) => {
           const isOpen = expanded === entry.userId;
-          const userHoldings = holdings[entry.userId] ?? [];
+          const userHoldings = liveHoldings[entry.userId] ?? [];
           const isLoading = loadingId === entry.userId;
 
           return (
