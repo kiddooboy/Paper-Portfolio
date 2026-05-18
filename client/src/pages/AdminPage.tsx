@@ -1,11 +1,12 @@
 ﻿import { useEffect, useState, Fragment } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 import { formatCurrency, cn, formatDbDate } from '../lib/utils';
 import {
   Users, Activity, DollarSign, ShieldCheck, Trash2,
-  RefreshCw, ChevronUp, Eye, List, Search, Lock
+  RefreshCw, ChevronUp, Eye, List, Search, Lock,
+  BarChart3, ArrowUpRight
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -138,6 +139,28 @@ export default function AdminPage() {
           <RefreshCw className="w-4 h-4" /> Refresh
         </button>
       </div>
+
+      {/* Platform Analytics — entry point to the dashboard */}
+      <Link
+        to="/admin/analytics"
+        className="block rounded-xl border border-indigo-200 dark:border-indigo-900/50 bg-gradient-to-r from-indigo-500/10 via-indigo-500/5 to-transparent hover:border-indigo-400 hover:shadow-md transition p-5"
+      >
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-indigo-500/15 text-indigo-500 flex items-center justify-center shrink-0">
+            <BarChart3 className="w-6 h-6" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-sm sm:text-base flex items-center gap-2">
+              Platform Analytics Dashboard
+              <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-500">New</span>
+            </p>
+            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+              End-to-end view of user activity, trading volume, P&L and top performers — with date-range filters.
+            </p>
+          </div>
+          <ArrowUpRight className="w-5 h-5 text-indigo-500 shrink-0" />
+        </div>
+      </Link>
 
       {/* Platform Stats */}
       {stats && (

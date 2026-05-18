@@ -283,4 +283,275 @@ router.get('/activity', async (req: AuthRequest, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// GET /api/admin/analytics — Platform-wide analytics with date-range filter
+// Query: ?from=YYYY-MM-DD&to=YYYY-MM-DD (defaults to last 30 days)
+// ---------------------------------------------------------------------------
+router.get('/analytics', async (req: AuthRequest, res) => {
+  try {
+    // ── Parse date range ──
+    const toRaw = String(req.query.to || '').trim();
+    const fromRaw = String(req.query.from || '').trim();
+    const isISO = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+
+    const today = new Date();
+    const defaultTo = today.toISOString().slice(0, 10);
+    const defaultFromDate = new Date(today);
+    defaultFromDate.setDate(defaultFromDate.getDate() - 29);
+    const defaultFrom = defaultFromDate.toISOString().slice(0, 10);
+
+    const from = isISO(fromRaw) ? fromRaw : defaultFrom;
+    const to = isISO(toRaw) ? toRaw : defaultTo;
+    // SQLite datetime() comparison: use inclusive end-of-day for `to`
+    const fromTs = `${from} 00:00:00`;
+    const toTs = `${to} 23:59:59`;
+
+    // ── KPIs in range ──
+    const newUsers = Number(((await db.prepare(
+      `SELECT COUNT(*) as c FROM users WHERE created_at BETWEEN ? AND ?`
+    ).get(fromTs, toTs)) as any)?.c ?? 0);
+
+    const activeUsers = Number(((await db.prepare(
+      `SELECT COUNT(DISTINCT user_id) as c FROM activity_log WHERE created_at BETWEEN ? AND ?`
+    ).get(fromTs, toTs)) as any)?.c ?? 0);
+
+    const tradeAgg = ((await db.prepare(
+      `SELECT
+         COUNT(*) as count,
+         COALESCE(SUM(total_amount), 0) as volume,
+         COALESCE(SUM(CASE WHEN type='BUY' THEN 1 ELSE 0 END), 0) as buys,
+         COALESCE(SUM(CASE WHEN type='SELL' THEN 1 ELSE 0 END), 0) as sells,
+         COALESCE(SUM(CASE WHEN type='BUY' THEN total_amount ELSE 0 END), 0) as buy_volume,
+         COALESCE(SUM(CASE WHEN type='SELL' THEN total_amount ELSE 0 END), 0) as sell_volume
+       FROM transactions WHERE created_at BETWEEN ? AND ?`
+    ).get(fromTs, toTs)) as any) || {};
+
+    const realizedAgg = ((await db.prepare(
+      `SELECT
+         COUNT(*) as count,
+         COALESCE(SUM(realized_pnl), 0) as total,
+         COALESCE(SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END), 0) as wins,
+         COALESCE(SUM(CASE WHEN realized_pnl < 0 THEN 1 ELSE 0 END), 0) as losses
+       FROM trade_pnl WHERE closed_at BETWEEN ? AND ?`
+    ).get(fromTs, toTs)) as any) || {};
+
+    const loginsInRange = Number(((await db.prepare(
+      `SELECT COUNT(*) as c FROM activity_log
+       WHERE action IN ('USER_LOGIN','MPIN_LOGIN') AND created_at BETWEEN ? AND ?`
+    ).get(fromTs, toTs)) as any)?.c ?? 0);
+
+    const largestTrade = ((await db.prepare(
+      `SELECT t.symbol, t.type, t.quantity, t.price, t.total_amount, t.created_at,
+              u.name as user_name, u.email as user_email
+       FROM transactions t LEFT JOIN users u ON u.id = t.user_id
+       WHERE t.created_at BETWEEN ? AND ?
+       ORDER BY t.total_amount DESC LIMIT 1`
+    ).get(fromTs, toTs)) as any) || null;
+
+    // ── Current/all-time snapshot KPIs ──
+    const totalUsers = Number(((await db.prepare('SELECT COUNT(*) as c FROM users').get()) as any)?.c ?? 0);
+    const totalCash = Number(((await db.prepare('SELECT COALESCE(SUM(balance),0) as s FROM users').get()) as any)?.s ?? 0);
+    const distinctHolders = Number(((await db.prepare(
+      `SELECT COUNT(DISTINCT user_id) as c FROM holdings WHERE quantity > 0`
+    ).get()) as any)?.c ?? 0);
+
+    // Live holdings valuation (snapshot, today)
+    const allHoldings = (await db.prepare(`SELECT user_id, symbol, quantity, avg_buy_price FROM holdings WHERE quantity > 0`).all()) as any[];
+    let investedValueAll = 0;
+    let currentValueAll = 0;
+    if (allHoldings.length) {
+      const symbols = Array.from(new Set(allHoldings.map((h: any) => h.symbol)));
+      const quotes = getCachedQuotes(symbols.map((s) => ({ symbol: s, exchange: 'NSE' as const })));
+      const pm = new Map(quotes.map((q) => [q.symbol, q.price]));
+      for (const h of allHoldings) {
+        const price = pm.get(h.symbol) ?? Number(h.avg_buy_price);
+        investedValueAll += Number(h.avg_buy_price) * Number(h.quantity);
+        currentValueAll += price * Number(h.quantity);
+      }
+    }
+    const unrealizedPnlAll = currentValueAll - investedValueAll;
+    const aum = totalCash + currentValueAll;
+
+    // ── Time-series (daily) ──
+    const dailyTrades = (await db.prepare(
+      `SELECT date(created_at) as day,
+              COUNT(*) as count,
+              COALESCE(SUM(CASE WHEN type='BUY' THEN 1 ELSE 0 END), 0) as buys,
+              COALESCE(SUM(CASE WHEN type='SELL' THEN 1 ELSE 0 END), 0) as sells,
+              COALESCE(SUM(total_amount), 0) as volume
+       FROM transactions
+       WHERE created_at BETWEEN ? AND ?
+       GROUP BY day ORDER BY day ASC`
+    ).all(fromTs, toTs)) as any[];
+
+    const dailyRealized = (await db.prepare(
+      `SELECT date(closed_at) as day,
+              COALESCE(SUM(realized_pnl), 0) as realized,
+              COUNT(*) as trades
+       FROM trade_pnl
+       WHERE closed_at BETWEEN ? AND ?
+       GROUP BY day ORDER BY day ASC`
+    ).all(fromTs, toTs)) as any[];
+
+    const dailyNewUsers = (await db.prepare(
+      `SELECT date(created_at) as day, COUNT(*) as count
+       FROM users WHERE created_at BETWEEN ? AND ?
+       GROUP BY day ORDER BY day ASC`
+    ).all(fromTs, toTs)) as any[];
+
+    const dailyActiveUsers = (await db.prepare(
+      `SELECT date(created_at) as day, COUNT(DISTINCT user_id) as count
+       FROM activity_log WHERE created_at BETWEEN ? AND ?
+       GROUP BY day ORDER BY day ASC`
+    ).all(fromTs, toTs)) as any[];
+
+    // ── Top lists ──
+    const topStocks = (await db.prepare(
+      `SELECT symbol,
+              COUNT(*) as trades,
+              COALESCE(SUM(total_amount), 0) as volume,
+              COALESCE(SUM(CASE WHEN type='BUY' THEN total_amount ELSE 0 END), 0) as buy_volume,
+              COALESCE(SUM(CASE WHEN type='SELL' THEN total_amount ELSE 0 END), 0) as sell_volume
+       FROM transactions WHERE created_at BETWEEN ? AND ?
+       GROUP BY symbol ORDER BY volume DESC LIMIT 10`
+    ).all(fromTs, toTs)) as any[];
+
+    const topTraders = (await db.prepare(
+      `SELECT u.id as user_id, u.name, u.email,
+              COUNT(t.id) as trades,
+              COALESCE(SUM(t.total_amount), 0) as volume
+       FROM transactions t JOIN users u ON u.id = t.user_id
+       WHERE t.created_at BETWEEN ? AND ?
+       GROUP BY u.id ORDER BY volume DESC LIMIT 10`
+    ).all(fromTs, toTs)) as any[];
+
+    const topWinners = (await db.prepare(
+      `SELECT u.id as user_id, u.name, u.email,
+              COALESCE(SUM(p.realized_pnl), 0) as realized,
+              COUNT(p.id) as closed_trades
+       FROM trade_pnl p JOIN users u ON u.id = p.user_id
+       WHERE p.closed_at BETWEEN ? AND ?
+       GROUP BY u.id HAVING realized > 0 ORDER BY realized DESC LIMIT 10`
+    ).all(fromTs, toTs)) as any[];
+
+    const topLosers = (await db.prepare(
+      `SELECT u.id as user_id, u.name, u.email,
+              COALESCE(SUM(p.realized_pnl), 0) as realized,
+              COUNT(p.id) as closed_trades
+       FROM trade_pnl p JOIN users u ON u.id = p.user_id
+       WHERE p.closed_at BETWEEN ? AND ?
+       GROUP BY u.id HAVING realized < 0 ORDER BY realized ASC LIMIT 10`
+    ).all(fromTs, toTs)) as any[];
+
+    const actionBreakdown = (await db.prepare(
+      `SELECT action, COUNT(*) as count FROM activity_log
+       WHERE created_at BETWEEN ? AND ?
+       GROUP BY action ORDER BY count DESC LIMIT 15`
+    ).all(fromTs, toTs)) as any[];
+
+    // Sector volume distribution — joins on stocks.sector when available
+    const sectorBreakdown = (await db.prepare(
+      `SELECT COALESCE(s.sector, 'Other') as sector,
+              COUNT(t.id) as trades,
+              COALESCE(SUM(t.total_amount), 0) as volume
+       FROM transactions t
+       LEFT JOIN stocks s ON s.symbol = t.symbol
+       WHERE t.created_at BETWEEN ? AND ?
+       GROUP BY sector ORDER BY volume DESC LIMIT 12`
+    ).all(fromTs, toTs)) as any[];
+
+    res.json({
+      range: { from, to },
+      kpis: {
+        // In-range
+        newUsers,
+        activeUsers,
+        loginsInRange,
+        tradesCount: Number(tradeAgg.count || 0),
+        tradesBuy: Number(tradeAgg.buys || 0),
+        tradesSell: Number(tradeAgg.sells || 0),
+        tradeVolume: +Number(tradeAgg.volume || 0).toFixed(2),
+        buyVolume: +Number(tradeAgg.buy_volume || 0).toFixed(2),
+        sellVolume: +Number(tradeAgg.sell_volume || 0).toFixed(2),
+        realizedPnl: +Number(realizedAgg.total || 0).toFixed(2),
+        closedTrades: Number(realizedAgg.count || 0),
+        winningTrades: Number(realizedAgg.wins || 0),
+        losingTrades: Number(realizedAgg.losses || 0),
+        avgTradeSize: tradeAgg.count ? +((Number(tradeAgg.volume || 0) / Number(tradeAgg.count)).toFixed(2)) : 0,
+        // Snapshot (current)
+        totalUsers,
+        activeHolders: distinctHolders,
+        totalCash: +totalCash.toFixed(2),
+        investedValue: +investedValueAll.toFixed(2),
+        currentValue: +currentValueAll.toFixed(2),
+        unrealizedPnl: +unrealizedPnlAll.toFixed(2),
+        aum: +aum.toFixed(2),
+      },
+      largestTrade: largestTrade ? {
+        symbol: largestTrade.symbol,
+        type: largestTrade.type,
+        quantity: Number(largestTrade.quantity),
+        price: Number(largestTrade.price),
+        total: +Number(largestTrade.total_amount).toFixed(2),
+        createdAt: largestTrade.created_at,
+        userName: largestTrade.user_name,
+        userEmail: largestTrade.user_email,
+      } : null,
+      series: {
+        dailyTrades: dailyTrades.map((r: any) => ({
+          day: r.day,
+          count: Number(r.count),
+          buys: Number(r.buys),
+          sells: Number(r.sells),
+          volume: +Number(r.volume).toFixed(2),
+        })),
+        dailyRealized: dailyRealized.map((r: any) => ({
+          day: r.day,
+          realized: +Number(r.realized).toFixed(2),
+          trades: Number(r.trades),
+        })),
+        dailyNewUsers: dailyNewUsers.map((r: any) => ({ day: r.day, count: Number(r.count) })),
+        dailyActiveUsers: dailyActiveUsers.map((r: any) => ({ day: r.day, count: Number(r.count) })),
+      },
+      topStocks: topStocks.map((r: any) => ({
+        symbol: r.symbol,
+        trades: Number(r.trades),
+        volume: +Number(r.volume).toFixed(2),
+        buyVolume: +Number(r.buy_volume).toFixed(2),
+        sellVolume: +Number(r.sell_volume).toFixed(2),
+      })),
+      topTraders: topTraders.map((r: any) => ({
+        userId: Number(r.user_id),
+        name: r.name,
+        email: r.email,
+        trades: Number(r.trades),
+        volume: +Number(r.volume).toFixed(2),
+      })),
+      topWinners: topWinners.map((r: any) => ({
+        userId: Number(r.user_id),
+        name: r.name,
+        email: r.email,
+        realized: +Number(r.realized).toFixed(2),
+        closedTrades: Number(r.closed_trades),
+      })),
+      topLosers: topLosers.map((r: any) => ({
+        userId: Number(r.user_id),
+        name: r.name,
+        email: r.email,
+        realized: +Number(r.realized).toFixed(2),
+        closedTrades: Number(r.closed_trades),
+      })),
+      actionBreakdown: actionBreakdown.map((r: any) => ({ action: r.action, count: Number(r.count) })),
+      sectorBreakdown: sectorBreakdown.map((r: any) => ({
+        sector: r.sector,
+        trades: Number(r.trades),
+        volume: +Number(r.volume).toFixed(2),
+      })),
+    });
+  } catch (err: any) {
+    console.error('[admin/analytics] error:', err);
+    res.status(500).json({ error: 'Failed to fetch analytics', detail: err?.message });
+  }
+});
+
 export default router;

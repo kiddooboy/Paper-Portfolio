@@ -25,6 +25,7 @@ const WatchlistPage      = lazy(() => import('./pages/WatchlistPage'));
 const LeaderboardPage    = lazy(() => import('./pages/LeaderboardPage'));
 const NotificationsPage  = lazy(() => import('./pages/NotificationsPage'));
 const AdminPage          = lazy(() => import('./pages/AdminPage'));
+const AdminAnalyticsPage = lazy(() => import('./pages/AdminAnalyticsPage'));
 const AIChatPage         = lazy(() => import('./pages/AIChatPage'));
 const SectorsPage        = lazy(() => import('./pages/SectorsPage'));
 const NewsPage           = lazy(() => import('./pages/NewsPage'));
@@ -81,6 +82,7 @@ function App() {
           <Route path="/leaderboard"     element={<LeaderboardPage />} />
           <Route path="/notifications"   element={<NotificationsPage />} />
           <Route path="/admin"           element={<AdminPage />} />
+          <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
           <Route path="/ai-chat"         element={<AIChatPage />} />
           <Route path="/sectors"         element={<SectorsPage />} />
           <Route path="/news"            element={<NewsPage />} />
