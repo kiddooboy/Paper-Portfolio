@@ -32,6 +32,13 @@ export default function TerminalPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
+  const goBack = () => {
+    // When opened in a new tab there's no history to go back to,
+    // so fall back to the dashboard.
+    if (window.history.length > 1) navigate(-1);
+    else navigate('/dashboard');
+  };
+
   const exchange: Exchange = (searchParams.get('exchange') as Exchange) || 'NSE';
   const [meta, setMeta] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -262,7 +269,7 @@ export default function TerminalPage() {
     return (
       <div className="flex flex-col items-center justify-center gap-2 py-20">
         <p className="font-semibold">Could not load market data for {symbol}</p>
-        <button onClick={() => navigate(-1)} className="text-sm text-groww-primary">
+        <button onClick={goBack} className="text-sm text-groww-primary">
           Go back
         </button>
       </div>
@@ -305,7 +312,7 @@ export default function TerminalPage() {
       <div className="flex items-center justify-between px-3 sm:px-6 py-2.5 bg-white dark:bg-groww-card border-b border-gray-100 dark:border-gray-800 gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <button
-            onClick={() => navigate(-1)}
+            onClick={goBack}
             className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 shrink-0"
           >
             <ArrowLeft className="w-5 h-5" />
