@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
-import { Trophy, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Info, RefreshCw } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Trophy, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Info, RefreshCw, ArrowUpRight, Rocket } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
 import { useMarketStore } from '../store/marketStore';
+import { useAuthStore } from '../store/authStore';
 
 const POLL_INTERVAL_MS = 10_000; // refresh every 10 s
 
@@ -75,6 +77,7 @@ export default function LeaderboardPage() {
   const expandedRef = useRef<number | null>(null);
   const allQuotes = useMarketStore((s) => s.quotes);
   const addSymbols = useMarketStore((s) => s.addSymbols);
+  const currentUserId = useAuthStore((s) => s.user?.id);
 
   expandedRef.current = expanded;
 
@@ -206,6 +209,32 @@ export default function LeaderboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Invest Now CTA — shown when the logged-in user hasn't invested yet
+          (and is therefore not present in the leaderboard listing). */}
+      {currentUserId != null && lastUpdated && !liveData.some(e => e.userId === currentUserId) && (
+        <div className="rounded-xl border border-groww-primary/20 bg-gradient-to-r from-groww-primary/10 via-groww-primary/5 to-transparent p-5 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="shrink-0 w-10 h-10 rounded-full bg-groww-primary/15 flex items-center justify-center">
+                <Rocket className="w-5 h-5 text-groww-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-sm sm:text-base">Get on the leaderboard</h3>
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                  You haven't invested yet. Make your first trade to start competing with other traders.
+                </p>
+              </div>
+            </div>
+            <Link
+              to="/market"
+              className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-groww-primary text-white text-sm font-semibold hover:opacity-90 transition shrink-0 self-start sm:self-auto"
+            >
+              Invest Now <ArrowUpRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
         {liveData.length === 0 && (

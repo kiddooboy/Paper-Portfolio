@@ -135,9 +135,13 @@ router.get('/', async (req, res) => {
     };
   });
 
+  // Hide users who have never invested (no current holdings AND no transactions).
+  // They get an "Invest Now" CTA on the client instead of a zero-row.
+  const invested = leaderboard.filter(e => (e.holdingsCount > 0) || (e.totalTxns > 0));
+
   // Rank by overall % return (the fair competition metric on equal starting capital)
-  leaderboard.sort((a, b) => b.pnlPercent - a.pnlPercent);
-  const ranked = leaderboard.map((entry, index) => ({ rank: index + 1, ...entry }));
+  invested.sort((a, b) => b.pnlPercent - a.pnlPercent);
+  const ranked = invested.map((entry, index) => ({ rank: index + 1, ...entry }));
   res.json(ranked);
 });
 
