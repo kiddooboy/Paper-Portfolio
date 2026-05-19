@@ -59,19 +59,33 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     const ex = exchange ?? 'NSE';
     const upperSymbol = symbol.toUpperCase();
 
-    const known = await db
-      .prepare(`SELECT 1 FROM stocks WHERE symbol = ? AND exchange = 'NSE' LIMIT 1`)
-      .get(upperSymbol);
-    if (!known) return res.status(400).json({ error: 'Trading restricted to NSE-listed stocks only' });
-
     if ((type === 'SL' || type === 'SL-M') && !triggerPrice) {
       return res.status(400).json({ error: 'Trigger price required for SL/SL-M orders' });
     }
 
     const quote = await getQuote(upperSymbol, ex);
-    if (!quote) return res.status(404).json({ error: 'Stock not found or market data unavailable' });
+    const hasLivePrice = !!quote && quote.price > 0;
 
-    const currentPrice = quote.price;
+    // The "is this tradable" gate applies only to BUY orders (opening exposure).
+    // A SELL is never blocked here — a user must always be able to exit a
+    // position they hold, even if the symbol was later delisted or dropped
+    // from the stock master. Holdings sufficiency is validated below.
+    if (transactionType === 'BUY') {
+      const known = db
+        .prepare(`SELECT 1 FROM stocks WHERE symbol = ? AND exchange = 'NSE' LIMIT 1`)
+        .get(upperSymbol);
+      if (!known && !hasLivePrice) {
+        return res.status(400).json({ error: 'This symbol is not tradable — no live market data available.' });
+      }
+    }
+
+    if (!hasLivePrice) {
+      return res.status(404).json({
+        error: 'Live market data is unavailable for this symbol right now. Please try again in a few seconds.',
+      });
+    }
+
+    const currentPrice = quote!.price;
 
     let effectiveType = type;
     let effectiveLimitPrice = limitPrice;

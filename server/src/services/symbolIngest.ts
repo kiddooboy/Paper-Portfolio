@@ -1,6 +1,21 @@
 import axios from 'axios';
 import { parse } from 'csv-parse/sync';
 import { db } from '../db/index.js';
+import { TRADEABLE_INDICES } from './marketData.js';
+
+/** Ensures the tradeable market indices (NIFTY, SENSEX, …) exist as
+ *  category='index' rows so users can trade them like stocks. */
+function ensureIndices() {
+  const insert = db.prepare(
+    `INSERT INTO stocks (symbol, name, exchange, category)
+     VALUES (?, ?, 'NSE', 'index')
+     ON CONFLICT (symbol, exchange) DO UPDATE SET
+       name = excluded.name, category = 'index'`
+  );
+  for (const idx of TRADEABLE_INDICES) {
+    try { insert.run(idx.symbol, idx.name); } catch {}
+  }
+}
 
 const FALLBACK_STOCKS = [
   { symbol: 'RELIANCE',   name: 'Reliance Industries Ltd',              exchange: 'NSE' as const, sector: 'Oil Gas & Consumable Fuels',       isin: 'INE002A01018' },
@@ -143,8 +158,11 @@ async function fetchAllNseSymbols(): Promise<StockRow[]> {
  * Skips ingest if stocks table already has ≥ 1 800 NSE rows (i.e. already expanded).
  */
 export async function ingestSymbols() {
+  // Always make sure the tradeable indices are present (cheap, idempotent).
+  ensureIndices();
+
   const existing =
-    ((db.prepare(`SELECT COUNT(*) as c FROM stocks WHERE exchange = 'NSE'`).get()) as any)?.c ?? 0;
+    ((db.prepare(`SELECT COUNT(*) as c FROM stocks WHERE exchange = 'NSE' AND category = 'stock'`).get()) as any)?.c ?? 0;
 
   if (existing >= 1800) {
     console.log(`[symbols] already have ${existing} NSE stocks — skipping ingest`);
@@ -180,8 +198,30 @@ export async function ingestSymbols() {
     nseStocks = FALLBACK_STOCKS;
   }
 
-  // Wipe old NSE rows then upsert fresh list (handles renames/delistings cleanly)
-  db.prepare(`DELETE FROM stocks WHERE exchange = 'NSE'`).run();
+  // Non-destructive prune: only remove stale rows when the fresh fetch is
+  // healthy (≥ 1 000 stocks), and NEVER remove a symbol a user holds or
+  // watches — otherwise they could be stuck unable to exit a position.
+  const healthyFetch = nseStocks.length >= 1000;
+  if (healthyFetch) {
+    const fresh = new Set(nseStocks.map((s) => s.symbol));
+    const protectedSyms = new Set(
+      (db.prepare(
+        `SELECT symbol FROM holdings UNION SELECT symbol FROM watchlist_items`
+      ).all() as any[]).map((r) => r.symbol)
+    );
+    const current = db.prepare(
+      `SELECT symbol FROM stocks WHERE exchange = 'NSE' AND category = 'stock'`
+    ).all() as any[];
+    const del = db.prepare(`DELETE FROM stocks WHERE symbol = ? AND exchange = 'NSE' AND category = 'stock'`);
+    let pruned = 0;
+    for (const row of current) {
+      if (!fresh.has(row.symbol) && !protectedSyms.has(row.symbol)) {
+        del.run(row.symbol);
+        pruned++;
+      }
+    }
+    if (pruned) console.log(`[symbols] pruned ${pruned} delisted/stale NSE rows`);
+  }
 
   const insert = db.prepare(
     `INSERT INTO stocks (symbol, name, exchange, sector, isin, category)

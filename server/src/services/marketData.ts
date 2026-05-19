@@ -97,7 +97,34 @@ function getTTL(): number {
 interface CacheEntry { data: Quote; at: number; }
 const cache = new Map<string, CacheEntry>();
 
+// ── Tradeable market indices ──
+// App symbol → Yahoo Finance index ticker. Lets users trade index levels
+// (NIFTY, SENSEX, …) the same way they trade a stock in this simulator.
+export const INDEX_TICKERS: Record<string, string> = {
+  NIFTY:       '^NSEI',
+  NIFTY50:     '^NSEI',
+  SENSEX:      '^BSESN',
+  BANKNIFTY:   '^NSEBANK',
+  NIFTYBANK:   '^NSEBANK',
+  NIFTYIT:     '^CNXIT',
+  NIFTY100:    '^CNX100',
+  NIFTYMIDCAP: '^CNXMIDCAP',
+};
+
+export const TRADEABLE_INDICES = [
+  { symbol: 'NIFTY',       name: 'NIFTY 50 Index' },
+  { symbol: 'SENSEX',      name: 'BSE SENSEX Index' },
+  { symbol: 'BANKNIFTY',   name: 'NIFTY Bank Index' },
+  { symbol: 'NIFTYIT',     name: 'NIFTY IT Index' },
+  { symbol: 'NIFTY100',    name: 'NIFTY 100 Index' },
+  { symbol: 'NIFTYMIDCAP', name: 'NIFTY Midcap Index' },
+];
+
 function yahooTicker(symbol: string, exchange: 'NSE' | 'BSE') {
+  const up = symbol.toUpperCase();
+  if (up.startsWith('^')) return up;          // raw Yahoo index ticker
+  const idx = INDEX_TICKERS[up];
+  if (idx) return idx;                        // tradeable index alias
   return `${symbol}.${exchange === 'NSE' ? 'NS' : 'BO'}`;
 }
 
