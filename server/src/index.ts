@@ -30,6 +30,7 @@ import cron from 'node-cron';
 import { getQuote, getQuotes, getIndices, isMarketOpen, NIFTY50 } from './services/marketData.js';
 import { ingestSymbols } from './services/symbolIngest.js';
 import { startOrderExecutionScheduler } from './services/orderExecution.js';
+import { recordIndexHistory, backfillIndexHistory } from './services/indexHistory.js';
 import { postDailyStrategy, seedCommunityIfEmpty } from './services/communityBot.js';
 import { logActivity } from './services/activityLogger.js';
 
@@ -67,6 +68,9 @@ async function main() {
 
   // Kick off symbol ingestion in background; don't block server start.
   ingestSymbols().catch((e) => console.warn('[symbols] ingest failed:', e?.message || e));
+
+  // Phase 2: ensure ~1y of Nifty/Sensex closes are available for benchmarking
+  backfillIndexHistory(400).catch((e) => console.warn('[indexHistory] backfill failed:', e?.message || e));
 
   // Seed community with initial posts if empty, then schedule daily strategy posts at 8:00 AM IST
   seedCommunityIfEmpty().catch((e) => console.warn('[communityBot] seed failed:', e?.message || e));
@@ -201,6 +205,11 @@ async function main() {
   // Daily 8:00 AM IST (2:30 AM UTC) — post AI-generated trading strategy to community
   cron.schedule('30 2 * * *', () => {
     postDailyStrategy().catch(err => console.error('[cron] communityBot error:', err));
+  });
+
+  // 15:35 IST (10:05 UTC) — persist today's Nifty / Sensex close for benchmarking
+  cron.schedule('5 10 * * 1-5', () => {
+    recordIndexHistory().catch(err => console.error('[cron] indexHistory error:', err));
   });
 
   // Every minute during market hours: check price alerts.

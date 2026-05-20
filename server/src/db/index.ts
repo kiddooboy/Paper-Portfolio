@@ -384,6 +384,49 @@ export async function initSchema() {
   safeExec(`ALTER TABLE transactions ADD COLUMN charges TEXT`,   'migration: transactions.charges');
   safeExec(`ALTER TABLE transactions ADD COLUMN net_amount REAL`,'migration: transactions.net_amount');
 
+  // Phase 2 — Portfolio Intelligence: index history for benchmark comparison
+  safeExec(`
+    CREATE TABLE IF NOT EXISTS index_history (
+      symbol      TEXT NOT NULL,
+      date        TEXT NOT NULL,
+      close       REAL NOT NULL,
+      prev_close  REAL,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (symbol, date)
+    )
+  `, 'table: index_history');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_index_history_date ON index_history(date)`, 'index: index_history_date');
+
+  // Phase 3 — Smart alerts: multi-condition support
+  safeExec(`ALTER TABLE price_alerts ADD COLUMN condition_type TEXT NOT NULL DEFAULT 'price'`, 'migration: price_alerts.condition_type');
+  safeExec(`ALTER TABLE price_alerts ADD COLUMN condition_spec TEXT`, 'migration: price_alerts.condition_spec');
+
+  // Phase 3 — News sentiment per symbol (rolling window)
+  safeExec(`
+    CREATE TABLE IF NOT EXISTS symbol_sentiment (
+      symbol      TEXT NOT NULL,
+      date        TEXT NOT NULL,
+      score       REAL NOT NULL,
+      mentions    INTEGER NOT NULL DEFAULT 0,
+      top_title   TEXT,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (symbol, date)
+    )
+  `, 'table: symbol_sentiment');
+
+  // Phase 3 — Notification preferences (which channels/types a user wants)
+  safeExec(`
+    CREATE TABLE IF NOT EXISTS notification_prefs (
+      user_id     INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      enabled     TEXT NOT NULL DEFAULT '["order","price_alert","system","ai_insight"]',
+      updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `, 'table: notification_prefs');
+
+  // Allow the new notification type
+  // (existing CHECK constraint may block 'ai_insight' — keep stored as 'system' for compat if so)
+  // SQLite can't ALTER CHECK; we accept that ai_insight notifications may be stored as 'system'.
+
   // Fix orders.type CHECK constraint — tables created before SL/SL-M support only
   // allow ('MARKET','LIMIT'). SQLite cannot ALTER a CHECK constraint, so rebuild
   // the table atomically when the stale constraint is detected.

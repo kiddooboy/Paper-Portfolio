@@ -3,6 +3,196 @@ import { db } from '../db/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { getCachedQuotes, Quote } from '../services/marketData.js';
 
+// ─── Phase 2 helpers — benchmark, drawdown, risk alerts ───────────────────
+const RF_DAILY = Math.pow(1.065, 1 / 252) - 1; // 6.5% annual risk-free → daily
+
+/** Returns aligned (date, portfolio_value, index_close) rows for the user. */
+function alignedReturns(userId: number, indexSymbol = '^NSEI', days = 365): {
+  dates: string[]; pv: number[]; iv: number[];
+} {
+  // portfolio_history has one snapshot per record; aggregate to last value of each IST date
+  const phRows = db.prepare(`
+    SELECT date(recorded_at, '+5 hours', '+30 minutes') AS d,
+           total_value AS pv
+    FROM portfolio_history WHERE user_id = ?
+    GROUP BY d
+    HAVING max(recorded_at) = max(recorded_at)
+    ORDER BY d DESC LIMIT ?
+  `).all(userId, days) as any[];
+  if (!phRows.length) return { dates: [], pv: [], iv: [] };
+  phRows.reverse();
+
+  const ihRows = db.prepare(`
+    SELECT date, close FROM index_history WHERE symbol = ? AND date >= ? ORDER BY date ASC
+  `).all(indexSymbol, phRows[0].d) as any[];
+  const ihMap = new Map<string, number>();
+  for (const r of ihRows) ihMap.set(r.date, r.close);
+
+  const dates: string[] = []; const pv: number[] = []; const iv: number[] = [];
+  for (const r of phRows) {
+    const ic = ihMap.get(r.d);
+    if (ic == null) continue;
+    dates.push(r.d); pv.push(Number(r.pv)); iv.push(Number(ic));
+  }
+  return { dates, pv, iv };
+}
+
+function pctReturns(series: number[]): number[] {
+  const out: number[] = [];
+  for (let i = 1; i < series.length; i++) {
+    const prev = series[i - 1];
+    if (!prev) { out.push(0); continue; }
+    out.push((series[i] - prev) / prev);
+  }
+  return out;
+}
+
+function mean(xs: number[]): number {
+  if (!xs.length) return 0;
+  return xs.reduce((s, v) => s + v, 0) / xs.length;
+}
+
+function variance(xs: number[]): number {
+  if (xs.length < 2) return 0;
+  const m = mean(xs);
+  return xs.reduce((s, v) => s + (v - m) ** 2, 0) / (xs.length - 1);
+}
+
+function covariance(xs: number[], ys: number[]): number {
+  if (xs.length < 2 || xs.length !== ys.length) return 0;
+  const mx = mean(xs), my = mean(ys);
+  return xs.reduce((s, _, i) => s + (xs[i] - mx) * (ys[i] - my), 0) / (xs.length - 1);
+}
+
+/** Returns benchmark stats vs `^NSEI` over the user's portfolio history. */
+function computeBenchmark(userId: number) {
+  const { pv, iv } = alignedReturns(userId, '^NSEI', 365);
+  if (pv.length < 10) {
+    return { name: 'NIFTY 50', return_1y: null, beta: null, alpha: null, tracking_error: null, samples: pv.length };
+  }
+  const rp = pctReturns(pv);
+  const rb = pctReturns(iv);
+  const n = Math.min(rp.length, rb.length);
+  const rpN = rp.slice(-n), rbN = rb.slice(-n);
+
+  const cov = covariance(rpN, rbN);
+  const varB = variance(rbN);
+  const beta = varB === 0 ? null : cov / varB;
+
+  // Jensen's alpha (annualised)
+  const alphaDaily = mean(rpN) - RF_DAILY - (beta ?? 0) * (mean(rbN) - RF_DAILY);
+  const alpha = alphaDaily * 252;
+
+  // Tracking error (annualised)
+  const diffs = rpN.map((v, i) => v - rbN[i]);
+  const te = Math.sqrt(variance(diffs)) * Math.sqrt(252);
+
+  const port1y = pv.length >= 2 ? (pv[pv.length - 1] - pv[0]) / pv[0] : 0;
+  const bench1y = iv.length >= 2 ? (iv[iv.length - 1] - iv[0]) / iv[0] : 0;
+
+  return {
+    name: 'NIFTY 50',
+    return_1y: +(port1y * 100).toFixed(2),
+    benchmark_return_1y: +(bench1y * 100).toFixed(2),
+    excess_return: +((port1y - bench1y) * 100).toFixed(2),
+    beta: beta == null ? null : +beta.toFixed(2),
+    alpha: +alpha.toFixed(4),
+    alpha_pct: +(alpha * 100).toFixed(2),
+    tracking_error: +(te * 100).toFixed(2),
+    samples: n,
+  };
+}
+
+/** Concentration / cash-drag / sector risk alerts. */
+function computeRiskAlerts(
+  holdings: any[], sectorAllocation: any[], hhi: number, balance: number, currentValue: number,
+) {
+  const alerts: { type: string; severity: 'low'|'med'|'high'; title: string; detail: string }[] = [];
+  for (const h of holdings) {
+    if ((h.weight ?? 0) > 25) {
+      alerts.push({
+        type: 'single_stock_overweight',
+        severity: h.weight > 40 ? 'high' : 'med',
+        title: `${h.symbol} is ${h.weight.toFixed(0)}% of portfolio`,
+        detail: 'Consider trimming — single-stock concentration above 25% is high-risk.',
+      });
+    }
+  }
+  for (const s of sectorAllocation) {
+    if (s.percent > 30) {
+      alerts.push({
+        type: 'sector_overweight',
+        severity: s.percent > 50 ? 'high' : 'med',
+        title: `${s.name || s.sector} is ${s.percent.toFixed(0)}% of portfolio`,
+        detail: 'One sector dominates the portfolio. Diversifying across sectors reduces drawdown risk.',
+      });
+    }
+  }
+  if (hhi > 2500 && holdings.length >= 1) {
+    alerts.push({
+      type: 'low_diversification',
+      severity: hhi > 5000 ? 'high' : 'med',
+      title: `Diversification is low (HHI ${Math.round(hhi)})`,
+      detail: 'Spread allocation across more positions to lower concentration risk.',
+    });
+  }
+  const equity = balance + currentValue;
+  if (equity > 0 && balance / equity > 0.30) {
+    alerts.push({
+      type: 'cash_drag',
+      severity: 'low',
+      title: `${Math.round((balance / equity) * 100)}% of portfolio is in cash`,
+      detail: 'Cash drag — uninvested capital is missing market returns.',
+    });
+  }
+  return alerts;
+}
+
+/** Drawdown episodes (peak → trough → recovery) from a value series. */
+function computeDrawdownSeries(series: { date: string; value: number }[]) {
+  if (series.length < 2) {
+    return { current_drawdown_pct: 0, max_drawdown_pct: 0, max_dd_date: null, recovery_days: null, episodes: [] as any[] };
+  }
+  let peak = series[0].value, peakIdx = 0;
+  let maxDD = 0, maxDDIdx = 0, maxPeakIdx = 0;
+  const episodes: any[] = [];
+  let inDrawdown = false; let troughIdx = 0; let troughValue = 0;
+
+  for (let i = 1; i < series.length; i++) {
+    const v = series[i].value;
+    if (v > peak) {
+      if (inDrawdown) {
+        episodes.push({
+          start_date: series[peakIdx].date,
+          trough_date: series[troughIdx].date,
+          recovery_date: series[i].date,
+          depth_pct: +((peak - troughValue) / peak * 100).toFixed(2),
+          recovery_days: i - peakIdx,
+        });
+        inDrawdown = false;
+      }
+      peak = v; peakIdx = i;
+    } else {
+      const dd = (peak - v) / peak;
+      if (!inDrawdown) { inDrawdown = true; troughIdx = i; troughValue = v; }
+      if (v < troughValue) { troughValue = v; troughIdx = i; }
+      if (dd > maxDD) { maxDD = dd; maxDDIdx = i; maxPeakIdx = peakIdx; }
+    }
+  }
+
+  const last = series[series.length - 1].value;
+  const currentDD = peak > 0 ? (peak - last) / peak : 0;
+
+  return {
+    current_drawdown_pct: +(currentDD * 100).toFixed(2),
+    max_drawdown_pct: +(maxDD * 100).toFixed(2),
+    max_dd_date: maxDD > 0 ? series[maxDDIdx].date : null,
+    max_dd_peak_date: maxDD > 0 ? series[maxPeakIdx].date : null,
+    recovery_days: inDrawdown ? null : (episodes.length ? episodes[episodes.length - 1].recovery_days : null),
+    episodes: episodes.slice(-5),
+  };
+}
+
 // Newton-Raphson XIRR implementation
 function xirr(cashflows: { amount: number; date: Date }[], guess = 0.1): number {
   const maxIter = 100;
@@ -202,6 +392,11 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
   const buyStats = allTxns.find((t: any) => t.type === 'BUY') || { count: 0, total: 0 };
   const sellStats = allTxns.find((t: any) => t.type === 'SELL') || { count: 0, total: 0 };
 
+  // ── Phase 2: benchmark + risk alerts ──
+  let benchmark: any = null;
+  try { benchmark = computeBenchmark(userId); } catch (err: any) { console.warn('[portfolio] benchmark err', err?.message); }
+  const riskAlerts = computeRiskAlerts(holdings, sectorAllocation, hhi, user.balance, currentValue);
+
   res.json({
     balance: user.balance,
     investedValue: +investedValue.toFixed(2),
@@ -213,6 +408,8 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
     holdings,
     sectorAllocation,
     stockAllocation: topStocks,
+    benchmark,
+    risk_alerts: riskAlerts,
     risk: {
       hhi: +hhi.toFixed(0),
       top3Weight: +top3Weight.toFixed(1),
@@ -243,6 +440,39 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
       cagr: cagr !== null ? +(cagr * 100).toFixed(2) : null,
     },
     transactions,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/portfolio/drawdown — peak → trough → recovery analysis
+// ---------------------------------------------------------------------------
+router.get('/drawdown', authMiddleware, async (req: AuthRequest, res) => {
+  const userId = req.user!.id;
+  const days = Math.min(parseInt(String(req.query.days || '365')) || 365, 1825);
+  const rows = db.prepare(`
+    SELECT date(recorded_at, '+5 hours', '+30 minutes') AS d, total_value
+    FROM portfolio_history WHERE user_id = ?
+      AND recorded_at >= datetime('now', '-' || ? || ' days')
+    GROUP BY d
+    ORDER BY d ASC
+  `).all(userId, days) as any[];
+  const series = rows.map((r) => ({ date: r.d, value: Number(r.total_value) }));
+  res.json(computeDrawdownSeries(series));
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/portfolio/benchmark/history — portfolio vs Nifty normalised series
+// ---------------------------------------------------------------------------
+router.get('/benchmark/history', authMiddleware, async (req: AuthRequest, res) => {
+  const userId = req.user!.id;
+  const days = Math.min(parseInt(String(req.query.days || '365')) || 365, 1825);
+  const { dates, pv, iv } = alignedReturns(userId, '^NSEI', days);
+  if (!pv.length) return res.json({ dates: [], portfolio: [], benchmark: [] });
+  const p0 = pv[0], i0 = iv[0];
+  res.json({
+    dates,
+    portfolio: pv.map((v) => +((v / p0 - 1) * 100).toFixed(2)),
+    benchmark: iv.map((v) => +((v / i0 - 1) * 100).toFixed(2)),
   });
 });
 
