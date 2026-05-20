@@ -2,21 +2,78 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────────────────────────────────────────
+   TradingView-styled base layer
+   - Trebuchet MS / Inter typography across the app
+   - TradingView dark (#131722) + light (#FFFFFF) backgrounds
+   - Tabular numerals everywhere (price/quantity columns line up)
+   - Subtle TradingView-style scrollbars
+   ───────────────────────────────────────────────────────────── */
+
 @layer base {
   html, body, button, input, select, textarea {
-    font-family: 'Inter', system-ui, sans-serif;
-    font-feature-settings: 'cv11', 'ss01', 'ss03';   /* Inter stylistic alts */
+    font-family: 'Trebuchet MS', 'Inter', 'Roboto', system-ui, sans-serif;
+    font-feature-settings: 'tnum' 1, 'cv11', 'ss01';
   }
+
   body {
-    @apply bg-gray-50 text-gray-900 dark:bg-groww-dark dark:text-groww-text;
+    @apply bg-white text-tv-lightText dark:bg-tv-bg dark:text-tv-text;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    letter-spacing: 0.005em;
   }
+
+  /* Price / quantity numbers always tabular so columns align */
+  .tabular-nums, table, td, th {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Subtle TradingView-style scrollbars */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(120,123,134,0.35);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(120,123,134,0.6); background-clip: padding-box; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* Form inputs: TradingView-style flat borders, sharp corners */
+  input[type="text"], input[type="number"], input[type="email"],
+  input[type="password"], input[type="search"], select, textarea {
+    @apply rounded-tv;
+  }
+
+  /* Section heading defaults inherit clean TV scale */
+  h1 { @apply text-[22px] font-semibold tracking-tight; }
+  h2 { @apply text-[18px] font-semibold tracking-tight; }
+  h3 { @apply text-[15px] font-semibold; }
 }
 
 @layer utilities {
-  .text-gain { @apply text-groww-gain; }
-  .text-loss { @apply text-groww-loss; }
-  .bg-gain { @apply bg-green-600 dark:bg-green-700; }
-  .bg-loss { @apply bg-red-600 dark:bg-red-700; }
+  /* P&L / direction colours — TradingView teal-green & red */
+  .text-gain { @apply text-tv-green; }
+  .text-loss { @apply text-tv-red; }
+  .bg-gain   { @apply bg-tv-green; }
+  .bg-loss   { @apply bg-tv-red; }
+
+  /* Brand link / CTA helpers (TradingView blue) */
+  .text-brand     { @apply text-tv-blue-500; }
+  .bg-brand       { @apply bg-tv-blue-500 hover:bg-tv-blue-600; }
+  .border-brand   { @apply border-tv-blue-500; }
+
+  /* TradingView-style card surfaces */
+  .tv-card {
+    @apply bg-white dark:bg-tv-card border border-tv-lightBorder dark:border-tv-border rounded-tv;
+  }
+  .tv-divider {
+    @apply border-tv-lightBorder dark:border-tv-border;
+  }
+  .tv-muted { @apply text-tv-muted; }
+
+  /* Section header label — uppercase tracked, TradingView-style */
+  .tv-label {
+    @apply text-[10px] font-semibold uppercase tracking-[0.08em] text-tv-muted;
+  }
 }
