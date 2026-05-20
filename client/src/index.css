@@ -3,9 +3,14 @@
 @tailwind utilities;
 
 @layer base {
+  html, body, button, input, select, textarea {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-feature-settings: 'cv11', 'ss01', 'ss03';   /* Inter stylistic alts */
+  }
   body {
-    font-family: 'Inter', 'DM Sans', system-ui, sans-serif;
     @apply bg-gray-50 text-gray-900 dark:bg-groww-dark dark:text-groww-text;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 

@@ -247,7 +247,12 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
 
     const chart = createChart(containerRef.current, {
       autoSize: true,
-      layout: { background: { type: ColorType.Solid, color: bgColor }, textColor },
+      layout: {
+        background: { type: ColorType.Solid, color: bgColor },
+        textColor,
+        fontFamily: "'Inter', system-ui, sans-serif",
+        fontSize: 11,
+      },
       grid:   { vertLines: { color: gridColor }, horzLines: { color: gridColor } },
       crosshair: { mode: CrosshairMode.Normal },
       rightPriceScale: { borderColor, scaleMargins: margins.price },
