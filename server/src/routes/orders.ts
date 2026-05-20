@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { db } from '../db/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { getQuote, getCachedQuote, isMarketOpen } from '../services/marketData.js';
+import { computeCharges } from '../services/fees.js';
 import { z } from 'zod';
 import { logActivity, getClientIp } from '../services/activityLogger.js';
 
@@ -22,6 +23,7 @@ const orderSchema = z.object({
   stopLossPrice: z.number().positive().optional(),
   productType: z.enum(['CNC', 'MIS']).optional().default('CNC'),
   is_amo: z.boolean().optional().default(false),
+  trailingPct: z.number().positive().max(50).optional(),  // % trail for SL/SL-M orders
 });
 
 const modifySchema = z.object({
@@ -149,7 +151,7 @@ router.get('/mis-shorts', authMiddleware, async (req: AuthRequest, res) => {
 
 router.post('/', authMiddleware, async (req: AuthRequest, res) => {
   try {
-    const { symbol, exchange, type, transactionType, quantity, limitPrice, triggerPrice, targetPrice, stopLossPrice, productType, is_amo } = orderSchema.parse(req.body);
+    const { symbol, exchange, type, transactionType, quantity, limitPrice, triggerPrice, targetPrice, stopLossPrice, productType, is_amo, trailingPct } = orderSchema.parse(req.body);
     const userId = req.user!.id;
     const ex = exchange ?? 'NSE';
     const upperSymbol = symbol.toUpperCase();
@@ -252,11 +254,20 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
           }
         }
 
+        // Use stopLossPrice as the trigger when the user attached a stop-loss leg
+        const _slLeg = stopLossPrice; // reserved for future SL-leg child creation
+
+        // Trailing SL: anchor = the entry/current price the trail follows from.
+        // For SELL: anchor walks UP with price; for BUY: anchor walks DOWN.
+        const trailAnchor = (trailingPct && trailingPct > 0) ? currentPrice : null;
+
         const result = await db.prepare(`
-          INSERT INTO orders (user_id, symbol, type, transaction_type, quantity, price, limit_price, trigger_price, target_price, product_type, is_amo, status)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO orders (user_id, symbol, type, transaction_type, quantity, price, limit_price, trigger_price, target_price, product_type, is_amo, trailing_pct, trail_anchor, status)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(userId, upperSymbol, effectiveType, transactionType, quantity, orderPrice,
-               effectiveLimitPrice || null, triggerPrice || null, targetPrice || null, productType, is_amo ? 1 : 0, 'PENDING');
+               effectiveLimitPrice || null, triggerPrice || null, targetPrice || null, productType,
+               is_amo ? 1 : 0, trailingPct || null, trailAnchor, 'PENDING');
+        void _slLeg;
 
         orderId = result.lastInsertRowid as number;
 
@@ -355,8 +366,10 @@ async function fillMisShort(
 ) {
   const positionValue  = price * quantity;
   const marginToBlock  = positionValue * MIS_MARGIN_RATE; // 20% — Groww-style SEBI intraday margin
+  const charges        = computeCharges('SELL', 'MIS', quantity, price);
 
-  db.prepare('UPDATE users SET balance = balance - ? WHERE id = ?').run(marginToBlock, userId);
+  // Block margin AND debit sell-side charges (STT, exchange, GST, etc.)
+  db.prepare('UPDATE users SET balance = balance - ? WHERE id = ?').run(marginToBlock + charges.total, userId);
 
   const existing = db.prepare(
     'SELECT * FROM mis_shorts WHERE user_id = ? AND symbol = ?'
@@ -378,14 +391,14 @@ async function fillMisShort(
   db.prepare(`UPDATE orders SET status = 'FILLED', filled_at = CURRENT_TIMESTAMP WHERE id = ?`).run(orderId);
 
   db.prepare(
-    'INSERT INTO transactions (user_id, order_id, symbol, type, quantity, price, total_amount) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).run(userId, orderId, symbol, 'SELL', quantity, price, positionValue);
+    'INSERT INTO transactions (user_id, order_id, symbol, type, quantity, price, total_amount, charges, net_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(userId, orderId, symbol, 'SELL', quantity, price, positionValue, JSON.stringify(charges), positionValue - charges.total);
 
   try {
     db.prepare(`INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, 'order')`).run(
       userId,
       `MIS Short Sell: ${symbol}`,
-      `Shorted ${quantity} ${symbol} @ ₹${price.toFixed(2)}. Margin blocked: ₹${marginToBlock.toFixed(2)} (20%). Square off before 3:20 PM.`,
+      `Shorted ${quantity} ${symbol} @ ₹${price.toFixed(2)}. Margin blocked: ₹${marginToBlock.toFixed(2)} (20%) · Charges: ₹${charges.total.toFixed(2)}. Square off before 3:20 PM.`,
     );
   } catch {}
 }
@@ -400,9 +413,13 @@ async function fillMisCover(
   short: any,
 ) {
   const proRataMargin = (short.margin_blocked / short.quantity) * quantity;
-  // P&L: positive when covered lower than entry (price fell as expected)
-  const pnl = (short.avg_entry_price - coverPrice) * quantity;
-  const creditToBalance = proRataMargin + pnl;
+  const charges       = computeCharges('BUY', 'MIS', quantity, coverPrice);
+  // Gross P&L from price movement
+  const grossPnl = (short.avg_entry_price - coverPrice) * quantity;
+  // Net P&L includes the cover-side charges (sell-side charges were already
+  // debited at short-open time, so we don't double-count them here).
+  const pnl = grossPnl - charges.total;
+  const creditToBalance = proRataMargin + grossPnl - charges.total;
 
   db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?').run(creditToBalance, userId);
 
@@ -424,16 +441,17 @@ async function fillMisCover(
 
   db.prepare(`UPDATE orders SET status = 'FILLED', filled_at = CURRENT_TIMESTAMP WHERE id = ?`).run(orderId);
 
+  const grossCover = coverPrice * quantity;
   db.prepare(
-    'INSERT INTO transactions (user_id, order_id, symbol, type, quantity, price, total_amount) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).run(userId, orderId, symbol, 'BUY', quantity, coverPrice, coverPrice * quantity);
+    'INSERT INTO transactions (user_id, order_id, symbol, type, quantity, price, total_amount, charges, net_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(userId, orderId, symbol, 'BUY', quantity, coverPrice, grossCover, JSON.stringify(charges), grossCover + charges.total);
 
   const pnlStr = pnl >= 0 ? `+₹${pnl.toFixed(2)}` : `-₹${Math.abs(pnl).toFixed(2)}`;
   try {
     db.prepare(`INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, 'order')`).run(
       userId,
       `Short Covered: ${symbol}`,
-      `Covered ${quantity} ${symbol} @ ₹${coverPrice.toFixed(2)}. Realized P&L: ${pnlStr}`,
+      `Covered ${quantity} ${symbol} @ ₹${coverPrice.toFixed(2)} · Charges ₹${charges.total.toFixed(2)} · Realized P&L: ${pnlStr}`,
     );
   } catch {}
 }
@@ -475,45 +493,53 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
   }
 });
 
-async function recordAvgCostPnl(userId: number, sellOrderId: number, symbol: string, quantity: number, avgBuyPrice: number, sellPrice: number) {
-  const pnl = (sellPrice - avgBuyPrice) * quantity;
-  await db.prepare(`
-    INSERT INTO trade_pnl (user_id, symbol, sell_order_id, quantity, buy_price, sell_price, realized_pnl)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(userId, symbol, sellOrderId, quantity, avgBuyPrice, sellPrice, pnl);
-}
-
 export async function fillOrder(orderId: number, userId: number, symbolRaw: string, transactionType: string, quantity: number, price: number) {
   const symbol = symbolRaw.toUpperCase();
   const totalAmount = price * quantity;
 
+  // Determine product type for fee computation (default CNC if order lookup fails)
+  const orderRow = db.prepare('SELECT product_type FROM orders WHERE id = ?').get(orderId) as any;
+  const productType: 'CNC' | 'MIS' = orderRow?.product_type === 'MIS' ? 'MIS' : 'CNC';
+  const charges = computeCharges(transactionType as 'BUY' | 'SELL', productType, quantity, price);
+  const netAmount = transactionType === 'BUY'
+    ? totalAmount + charges.total    // BUY: cost = gross + fees
+    : totalAmount - charges.total;   // SELL: proceeds = gross − fees
+
   await db.transaction(async () => {
     if (transactionType === 'BUY') {
-      await db.prepare('UPDATE users SET balance = balance - ? WHERE id = ?').run(totalAmount, userId);
+      // Cost basis includes charges so unrealised P&L on the leaderboard already
+      // reflects fees paid at entry.
+      await db.prepare('UPDATE users SET balance = balance - ? WHERE id = ?').run(netAmount, userId);
       const holding = (await db.prepare('SELECT * FROM holdings WHERE user_id = ? AND symbol = ?').get(userId, symbol)) as any;
       if (holding) {
         const newQty = holding.quantity + quantity;
-        const newAvg = ((holding.avg_buy_price * holding.quantity) + totalAmount) / newQty;
+        const newAvg = ((holding.avg_buy_price * holding.quantity) + netAmount) / newQty;
         await db.prepare('UPDATE holdings SET quantity = ?, avg_buy_price = ? WHERE id = ?').run(newQty, newAvg, holding.id);
       } else {
+        const avgWithCharges = netAmount / quantity;
         await db.prepare('INSERT INTO holdings (user_id, symbol, quantity, avg_buy_price) VALUES (?, ?, ?, ?)')
-          .run(userId, symbol, quantity, price);
+          .run(userId, symbol, quantity, avgWithCharges);
       }
     } else {
-      await db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?').run(totalAmount, userId);
+      await db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?').run(netAmount, userId);
       const holding = (await db.prepare('SELECT * FROM holdings WHERE user_id = ? AND symbol = ?').get(userId, symbol)) as any;
       if (holding) {
         const newQty = holding.quantity - quantity;
         if (newQty <= 0) await db.prepare('DELETE FROM holdings WHERE id = ?').run(holding.id);
         else await db.prepare('UPDATE holdings SET quantity = ? WHERE id = ?').run(newQty, holding.id);
-        await recordAvgCostPnl(userId, orderId, symbol, quantity, holding.avg_buy_price, price);
+        // Realized P&L is net of sell-side charges (buy charges already in avg cost)
+        const realizedPnl = (price - holding.avg_buy_price) * quantity - charges.total;
+        await db.prepare(`
+          INSERT INTO trade_pnl (user_id, symbol, sell_order_id, quantity, buy_price, sell_price, realized_pnl)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(userId, symbol, orderId, quantity, holding.avg_buy_price, price, realizedPnl);
       }
     }
 
     await db.prepare(`
-      INSERT INTO transactions (user_id, order_id, symbol, type, quantity, price, total_amount)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(userId, orderId, symbol, transactionType, quantity, price, totalAmount);
+      INSERT INTO transactions (user_id, order_id, symbol, type, quantity, price, total_amount, charges, net_amount)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(userId, orderId, symbol, transactionType, quantity, price, totalAmount, JSON.stringify(charges), netAmount);
 
     await db.prepare(`UPDATE orders SET status = 'FILLED', filled_at = CURRENT_TIMESTAMP WHERE id = ?`).run(orderId);
 
@@ -547,7 +573,15 @@ export async function fillOrder(orderId: number, userId: number, symbolRaw: stri
 }
 
 router.get('/', authMiddleware, async (req: AuthRequest, res) => {
-  const orders = await db.prepare(`SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC`).all(req.user!.id);
+  // Join the executed transaction (if any) so the response carries the
+  // realised fee breakdown for each filled order.
+  const orders = await db.prepare(`
+    SELECT o.*, t.charges AS charges, t.net_amount AS net_amount
+    FROM orders o
+    LEFT JOIN transactions t ON t.order_id = o.id
+    WHERE o.user_id = ?
+    ORDER BY o.created_at DESC
+  `).all(req.user!.id);
   res.json(orders);
 });
 

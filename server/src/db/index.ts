@@ -376,6 +376,14 @@ export async function initSchema() {
   safeExec(`ALTER TABLE orders ADD COLUMN is_amo INTEGER NOT NULL DEFAULT 0`, 'migration: orders.is_amo');
   safeExec(`ALTER TABLE orders ADD COLUMN parent_order_id INTEGER`, 'migration: orders.parent_order_id');
 
+  // Trailing stop-loss support (Phase 1 — trading reliability & realism)
+  safeExec(`ALTER TABLE orders ADD COLUMN trailing_pct REAL`,    'migration: orders.trailing_pct');
+  safeExec(`ALTER TABLE orders ADD COLUMN trail_anchor REAL`,    'migration: orders.trail_anchor');
+
+  // Broker / STT / exchange / GST / stamp charges per fill
+  safeExec(`ALTER TABLE transactions ADD COLUMN charges TEXT`,   'migration: transactions.charges');
+  safeExec(`ALTER TABLE transactions ADD COLUMN net_amount REAL`,'migration: transactions.net_amount');
+
   // Fix orders.type CHECK constraint — tables created before SL/SL-M support only
   // allow ('MARKET','LIMIT'). SQLite cannot ALTER a CHECK constraint, so rebuild
   // the table atomically when the stale constraint is detected.

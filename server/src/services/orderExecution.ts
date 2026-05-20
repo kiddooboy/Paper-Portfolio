@@ -17,6 +17,10 @@ interface PendingOrder {
   target_price: number | null;
   product_type: 'CNC' | 'MIS';
   status: string;
+  is_gtt?: number;
+  gtt_valid_till?: string | null;
+  trailing_pct?: number | null;
+  trail_anchor?: number | null;
 }
 
 async function notify(userId: number, title: string, message: string, type: 'order' | 'price_alert' | 'system' = 'order') {
@@ -120,7 +124,68 @@ function checkPriceAlerts(symbol: string, currentPrice: number) {
   }
 }
 
+// Advance trailing-SL anchors against the current price. Returns the (possibly
+// updated) trigger_price the fill check should evaluate against.
+function updateTrailingStop(order: PendingOrder, currentPrice: number): number {
+  const tp = Number(order.trailing_pct) || 0;
+  if (tp <= 0 || (order.type !== 'SL' && order.type !== 'SL-M')) {
+    return Number(order.trigger_price ?? 0);
+  }
+  const cur = currentPrice;
+  let anchor = Number(order.trail_anchor) || cur;
+
+  if (order.transaction_type === 'SELL') {
+    // Protecting a long: walk anchor UP with price; never down.
+    if (cur > anchor) anchor = cur;
+    const newTrigger = anchor * (1 - tp / 100);
+    db.prepare(`UPDATE orders SET trail_anchor = ?, trigger_price = ? WHERE id = ?`)
+      .run(anchor, newTrigger, order.id);
+    return newTrigger;
+  } else {
+    // Covering a short: walk anchor DOWN with price; never up.
+    if (cur < anchor) anchor = cur;
+    const newTrigger = anchor * (1 + tp / 100);
+    db.prepare(`UPDATE orders SET trail_anchor = ?, trigger_price = ? WHERE id = ?`)
+      .run(anchor, newTrigger, order.id);
+    return newTrigger;
+  }
+}
+
+// Cancel GTT orders whose validity window has expired (run periodically and at
+// market-open). Emits a notification per cancelled order.
+function sweepExpiredGttOrders(): number {
+  const todayIst = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
+  const expired = db.prepare(`
+    SELECT id, user_id, symbol, transaction_type, quantity, trigger_price, gtt_valid_till
+    FROM orders
+    WHERE is_gtt = 1 AND status = 'PENDING'
+      AND gtt_valid_till IS NOT NULL AND gtt_valid_till < ?
+  `).all(todayIst) as any[];
+  if (!expired.length) return 0;
+
+  const cancel = db.prepare(`UPDATE orders SET status = 'EXPIRED' WHERE id = ?`);
+  const insertNote = db.prepare(`INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, 'order')`);
+  for (const o of expired) {
+    try {
+      cancel.run(o.id);
+      insertNote.run(
+        o.user_id,
+        `GTT Expired: ${o.transaction_type} ${o.symbol}`,
+        `Your GTT ${o.transaction_type} order for ${o.quantity} ${o.symbol} @ ₹${Number(o.trigger_price).toFixed(2)} expired on ${o.gtt_valid_till} without triggering.`,
+      );
+      logActivity(o.user_id, 'ORDER_FAILED', { orderId: o.id, symbol: o.symbol, reason: 'GTT expired' });
+    } catch (err) {
+      console.error(`[OrderExecution] GTT expiry handling failed for order ${o.id}:`, err);
+    }
+  }
+  console.log(`[OrderExecution] expired ${expired.length} GTT orders past validity`);
+  return expired.length;
+}
+
 async function sweepPendingOrders(label: string) {
+  // First: expire any GTTs past their validity (cheap, no quote lookups needed)
+  sweepExpiredGttOrders();
+
   const pending = db.prepare(`SELECT * FROM orders WHERE status = 'PENDING' ORDER BY created_at ASC`).all() as unknown as PendingOrder[];
   if (pending.length === 0) return { filled: 0, kept: 0, failed: 0 };
 
@@ -142,6 +207,14 @@ async function sweepPendingOrders(label: string) {
   for (const order of pending) {
     const currentPrice = priceMap.get(order.symbol);
     if (!currentPrice) { kept++; continue; }
+
+    // For trailing SL/SL-M orders, advance the anchor and refresh trigger_price
+    // BEFORE evaluating the fill condition. Mutates the order row in place.
+    if ((order.trailing_pct ?? 0) > 0 && (order.type === 'SL' || order.type === 'SL-M')) {
+      const newTrigger = updateTrailingStop(order, currentPrice);
+      order.trigger_price = newTrigger;
+    }
+
     try {
       const ok = await tryFillOrder(order, currentPrice);
       if (ok) filled++; else kept++;
