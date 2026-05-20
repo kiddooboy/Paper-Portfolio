@@ -22,10 +22,29 @@ type MisShort = {
   unrealized_pnl_pct?: number;
 };
 
+type DayPosition = {
+  symbol: string;
+  side: 'LONG' | 'SHORT' | 'CLOSED';
+  status: 'OPEN' | 'CLOSED';
+  quantity: number;
+  avg_entry_price: number;
+  avg_exit_price?: number;
+  current_price?: number;
+  unrealized_pnl?: number;
+  unrealized_pnl_pct?: number;
+  realized_pnl?: number;
+  realized_pnl_pct?: number;
+  product_type: 'CNC' | 'MIS';
+  opened_at: string;
+  closed_at?: string;
+};
+
 export default function PositionsPage() {
   const [activeTab, setActiveTab] = useState<'holdings' | 'day'>('holdings');
   const [holdings, setHoldings] = useState<any[]>([]);
   const [misShorts, setMisShorts] = useState<MisShort[]>([]);
+  const [dayPositions, setDayPositions] = useState<DayPosition[]>([]);
+  const [dayDate, setDayDate] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>('pnl');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
@@ -35,21 +54,41 @@ export default function PositionsPage() {
   const allQuotes = useMarketStore((s) => s.quotes);
 
   useEffect(() => {
+    let cancelled = false;
     async function fetchPositions() {
       try {
-        const [portfolioRes, shortsRes] = await Promise.all([
+        const [portfolioRes, shortsRes, dayRes] = await Promise.all([
           axios.get('/api/portfolio'),
           axios.get('/api/orders/mis-shorts'),
+          axios.get('/api/orders/day-positions'),
         ]);
+        if (cancelled) return;
         setHoldings(portfolioRes.data.holdings || []);
         setMisShorts(shortsRes.data || []);
+        setDayPositions(dayRes.data?.positions || []);
+        setDayDate(dayRes.data?.date || '');
       } catch (error) {
         console.error('Error fetching positions:', error);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
     fetchPositions();
+    // Refresh day positions every 15s so new buys / live P&L appear without
+    // a manual reload.
+    const id = setInterval(async () => {
+      try {
+        const [dayRes, shortsRes] = await Promise.all([
+          axios.get('/api/orders/day-positions'),
+          axios.get('/api/orders/mis-shorts'),
+        ]);
+        if (cancelled) return;
+        setDayPositions(dayRes.data?.positions || []);
+        setMisShorts(shortsRes.data || []);
+        setDayDate(dayRes.data?.date || '');
+      } catch {}
+    }, 15_000);
+    return () => { cancelled = true; clearInterval(id); };
   }, []);
 
   // Enrich holdings with live market data
@@ -212,7 +251,12 @@ export default function PositionsPage() {
       </div>
 
       {activeTab === 'day' ? (
-        <DayPositionsPanel misShorts={misShorts} />
+        <DayPositionsPanel
+          dayPositions={dayPositions}
+          misShorts={misShorts}
+          dayDate={dayDate}
+          liveQuotes={allQuotes}
+        />
       ) : (
       <>
 
@@ -366,101 +410,282 @@ export default function PositionsPage() {
   );
 }
 
-/* ── Day Positions (MIS open shorts) ── */
+/* ── Day Positions — everything traded today, resets daily ── */
 
-function DayPositionsPanel({ misShorts }: { misShorts: MisShort[] }) {
-  const totalPnl = misShorts.reduce((acc, s) => acc + (s.unrealized_pnl ?? 0), 0);
+function DayPositionsPanel({
+  dayPositions, misShorts, dayDate, liveQuotes,
+}: {
+  dayPositions: DayPosition[];
+  misShorts: MisShort[];
+  dayDate: string;
+  liveQuotes: Record<string, any>;
+}) {
+  // Recompute live P&L from current quote so the table updates in real time
+  const enriched = dayPositions.map((p) => {
+    if (p.status !== 'OPEN') return p;
+    const live = liveQuotes[p.symbol];
+    const ltp = live?.price && live.price > 0 ? live.price : (p.current_price ?? 0);
+    if (!ltp) return p;
+    const dir = p.side === 'LONG' ? 1 : -1;
+    const pnl = (ltp - p.avg_entry_price) * p.quantity * dir;
+    const pct = p.avg_entry_price > 0 ? ((ltp - p.avg_entry_price) / p.avg_entry_price) * 100 * dir : 0;
+    return { ...p, current_price: ltp, unrealized_pnl: pnl, unrealized_pnl_pct: pct };
+  });
+
+  const opens   = enriched.filter((p) => p.status === 'OPEN');
+  const closed  = enriched.filter((p) => p.status === 'CLOSED');
+  const openLongs  = opens.filter((p) => p.side === 'LONG');
+  const openShorts = opens.filter((p) => p.side === 'SHORT');
+
+  const unrealised = opens.reduce((acc, p) => acc + (p.unrealized_pnl ?? 0), 0)
+                   + misShorts.reduce((acc, s) => acc + (s.unrealized_pnl ?? 0), 0);
+  const realised   = closed.reduce((acc, p) => acc + (p.realized_pnl ?? 0), 0);
+  const dayPnl     = unrealised + realised;
   const totalMargin = misShorts.reduce((acc, s) => acc + s.margin_blocked, 0);
 
-  if (misShorts.length === 0) {
+  if (enriched.length === 0 && misShorts.length === 0) {
     return (
       <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 flex flex-col items-center justify-center py-16 gap-3">
         <ArrowDownUp className="w-8 h-8 text-gray-300 dark:text-gray-600" />
-        <p className="font-semibold text-gray-500">No open intraday positions</p>
-        <p className="text-sm text-gray-400">MIS short positions you open today will appear here.</p>
+        <p className="font-semibold text-gray-500">No trades today</p>
+        <p className="text-sm text-gray-400">Stocks you buy or sell today will appear here.</p>
+        {dayDate && <p className="text-[11px] text-gray-400">Date: {dayDate}</p>}
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
+      <div className="flex items-baseline justify-between">
+        <h1 className="text-2xl font-bold">Day Positions</h1>
+        <p className="text-xs text-gray-500">
+          {dayDate ? `Today · ${dayDate}` : 'Today'} · resets daily
+        </p>
+      </div>
+
       {/* Summary strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-white dark:bg-groww-card rounded-xl p-4 border border-gray-100 dark:border-gray-800">
-          <p className="text-xs text-gray-500 mb-1">Open Shorts</p>
-          <p className="text-xl font-bold">{misShorts.length}</p>
-        </div>
-        <div className="bg-white dark:bg-groww-card rounded-xl p-4 border border-gray-100 dark:border-gray-800">
-          <p className="text-xs text-gray-500 mb-1">Margin Blocked</p>
-          <p className="text-xl font-bold">{formatCurrency(totalMargin)}</p>
-        </div>
-        <div className="bg-white dark:bg-groww-card rounded-xl p-4 border border-gray-100 dark:border-gray-800 col-span-2 sm:col-span-1">
-          <p className="text-xs text-gray-500 mb-1">Unrealised P&L</p>
-          <p className={cn('text-xl font-bold', totalPnl >= 0 ? 'text-gain' : 'text-loss')}>
-            {totalPnl >= 0 ? '+' : ''}{formatCurrency(totalPnl)}
+          <p className="text-xs text-gray-500 mb-1">Open Today</p>
+          <p className="text-xl font-bold">{opens.length + misShorts.length}</p>
+          <p className="text-[10px] text-gray-400 mt-0.5">
+            {openLongs.length} long · {openShorts.length + misShorts.length} short
           </p>
         </div>
-      </div>
-
-      {/* Shorts table */}
-      <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-100 dark:border-gray-800">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Stock</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Qty</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Avg Sold</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">LTP</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">P&L</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {misShorts.map((s) => (
-                <tr key={s.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <StockLogo symbol={s.symbol} size={36} />
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <p className="font-medium text-sm">{s.symbol}</p>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 font-bold">SELL</span>
-                        </div>
-                        <p className="text-[10px] text-gray-400">MIS · Auto sq-off 3:20 PM</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right font-medium">{s.quantity}</td>
-                  <td className="px-4 py-3 text-right font-medium tabular-nums">{formatCurrency(s.avg_entry_price)}</td>
-                  <td className="px-4 py-3 text-right font-medium tabular-nums">
-                    {s.current_price != null ? formatCurrency(s.current_price) : '—'}
-                  </td>
-                  <td className={cn('px-4 py-3 text-right font-semibold tabular-nums', (s.unrealized_pnl ?? 0) >= 0 ? 'text-gain' : 'text-loss')}>
-                    {(s.unrealized_pnl ?? 0) >= 0 ? '+' : ''}{formatCurrency(s.unrealized_pnl ?? 0)}
-                    <span className="block text-[10px] font-normal opacity-70">
-                      {(s.unrealized_pnl_pct ?? 0) >= 0 ? '+' : ''}{(s.unrealized_pnl_pct ?? 0).toFixed(2)}%
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Link
-                      to={`/terminal/${s.symbol}?tab=buy&productType=MIS&fullscreen=1`} target="_blank" rel="noopener noreferrer"
-                      className="text-xs font-semibold text-amber-600 dark:text-amber-400 hover:underline"
-                    >
-                      Exit →
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="bg-white dark:bg-groww-card rounded-xl p-4 border border-gray-100 dark:border-gray-800">
+          <p className="text-xs text-gray-500 mb-1">Closed Today</p>
+          <p className="text-xl font-bold">{closed.length}</p>
+          <p className={cn('text-[10px] mt-0.5 font-medium', realised >= 0 ? 'text-gain' : 'text-loss')}>
+            Realised {realised >= 0 ? '+' : ''}{formatCurrency(realised)}
+          </p>
+        </div>
+        <div className="bg-white dark:bg-groww-card rounded-xl p-4 border border-gray-100 dark:border-gray-800">
+          <p className="text-xs text-gray-500 mb-1">MIS Margin Blocked</p>
+          <p className="text-xl font-bold">{formatCurrency(totalMargin)}</p>
+        </div>
+        <div className="bg-white dark:bg-groww-card rounded-xl p-4 border border-gray-100 dark:border-gray-800">
+          <p className="text-xs text-gray-500 mb-1">Day P&L</p>
+          <p className={cn('text-xl font-bold', dayPnl >= 0 ? 'text-gain' : 'text-loss')}>
+            {dayPnl >= 0 ? '+' : ''}{formatCurrency(dayPnl)}
+          </p>
+          <p className="text-[10px] text-gray-400 mt-0.5">Unrealised {unrealised >= 0 ? '+' : ''}{formatCurrency(unrealised)}</p>
         </div>
       </div>
 
-      <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
-        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
-        All MIS positions are auto square-off at 3:20 PM IST. Exit before then to avoid forced closure.
-      </p>
+      {/* Open positions from today's trades */}
+      {opens.length > 0 && (
+        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-800 flex items-center gap-2">
+            <span className="text-sm font-semibold">Open positions opened today</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-bold">
+              {opens.length}
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-100 dark:border-gray-800">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Stock</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Qty</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Avg Entry</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">LTP</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">P&L</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {opens.map((p) => (
+                  <tr key={`${p.symbol}-${p.product_type}-${p.side}`} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <StockLogo symbol={p.symbol} size={36} />
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <p className="font-medium text-sm">{p.symbol}</p>
+                            <span className={cn(
+                              'text-[10px] px-1.5 py-0.5 rounded font-bold',
+                              p.side === 'LONG'
+                                ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400'
+                                : 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400',
+                            )}>
+                              {p.side === 'LONG' ? 'BUY' : 'SELL'}
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-semibold">
+                              {p.product_type}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-gray-400">
+                            {p.product_type === 'MIS' ? 'MIS · Auto sq-off 3:20 PM' : 'CNC delivery'}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right font-medium">{p.quantity}</td>
+                    <td className="px-4 py-3 text-right font-medium tabular-nums">{formatCurrency(p.avg_entry_price)}</td>
+                    <td className="px-4 py-3 text-right font-medium tabular-nums">
+                      {p.current_price != null ? formatCurrency(p.current_price) : '—'}
+                    </td>
+                    <td className={cn('px-4 py-3 text-right font-semibold tabular-nums', (p.unrealized_pnl ?? 0) >= 0 ? 'text-gain' : 'text-loss')}>
+                      {(p.unrealized_pnl ?? 0) >= 0 ? '+' : ''}{formatCurrency(p.unrealized_pnl ?? 0)}
+                      <span className="block text-[10px] font-normal opacity-70">
+                        {(p.unrealized_pnl_pct ?? 0) >= 0 ? '+' : ''}{(p.unrealized_pnl_pct ?? 0).toFixed(2)}%
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Link
+                        to={`/terminal/${p.symbol}?fullscreen=1${p.product_type === 'MIS' ? '&productType=MIS' : ''}`}
+                        target="_blank" rel="noopener noreferrer"
+                        className="text-xs font-semibold text-gold-600 dark:text-gold-400 hover:underline"
+                      >
+                        {p.side === 'LONG' ? 'Exit (Sell)' : 'Exit (Cover)'} →
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Existing MIS short positions */}
+      {misShorts.length > 0 && (
+        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-800 flex items-center gap-2">
+            <span className="text-sm font-semibold">MIS short positions</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 font-bold">
+              {misShorts.length}
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-100 dark:border-gray-800">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Stock</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Qty</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Avg Sold</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">LTP</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">P&L</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {misShorts.map((s) => (
+                  <tr key={s.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <StockLogo symbol={s.symbol} size={36} />
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <p className="font-medium text-sm">{s.symbol}</p>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 font-bold">SHORT</span>
+                          </div>
+                          <p className="text-[10px] text-gray-400">MIS · Auto sq-off 3:20 PM</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right font-medium">{s.quantity}</td>
+                    <td className="px-4 py-3 text-right font-medium tabular-nums">{formatCurrency(s.avg_entry_price)}</td>
+                    <td className="px-4 py-3 text-right font-medium tabular-nums">
+                      {s.current_price != null ? formatCurrency(s.current_price) : '—'}
+                    </td>
+                    <td className={cn('px-4 py-3 text-right font-semibold tabular-nums', (s.unrealized_pnl ?? 0) >= 0 ? 'text-gain' : 'text-loss')}>
+                      {(s.unrealized_pnl ?? 0) >= 0 ? '+' : ''}{formatCurrency(s.unrealized_pnl ?? 0)}
+                      <span className="block text-[10px] font-normal opacity-70">
+                        {(s.unrealized_pnl_pct ?? 0) >= 0 ? '+' : ''}{(s.unrealized_pnl_pct ?? 0).toFixed(2)}%
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Link
+                        to={`/terminal/${s.symbol}?tab=buy&productType=MIS&fullscreen=1`} target="_blank" rel="noopener noreferrer"
+                        className="text-xs font-semibold text-gold-600 dark:text-gold-400 hover:underline"
+                      >
+                        Cover →
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Closed round-trips today */}
+      {closed.length > 0 && (
+        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-800 flex items-center gap-2">
+            <span className="text-sm font-semibold">Closed today (round-trips)</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-bold">
+              {closed.length}
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-100 dark:border-gray-800">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Stock</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Qty</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Avg Buy</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Avg Sell</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Realised P&L</th>
+                </tr>
+              </thead>
+              <tbody>
+                {closed.map((p) => (
+                  <tr key={`closed-${p.symbol}-${p.product_type}`} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <StockLogo symbol={p.symbol} size={36} />
+                        <div>
+                          <p className="font-medium text-sm">{p.symbol}</p>
+                          <p className="text-[10px] text-gray-400">{p.product_type} · closed</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right font-medium">{p.quantity}</td>
+                    <td className="px-4 py-3 text-right font-medium tabular-nums">{formatCurrency(p.avg_entry_price)}</td>
+                    <td className="px-4 py-3 text-right font-medium tabular-nums">{p.avg_exit_price != null ? formatCurrency(p.avg_exit_price) : '—'}</td>
+                    <td className={cn('px-4 py-3 text-right font-semibold tabular-nums', (p.realized_pnl ?? 0) >= 0 ? 'text-gain' : 'text-loss')}>
+                      {(p.realized_pnl ?? 0) >= 0 ? '+' : ''}{formatCurrency(p.realized_pnl ?? 0)}
+                      <span className="block text-[10px] font-normal opacity-70">
+                        {(p.realized_pnl_pct ?? 0) >= 0 ? '+' : ''}{(p.realized_pnl_pct ?? 0).toFixed(2)}%
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {misShorts.length > 0 && (
+        <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
+          MIS positions auto-square-off at 3:20 PM IST. Exit before then to avoid forced closure.
+        </p>
+      )}
     </div>
   );
 }

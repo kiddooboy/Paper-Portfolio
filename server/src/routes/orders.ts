@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
-import { getQuote, isMarketOpen } from '../services/marketData.js';
+import { getQuote, getCachedQuote, isMarketOpen } from '../services/marketData.js';
 import { z } from 'zod';
 import { logActivity, getClientIp } from '../services/activityLogger.js';
 
@@ -28,6 +28,101 @@ const modifySchema = z.object({
   quantity: z.number().int().positive().optional(),
   limitPrice: z.number().optional(),
   triggerPrice: z.number().optional(),
+});
+
+// ── GET /api/orders/day-positions ── ALL of today's trade activity ─────────
+// Aggregates orders filled today (IST) per symbol → net open longs / shorts /
+// closed round-trips. Resets automatically each day. Independent of holdings
+// (so a CNC buy made today shows here even though it lives in holdings).
+router.get('/day-positions', authMiddleware, (req: AuthRequest, res) => {
+  const userId = req.user!.id;
+
+  // Use IST date for the "today" cutoff. filled_at is stored as UTC
+  // CURRENT_TIMESTAMP — shift to IST (+05:30) before extracting date.
+  const todayIst = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
+
+  const rows = db.prepare(`
+    SELECT id, symbol, transaction_type, quantity, price, product_type, filled_at
+    FROM orders
+    WHERE user_id = ?
+      AND status = 'FILLED'
+      AND date(datetime(filled_at, '+5 hours', '+30 minutes')) = ?
+    ORDER BY filled_at ASC
+  `).all(userId, todayIst) as any[];
+
+  // Aggregate buy/sell per symbol+product
+  const map = new Map<string, any>();
+  for (const o of rows) {
+    const key = `${o.symbol}:${o.product_type || 'CNC'}`;
+    if (!map.has(key)) {
+      map.set(key, {
+        symbol: o.symbol, product_type: o.product_type || 'CNC',
+        buyQty: 0, buyValue: 0, sellQty: 0, sellValue: 0,
+        first_at: o.filled_at, last_at: o.filled_at,
+      });
+    }
+    const e = map.get(key);
+    if (o.transaction_type === 'BUY') { e.buyQty += o.quantity;  e.buyValue  += o.quantity * o.price; }
+    else                              { e.sellQty += o.quantity; e.sellValue += o.quantity * o.price; }
+    e.last_at = o.filled_at;
+  }
+
+  const positions: any[] = [];
+  for (const e of map.values()) {
+    const netQty = e.buyQty - e.sellQty;
+    const avgBuy  = e.buyQty  > 0 ? e.buyValue  / e.buyQty  : 0;
+    const avgSell = e.sellQty > 0 ? e.sellValue / e.sellQty : 0;
+    const q = getCachedQuote(e.symbol, 'NSE');
+    const ltp = q && q.price > 0 ? q.price : (avgBuy || avgSell);
+
+    if (netQty > 0) {
+      // Open long opened today
+      const pnl = (ltp - avgBuy) * netQty;
+      const pct = avgBuy > 0 ? ((ltp - avgBuy) / avgBuy) * 100 : 0;
+      positions.push({
+        symbol: e.symbol, side: 'LONG', status: 'OPEN',
+        quantity: netQty, avg_entry_price: +avgBuy.toFixed(2),
+        current_price: +ltp.toFixed(2),
+        unrealized_pnl: +pnl.toFixed(2),
+        unrealized_pnl_pct: +pct.toFixed(2),
+        product_type: e.product_type, opened_at: e.first_at,
+      });
+    } else if (netQty < 0) {
+      // Net short (sold from existing holdings more than bought back today)
+      const qty = Math.abs(netQty);
+      const pnl = (avgSell - ltp) * qty;
+      const pct = avgSell > 0 ? ((avgSell - ltp) / avgSell) * 100 : 0;
+      positions.push({
+        symbol: e.symbol, side: 'SHORT', status: 'OPEN',
+        quantity: qty, avg_entry_price: +avgSell.toFixed(2),
+        current_price: +ltp.toFixed(2),
+        unrealized_pnl: +pnl.toFixed(2),
+        unrealized_pnl_pct: +pct.toFixed(2),
+        product_type: e.product_type, opened_at: e.first_at,
+      });
+    } else {
+      // Closed intraday round-trip
+      const realized = (avgSell - avgBuy) * e.buyQty;
+      const pct = avgBuy > 0 ? ((avgSell - avgBuy) / avgBuy) * 100 : 0;
+      positions.push({
+        symbol: e.symbol, side: 'CLOSED', status: 'CLOSED',
+        quantity: e.buyQty, avg_entry_price: +avgBuy.toFixed(2),
+        avg_exit_price: +avgSell.toFixed(2),
+        realized_pnl: +realized.toFixed(2),
+        realized_pnl_pct: +pct.toFixed(2),
+        product_type: e.product_type, opened_at: e.first_at, closed_at: e.last_at,
+      });
+    }
+  }
+
+  // Sort: open first (longs then shorts), then closed, newest first within each
+  positions.sort((a, b) => {
+    const rank = (p: any) => p.status === 'OPEN' ? (p.side === 'LONG' ? 0 : 1) : 2;
+    if (rank(a) !== rank(b)) return rank(a) - rank(b);
+    return String(b.opened_at).localeCompare(String(a.opened_at));
+  });
+
+  res.json({ date: todayIst, positions });
 });
 
 // ── GET /api/orders/mis-shorts ── open MIS short positions with live P&L ──
