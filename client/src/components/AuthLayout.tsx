@@ -99,21 +99,21 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
             <svg viewBox="0 0 200 60" className="w-full h-14">
               <defs>
                 <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={nifty && nifty.change < 0 ? '#ef4444' : '#00b386'} stopOpacity="0.4" />
-                  <stop offset="100%" stopColor={nifty && nifty.change < 0 ? '#ef4444' : '#00b386'} stopOpacity="0" />
+                  <stop offset="0%" stopColor={nifty && nifty.change < 0 ? 'Def4444' : 'DD4AF37'} stopOpacity="0.4" />
+                  <stop offset="100%" stopColor={nifty && nifty.change < 0 ? 'Def4444' : 'DD4AF37'} stopOpacity="0" />
                 </linearGradient>
               </defs>
               <path
                 d="M0,40 L20,35 L40,38 L60,28 L80,32 L100,22 L120,25 L140,18 L160,20 L180,12 L200,15"
                 fill="none"
-                stroke={nifty && nifty.change < 0 ? '#ef4444' : '#00b386'}
+                stroke={nifty && nifty.change < 0 ? 'Def4444' : 'DD4AF37'}
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
               <path
                 d="M0,40 L20,35 L40,38 L60,28 L80,32 L100,22 L120,25 L140,18 L160,20 L180,12 L200,15 L200,60 L0,60 Z"
-                fill="url(#lineGrad)"
+                fill="url(DlineGrad)"
               />
             </svg>
           </div>

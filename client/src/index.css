@@ -10,7 +10,7 @@
 }
 
 @layer utilities {
-  .text-gain { @apply text-groww-primary; }
+  .text-gain { @apply text-groww-gain; }
   .text-loss { @apply text-groww-loss; }
   .bg-gain { @apply bg-green-600 dark:bg-green-700; }
   .bg-loss { @apply bg-red-600 dark:bg-red-700; }

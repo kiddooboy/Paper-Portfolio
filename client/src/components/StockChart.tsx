@@ -106,15 +106,15 @@ function calcVWAP(bars: Bar[]): (number | null)[] {
 
 // ── Indicator definitions ─────────────────────────────────────────────────────
 const IND_DEFS = [
-  { key: 'ma20',  label: 'MA 20',           color: '#f59e0b', sub: false },
-  { key: 'ma50',  label: 'MA 50',           color: '#3b82f6', sub: false },
-  { key: 'ma200', label: 'MA 200',          color: '#ec4899', sub: false },
-  { key: 'ema9',  label: 'EMA 9',           color: '#8b5cf6', sub: false },
-  { key: 'ema21', label: 'EMA 21',          color: '#06b6d4', sub: false },
-  { key: 'bb',    label: 'Bollinger Bands', color: '#94a3b8', sub: false },
-  { key: 'vwap',  label: 'VWAP',            color: '#10b981', sub: false },
-  { key: 'rsi',   label: 'RSI 14',          color: '#a855f7', sub: true  },
-  { key: 'macd',  label: 'MACD',            color: '#f97316', sub: true  },
+  { key: 'ma20',  label: 'MA 20',           color: 'Df59e0b', sub: false },
+  { key: 'ma50',  label: 'MA 50',           color: 'D3b82f6', sub: false },
+  { key: 'ma200', label: 'MA 200',          color: 'Dec4899', sub: false },
+  { key: 'ema9',  label: 'EMA 9',           color: 'D8b5cf6', sub: false },
+  { key: 'ema21', label: 'EMA 21',          color: 'D06b6d4', sub: false },
+  { key: 'bb',    label: 'Bollinger Bands', color: 'D94a3b8', sub: false },
+  { key: 'vwap',  label: 'VWAP',            color: 'DD4AF37', sub: false },
+  { key: 'rsi',   label: 'RSI 14',          color: 'Da855f7', sub: true  },
+  { key: 'macd',  label: 'MACD',            color: 'Df97316', sub: true  },
 ] as const;
 type IndKey = typeof IND_DEFS[number]['key'];
 type Indicators = Record<IndKey, boolean>;
@@ -233,8 +233,8 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
     if (!containerRef.current || bars.length === 0) return;
 
     const isDark      = document.documentElement.classList.contains('dark');
-    const bgColor     = isDark ? '#1a1f2e' : '#ffffff';
-    const textColor   = isDark ? '#9ca3af' : '#6b7280';
+    const bgColor     = isDark ? 'D1a1f2e' : 'Dffffff';
+    const textColor   = isDark ? 'D9ca3af' : 'D6b7280';
     const gridColor   = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.05)';
     const borderColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.1)';
 
@@ -264,9 +264,9 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
     let mainSeries: any;
     if (chartType === 'candle') {
       mainSeries = chart.addSeries(CandlestickSeries, {
-        upColor: '#00c087', downColor: '#ef4444',
-        borderUpColor: '#00c087', borderDownColor: '#ef4444',
-        wickUpColor: '#00c087', wickDownColor: '#ef4444',
+        upColor: 'DD4AF37', downColor: 'Def4444',
+        borderUpColor: 'DD4AF37', borderDownColor: 'Def4444',
+        wickUpColor: 'DD4AF37', wickDownColor: 'Def4444',
       });
       mainSeries.setData(sorted.map(b => ({
         time: toTimestamp(b.date) as any,
@@ -280,7 +280,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
       });
     } else {
       mainSeries = chart.addSeries(LineSeries, {
-        color: '#00c087', lineWidth: 2,
+        color: 'DD4AF37', lineWidth: 2,
         crosshairMarkerVisible: true, crosshairMarkerRadius: 4,
         lastValueVisible: true, priceLineVisible: true,
       });
@@ -289,12 +289,12 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
     mainSerRef.current = mainSeries;
 
     const volSeries = chart.addSeries(HistogramSeries, {
-      color: '#00c08740', priceFormat: { type: 'volume' }, priceScaleId: 'volume',
+      color: 'DD4AF3740', priceFormat: { type: 'volume' }, priceScaleId: 'volume',
     });
     chart.priceScale('volume').applyOptions({ scaleMargins: margins.volume });
     volSeries.setData(sorted.map(b => ({
       time: toTimestamp(b.date) as any, value: b.volume,
-      color: b.close >= b.open ? '#00c08740' : '#ef444440',
+      color: b.close >= b.open ? 'DD4AF3740' : 'Def444440',
     })));
 
     chart.timeScale().fitContent();
@@ -337,46 +337,46 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
       indSerRef.current.set(key, [s]);
     };
 
-    if (indicators.ma20)  addLine('ma20',  toSer(calcSMA(closes, 20)),  '#f59e0b');
-    if (indicators.ma50)  addLine('ma50',  toSer(calcSMA(closes, 50)),  '#3b82f6');
-    if (indicators.ma200) addLine('ma200', toSer(calcSMA(closes, 200)), '#ec4899');
-    if (indicators.ema9)  addLine('ema9',  toSer(calcEMA(closes, 9)),   '#8b5cf6');
-    if (indicators.ema21) addLine('ema21', toSer(calcEMA(closes, 21)),  '#06b6d4');
+    if (indicators.ma20)  addLine('ma20',  toSer(calcSMA(closes, 20)),  'Df59e0b');
+    if (indicators.ma50)  addLine('ma50',  toSer(calcSMA(closes, 50)),  'D3b82f6');
+    if (indicators.ma200) addLine('ma200', toSer(calcSMA(closes, 200)), 'Dec4899');
+    if (indicators.ema9)  addLine('ema9',  toSer(calcEMA(closes, 9)),   'D8b5cf6');
+    if (indicators.ema21) addLine('ema21', toSer(calcEMA(closes, 21)),  'D06b6d4');
 
     if (indicators.bb) {
       const bb = calcBB(closes);
       const upper = bb.map((v, i) => v.upper !== null ? { time: times[i], value: v.upper } : null).filter(Boolean) as any[];
       const mid   = bb.map((v, i) => v.mid   !== null ? { time: times[i], value: v.mid   } : null).filter(Boolean) as any[];
       const lower = bb.map((v, i) => v.lower !== null ? { time: times[i], value: v.lower } : null).filter(Boolean) as any[];
-      const su = chart.addSeries(LineSeries, { color: '#94a3b880', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-      const sm = chart.addSeries(LineSeries, { color: '#94a3b8',   lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, lineStyle: LineStyle.Dashed });
-      const sl = chart.addSeries(LineSeries, { color: '#94a3b880', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+      const su = chart.addSeries(LineSeries, { color: 'D94a3b880', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+      const sm = chart.addSeries(LineSeries, { color: 'D94a3b8',   lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, lineStyle: LineStyle.Dashed });
+      const sl = chart.addSeries(LineSeries, { color: 'D94a3b880', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
       su.setData(upper); sm.setData(mid); sl.setData(lower);
       indSerRef.current.set('bb', [su, sm, sl]);
     }
 
-    if (indicators.vwap) addLine('vwap', toSer(calcVWAP(sorted)), '#10b981', { lineStyle: LineStyle.Dashed });
+    if (indicators.vwap) addLine('vwap', toSer(calcVWAP(sorted)), 'DD4AF37', { lineStyle: LineStyle.Dashed });
 
     if (indicators.rsi && margins.rsi) {
       const s = chart.addSeries(LineSeries, {
-        color: '#a855f7', lineWidth: 1, priceScaleId: 'rsi',
+        color: 'Da855f7', lineWidth: 1, priceScaleId: 'rsi',
         priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: false,
       });
       s.setData(toSer(calcRSI(closes)));
       chart.priceScale('rsi').applyOptions({ scaleMargins: margins.rsi, borderVisible: true, alignLabels: true });
-      s.createPriceLine({ price: 70, color: '#ef444460', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: '70' });
-      s.createPriceLine({ price: 30, color: '#22c55e60', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: '30' });
+      s.createPriceLine({ price: 70, color: 'Def444460', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: '70' });
+      s.createPriceLine({ price: 30, color: 'D22c55e60', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: '30' });
       indSerRef.current.set('rsi', [s]);
     }
 
     if (indicators.macd && margins.macd) {
       const md = calcMACD(closes);
-      const sm2 = chart.addSeries(LineSeries,      { color: '#f97316', lineWidth: 1, priceScaleId: 'macd', priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-      const ss  = chart.addSeries(LineSeries,      { color: '#06b6d4', lineWidth: 1, priceScaleId: 'macd', priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+      const sm2 = chart.addSeries(LineSeries,      { color: 'Df97316', lineWidth: 1, priceScaleId: 'macd', priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+      const ss  = chart.addSeries(LineSeries,      { color: 'D06b6d4', lineWidth: 1, priceScaleId: 'macd', priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
       const sh  = chart.addSeries(HistogramSeries, { priceScaleId: 'macd', priceLineVisible: false, lastValueVisible: false });
       sm2.setData(md.map((v, i) => v.macd      !== null ? { time: times[i], value: v.macd      } : null).filter(Boolean) as any[]);
       ss.setData (md.map((v, i) => v.signal    !== null ? { time: times[i], value: v.signal    } : null).filter(Boolean) as any[]);
-      sh.setData (md.map((v, i) => v.histogram !== null ? { time: times[i], value: v.histogram, color: v.histogram! >= 0 ? '#00c08760' : '#ef444460' } : null).filter(Boolean) as any[]);
+      sh.setData (md.map((v, i) => v.histogram !== null ? { time: times[i], value: v.histogram, color: v.histogram! >= 0 ? 'DD4AF3760' : 'Def444460' } : null).filter(Boolean) as any[]);
       chart.priceScale('macd').applyOptions({ scaleMargins: margins.macd, borderVisible: true, alignLabels: true });
       indSerRef.current.set('macd', [sm2, ss, sh]);
     }
@@ -415,7 +415,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
       // ── Horizontal line ──────────────────────────────────────────────────
       if (activeTool === 'hline') {
         const pl = main.createPriceLine({
-          price, color: '#64748b', lineWidth: 1,
+          price, color: 'D64748b', lineWidth: 1,
           lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '',
         });
         plinesRef.current.push({ series: main, line: pl });
@@ -424,7 +424,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
       // ── Magnet snap line ────────────────────────────────────────────────
       if (activeTool === 'magnet') {
         const pl = main.createPriceLine({
-          price, color: '#00B386', lineWidth: 1,
+          price, color: 'DD4AF37', lineWidth: 1,
           lineStyle: LineStyle.Solid, axisLabelVisible: true, title: '⊕',
         });
         plinesRef.current.push({ series: main, line: pl });
@@ -437,7 +437,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
         } else {
           const t1 = trendRef.current;
           const ts = chart.addSeries(LineSeries, {
-            color: '#ef4444', lineWidth: 1,
+            color: 'Def4444', lineWidth: 1,
             priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
           });
           ts.setData([{ time: t1.time, value: t1.price }, { time: param.time, value: price }]);
@@ -455,8 +455,8 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
           const p1 = channelRef.current.price;
           const upper = Math.max(p1, price);
           const lower = Math.min(p1, price);
-          const upperLine = main.createPriceLine({ price: upper, color: '#8b5cf6', lineWidth: 1, lineStyle: LineStyle.Solid, axisLabelVisible: true, title: 'R' });
-          const lowerLine = main.createPriceLine({ price: lower, color: '#8b5cf6', lineWidth: 1, lineStyle: LineStyle.Solid, axisLabelVisible: true, title: 'S' });
+          const upperLine = main.createPriceLine({ price: upper, color: 'D8b5cf6', lineWidth: 1, lineStyle: LineStyle.Solid, axisLabelVisible: true, title: 'R' });
+          const lowerLine = main.createPriceLine({ price: lower, color: 'D8b5cf6', lineWidth: 1, lineStyle: LineStyle.Solid, axisLabelVisible: true, title: 'S' });
           plinesRef.current.push({ series: main, line: upperLine });
           plinesRef.current.push({ series: main, line: lowerLine });
           channelRef.current = null;
@@ -468,7 +468,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
         const text = window.prompt('Enter label text:', '');
         if (text?.trim()) {
           const pl = main.createPriceLine({
-            price, color: '#f59e0b', lineWidth: 1,
+            price, color: 'Df59e0b', lineWidth: 1,
             lineStyle: LineStyle.Dotted, axisLabelVisible: true, title: text.trim(),
           });
           plinesRef.current.push({ series: main, line: pl });
@@ -492,7 +492,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
           const pct   = (diff / fromP) * 100;
           // Draw measurement line
           const ts = chart.addSeries(LineSeries, {
-            color: '#f97316', lineWidth: 2, lineStyle: LineStyle.Dashed,
+            color: 'Df97316', lineWidth: 2, lineStyle: LineStyle.Dashed,
             priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
           });
           ts.setData([
@@ -734,7 +734,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
                   <button key={e} onClick={() => {
                     if (mainSerRef.current && emojiPos) {
                       const pl = mainSerRef.current.createPriceLine({
-                        price: emojiPos.price, color: '#f59e0b', lineWidth: 1,
+                        price: emojiPos.price, color: 'Df59e0b', lineWidth: 1,
                         lineStyle: LineStyle.Dotted, axisLabelVisible: true, title: e,
                       });
                       plinesRef.current.push({ series: mainSerRef.current, line: pl });

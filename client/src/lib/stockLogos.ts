@@ -153,8 +153,8 @@ export const STOCK_DOMAINS: Record<string, string> = {
 
 // Consistent fallback background colors (by first letter).
 const PALETTE = [
-  '#6366F1', '#EC4899', '#F59E0B', '#10B981', '#0EA5E9',
-  '#8B5CF6', '#F43F5E', '#14B8A6', '#F97316', '#3B82F6',
+  'D6366F1', 'DEC4899', 'DF59E0B', 'DD4AF37', 'D0EA5E9',
+  'D8B5CF6', 'DF43F5E', 'D14B8A6', 'DF97316', 'D3B82F6',
 ];
 
 export function getLogoUrl(symbol: string): string | null {
