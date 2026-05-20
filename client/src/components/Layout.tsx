@@ -77,7 +77,7 @@ export default function Layout() {
           <div className="flex items-center gap-3 shrink-0">
             {/* Greeqs Options Terminal — external link */}
             <a
-              href="https://greeqs.com"
+              href="https://greeqs.in"
               target="_blank"
               rel="noopener noreferrer"
               title="Open Greeqs Options Terminal"
