@@ -33,7 +33,17 @@ export default function GlobalSearch({ onStockSelect }: GlobalSearchProps = {}) 
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const inField = !!target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName);
+      // Ctrl/Cmd+K from anywhere
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        inputRef.current?.focus();
+        setOpen(true);
+        return;
+      }
+      // Plain `/` shortcut — only when not already typing in a field
+      if (!inField && e.key === '/') {
         e.preventDefault();
         inputRef.current?.focus();
         setOpen(true);

@@ -23,7 +23,8 @@ const PositionsPage      = lazy(() => import('./pages/PositionsPage'));
 const OrdersPage         = lazy(() => import('./pages/OrdersPage'));
 const WatchlistPage      = lazy(() => import('./pages/WatchlistPage'));
 const LeaderboardPage    = lazy(() => import('./pages/LeaderboardPage'));
-const NotificationsPage  = lazy(() => import('./pages/NotificationsPage'));
+const NotificationsPage         = lazy(() => import('./pages/NotificationsPage'));
+const NotificationSettingsPage  = lazy(() => import('./pages/NotificationSettingsPage'));
 const AdminPage          = lazy(() => import('./pages/AdminPage'));
 const AdminAnalyticsPage = lazy(() => import('./pages/AdminAnalyticsPage'));
 const AIChatPage         = lazy(() => import('./pages/AIChatPage'));
@@ -80,7 +81,8 @@ function App() {
           <Route path="/orders"          element={<OrdersPage />} />
           <Route path="/watchlist"       element={<WatchlistPage />} />
           <Route path="/leaderboard"     element={<LeaderboardPage />} />
-          <Route path="/notifications"   element={<NotificationsPage />} />
+          <Route path="/notifications"            element={<NotificationsPage />} />
+          <Route path="/notifications/settings"   element={<NotificationSettingsPage />} />
           <Route path="/admin"           element={<AdminPage />} />
           <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
           <Route path="/ai-chat"         element={<AIChatPage />} />

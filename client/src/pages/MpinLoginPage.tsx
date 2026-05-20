@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -16,12 +16,16 @@ export default function MpinLoginPage() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const login = useAuthStore((s) => s.login);
+  const mpinInputRef = useRef<HTMLInputElement>(null);
 
+  // Desktop fallback: capture digits via global keydown when no input is focused.
+  // Mobile users rely on the hidden numeric input below, which raises the keypad.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
-      if (e.key >= '0' && e.key <= '9') setMpin(prev => prev.length < 4 ? prev + e.key : prev);
-      else if (e.key === 'Backspace') setMpin(prev => prev.slice(0, -1));
+      const t = e.target as HTMLElement | null;
+      if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+      if (e.key >= '0' && e.key <= '9') setMpin((prev) => (prev.length < 4 ? prev + e.key : prev));
+      else if (e.key === 'Backspace') setMpin((prev) => prev.slice(0, -1));
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -33,7 +37,14 @@ export default function MpinLoginPage() {
     };
     window.addEventListener('keydown', onEnter);
     return () => window.removeEventListener('keydown', onEnter);
-  }, [mpin, email]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mpin, email]);
+
+  // Auto-focus the hidden input so mobile keyboards open on page entry.
+  useEffect(() => {
+    const t = setTimeout(() => mpinInputRef.current?.focus(), 250);
+    return () => clearTimeout(t);
+  }, []);
 
   const handleSubmit = async () => {
     if (!email || mpin.length !== 4) {
@@ -91,19 +102,52 @@ export default function MpinLoginPage() {
             </button>
           </div>
 
-          {/* Dot indicators */}
-          <div className="flex justify-center gap-3">
+          {/* Hidden numeric input — raises the mobile keypad and captures
+              typed digits. Tapping the dot row focuses it. */}
+          <input
+            ref={mpinInputRef}
+            type="tel"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            autoComplete="one-time-code"
+            maxLength={4}
+            value={mpin}
+            onChange={(e) => {
+              const digits = e.target.value.replace(/\D/g, '').slice(0, 4);
+              setMpin(digits);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && mpin.length === 4 && email) handleSubmit();
+            }}
+            aria-label="Enter 4-digit MPIN"
+            style={{ position: 'absolute', left: '-9999px', opacity: 0, pointerEvents: 'none' }}
+          />
+
+          {/* Dot indicators — tapping focuses the hidden input so the mobile keypad pops up */}
+          <div
+            className="flex justify-center gap-3 cursor-pointer"
+            onClick={() => mpinInputRef.current?.focus()}
+            role="button"
+            tabIndex={0}
+          >
             {[0, 1, 2, 3].map((i) => (
-              <div key={i} className={cn(
-                'w-11 h-11 sm:w-14 sm:h-14 rounded-xl border-2 flex items-center justify-center text-lg sm:text-xl font-bold transition-all duration-150',
-                mpin[i] ? 'border-groww-primary bg-groww-primary/10 text-groww-primary scale-105' : 'border-gray-300 dark:border-gray-700'
-              )}>
-                {mpin[i] ? (showMpin ? mpin[i] : 'â—') : ''}
+              <div
+                key={i}
+                className={cn(
+                  'w-11 h-11 sm:w-14 sm:h-14 rounded-xl border-2 flex items-center justify-center text-lg sm:text-xl font-bold transition-all duration-150 select-none',
+                  mpin[i]
+                    ? 'border-groww-primary bg-groww-primary/10 text-groww-primary scale-105'
+                    : 'border-gray-300 dark:border-gray-700'
+                )}
+              >
+                {mpin[i] ? (showMpin ? mpin[i] : '•') : ''}
               </div>
             ))}
           </div>
 
-          <p className="text-xs text-center text-gray-400">Use number keys Â· Backspace to delete Â· Enter to sign in</p>
+          <p className="text-xs text-center text-gray-400">
+            Tap the dots and type your 4-digit MPIN · Enter to sign in
+          </p>
         </div>
 
         <button

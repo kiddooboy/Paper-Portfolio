@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Lock } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -19,6 +19,7 @@ export default function IdleLock() {
   const [locked, setLocked] = useState(false);
   const [mpin, setMpin] = useState('');
   const [verifying, setVerifying] = useState(false);
+  const mpinInputRef = useRef<HTMLInputElement>(null);
 
   // Activity tracking — only when authenticated user has an MPIN.
   useEffect(() => {
@@ -53,11 +54,12 @@ export default function IdleLock() {
     };
   }, [isAuthenticated, user?.has_mpin]);
 
-  // Number-pad entry while locked.
+  // Desktop fallback — capture digits via global keydown when no input is focused.
   useEffect(() => {
     if (!locked) return;
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
+      const t = e.target as HTMLElement | null;
+      if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
       if (e.key >= '0' && e.key <= '9') setMpin((prev) => (prev.length < 4 ? prev + e.key : prev));
       else if (e.key === 'Backspace') setMpin((prev) => prev.slice(0, -1));
       else if (e.key === 'Enter' && mpin.length === 4) verify();
@@ -66,6 +68,14 @@ export default function IdleLock() {
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locked, mpin]);
+
+  // Auto-focus the hidden numeric input when the lock appears, so mobile
+  // keyboards open immediately and users can type their MPIN.
+  useEffect(() => {
+    if (!locked) return;
+    const t = setTimeout(() => mpinInputRef.current?.focus(), 100);
+    return () => clearTimeout(t);
+  }, [locked]);
 
   async function verify() {
     if (!user?.email || mpin.length !== 4) return;
@@ -99,12 +109,33 @@ export default function IdleLock() {
           </p>
         </div>
 
-        <div className="flex justify-center gap-3">
+        {/* Hidden numeric input — raises the mobile keypad and captures
+            typed digits. Tapping the dot row focuses it. */}
+        <input
+          ref={mpinInputRef}
+          type="tel"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          autoComplete="one-time-code"
+          maxLength={4}
+          value={mpin}
+          onChange={(e) => setMpin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+          onKeyDown={(e) => { if (e.key === 'Enter' && mpin.length === 4) verify(); }}
+          aria-label="Enter 4-digit MPIN"
+          style={{ position: 'absolute', left: '-9999px', opacity: 0, pointerEvents: 'none' }}
+        />
+
+        <div
+          className="flex justify-center gap-3 cursor-pointer"
+          onClick={() => mpinInputRef.current?.focus()}
+          role="button"
+          tabIndex={0}
+        >
           {[0, 1, 2, 3].map((i) => (
             <div
               key={i}
               className={cn(
-                'w-12 h-12 rounded-xl border-2 flex items-center justify-center text-xl font-bold transition',
+                'w-12 h-12 rounded-xl border-2 flex items-center justify-center text-xl font-bold transition select-none',
                 mpin[i]
                   ? 'border-groww-primary bg-groww-primary/10 text-groww-primary scale-105'
                   : 'border-gray-300 dark:border-gray-700'
@@ -116,7 +147,7 @@ export default function IdleLock() {
         </div>
 
         <p className="text-[11px] text-gray-400 text-center">
-          Use number keys · Backspace · Enter
+          Tap the dots and type your 4-digit MPIN
         </p>
 
         <button
