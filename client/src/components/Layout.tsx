@@ -81,15 +81,15 @@ export default function Layout() {
               target="_blank"
               rel="noopener noreferrer"
               title="Open Greeqs Options Terminal"
-              className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-tv bg-gray-900 hover:bg-black dark:bg-black/60 dark:hover:bg-black border border-gray-800 dark:border-gray-700 transition group"
+              className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 transition group"
             >
               <Triangle
-                className="w-4 h-4 text-amber-400 group-hover:text-amber-300 transition"
+                className="w-4 h-4 text-amber-500 dark:text-amber-400 group-hover:text-amber-600 dark:group-hover:text-amber-300 transition"
                 strokeWidth={2}
               />
               <div className="flex flex-col leading-none">
-                <span className="text-[13px] font-bold text-white tracking-tight">Greeqs</span>
-                <span className="text-[8.5px] font-semibold uppercase tracking-[0.12em] text-gray-400 group-hover:text-gray-300 mt-0.5">
+                <span className="text-[13px] font-bold tracking-tight text-gray-900 dark:text-white">Greeqs</span>
+                <span className="text-[8.5px] font-semibold uppercase tracking-[0.12em] mt-0.5 text-gray-500 dark:text-gray-400">
                   Options Terminal
                 </span>
               </div>
