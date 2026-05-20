@@ -7,81 +7,111 @@ export default {
   ],
   theme: {
     extend: {
-      // TradingView's UI is set in Trebuchet MS (their signature look) with
-      // Inter / Roboto as graceful fallbacks across platforms.
+      // Greeqs typography — Inter UI, JetBrains Mono for numerics
       fontFamily: {
-        sans: ['"Trebuchet MS"', 'Inter', 'Roboto', 'system-ui', 'sans-serif'],
+        sans:  ['Inter', 'system-ui', 'sans-serif'],
         inter: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['"JetBrains Mono"', '"Roboto Mono"', 'ui-monospace', 'monospace'],
+        mono:  ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
       colors: {
-        // ── TradingView palette ─────────────────────────────────────────
-        // Brand:  #2962FF (signature TradingView blue)
-        // Dark:   #131722 background · #1E222D card · #2A2E39 border
-        // Light:  #FFFFFF background · #F8F9FD card · #E0E3EB border
-        // Direction: #26A69A green · #EF5350 red
-        tv: {
-          // Brand blue scale
-          blue: {
-            50:  '#E8F0FE',
-            100: '#C7D9FC',
-            200: '#9DBAFA',
-            300: '#6E96F6',
-            400: '#4576F0',
-            500: '#2962FF',   // primary TradingView blue
-            600: '#1E53E5',
-            700: '#1543BF',
-            800: '#0E3399',
-            900: '#082673',
-          },
-          // Dark theme
-          bg:           '#131722',
-          bgAlt:        '#0D1015',
-          card:         '#1E222D',
-          cardAlt:      '#262B38',
-          border:       '#2A2E39',
-          borderStrong: '#363A45',
-          text:         '#D1D4DC',
-          textStrong:   '#F0F3FA',
-          muted:        '#787B86',
-          // Light theme
-          lightBg:      '#FFFFFF',
-          lightBgAlt:   '#F8F9FD',
-          lightCard:    '#F8F9FD',
-          lightBorder:  '#E0E3EB',
-          lightText:    '#131722',
-          lightMuted:   '#787B86',
-          // Direction
-          green:     '#26A69A',
-          greenDark: '#00897B',
-          red:       '#EF5350',
-          redDark:   '#E53935',
-        },
-        // Legacy `groww-*` aliases — repointed to TradingView tokens so
-        // every existing class in the codebase (text-groww-primary, etc.)
-        // automatically renders in the TradingView palette.
+        // ── Greeqs semantic tokens ──────────────────────────────────
+        // All point at CSS variables defined in index.css, so they
+        // automatically switch between the light and dark palette
+        // when `.dark` is toggled. Every existing class in the codebase
+        // (text-groww-primary, bg-groww-card, text-gain, etc.) is now
+        // expressed in OKLCH Greeqs colours via this mapping.
+
+        canvas:    'var(--canvas)',
+        surface0:  'var(--surface-0)',
+        surface1:  'var(--surface-1)',
+        surface2:  'var(--surface-2)',
+        surface3:  'var(--surface-3)',
+
+        line:       'var(--line)',
+        lineStrong: 'var(--line-strong)',
+
+        fg:   'var(--fg)',
+        fg2:  'var(--fg-2)',
+        fg3:  'var(--fg-3)',
+        fg4:  'var(--fg-4)',
+
+        accent:     'var(--accent)',
+        accentSoft: 'var(--accent-soft)',
+        accentLine: 'var(--accent-line)',
+        up:         'var(--up)',
+        upSoft:     'var(--up-soft)',
+        upLine:     'var(--up-line)',
+        down:       'var(--down)',
+        downSoft:   'var(--down-soft)',
+        downLine:   'var(--down-line)',
+        info:       'var(--info)',
+        infoSoft:   'var(--info-soft)',
+        infoLine:   'var(--info-line)',
+
+        // Legacy `groww-*` aliases — repointed at Greeqs tokens so
+        // every existing class re-skins without per-file edits.
         groww: {
-          primary:   '#2962FF',  // TradingView blue
-          dark:      '#131722',
-          card:      '#1E222D',
-          cardLight: '#F8F9FD',
-          text:      '#D1D4DC',
-          textLight: '#131722',
-          muted:     '#787B86',
-          gain:      '#26A69A',  // TV teal-green
-          loss:      '#EF5350',  // TV red
+          primary:   'var(--accent)',
+          dark:      'var(--canvas)',
+          card:      'var(--surface-1)',
+          cardLight: 'var(--surface-1)',
+          text:      'var(--fg)',
+          textLight: 'var(--fg)',
+          muted:     'var(--fg-3)',
+          gain:      'var(--up)',
+          loss:      'var(--down)',
         },
-        // Keep the `gold` tokens defined so any direct references still
-        // resolve (re-pointed to a muted accent — not used as the brand).
+
+        // Legacy `tv-*` aliases — repointed at Greeqs tokens.
+        tv: {
+          bg:           'var(--canvas)',
+          bgAlt:        'var(--surface-0)',
+          card:         'var(--surface-1)',
+          cardAlt:      'var(--surface-2)',
+          border:       'var(--line)',
+          borderStrong: 'var(--line-strong)',
+          text:         'var(--fg)',
+          textStrong:   'var(--fg)',
+          muted:        'var(--fg-3)',
+          lightBg:      'var(--canvas)',
+          lightBgAlt:   'var(--surface-0)',
+          lightCard:    'var(--surface-1)',
+          lightBorder:  'var(--line)',
+          lightText:    'var(--fg)',
+          lightMuted:   'var(--fg-3)',
+          green:        'var(--up)',
+          greenDark:    'var(--up)',
+          red:          'var(--down)',
+          redDark:      'var(--down)',
+          // Brand blue scale → repointed at info (still distinct from amber accent)
+          blue: {
+            50:  'var(--info-soft)',
+            100: 'var(--info-soft)',
+            200: 'var(--info-soft)',
+            300: 'var(--info)',
+            400: 'var(--info)',
+            500: 'var(--info)',
+            600: 'var(--info)',
+            700: 'var(--info)',
+            800: 'var(--info)',
+            900: 'var(--info)',
+          },
+        },
+
+        // Keep the gold palette around (now an alias of accent) so any
+        // existing reference still resolves.
         gold: {
-          50:  '#fdf8e6', 100: '#fbedb8', 200: '#f6df85', 300: '#efce53',
-          400: '#e4b933', 500: '#D4AF37', 600: '#b08d27', 700: '#8a6e1e',
-          800: '#634f16', 900: '#3f320d',
+          50:  'var(--accent-soft)',  100: 'var(--accent-soft)',
+          200: 'var(--accent-soft)',  300: 'var(--accent)',
+          400: 'var(--accent)',       500: 'var(--accent)',
+          600: 'var(--accent-2, var(--accent))',
+          700: 'var(--accent-2, var(--accent))',
+          800: 'var(--accent-2, var(--accent))',
+          900: 'var(--accent-2, var(--accent))',
         },
       },
-      // Tighter radii — TradingView UI uses 2-6px corners
       borderRadius: {
-        tv: '4px',
+        tv: '6px',
       },
       boxShadow: {
         tv: '0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04)',
