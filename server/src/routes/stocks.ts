@@ -726,21 +726,34 @@ router.get('/:symbol/history', async (req, res) => {
   res.json(history);
 });
 
-// POST /api/stocks/:symbol/alert
+// POST /api/stocks/:symbol/alert — supports price, pct_move, indicator types
 router.post('/:symbol/alert', authMiddleware, (req: AuthRequest, res) => {
-  const { targetPrice, condition } = req.body;
   const symbol = req.params.symbol.toUpperCase();
   const userId = req.user!.id;
-
-  if (!targetPrice || !['above', 'below'].includes(condition)) {
-    return res.status(400).json({ error: 'Valid targetPrice and condition (above/below) required' });
-  }
+  const { conditionType, conditionSpec, targetPrice, condition } = req.body || {};
 
   try {
-    db.prepare(
-      `INSERT INTO price_alerts (user_id, symbol, target_price, condition) VALUES (?, ?, ?, ?)`
-    ).run(userId, symbol, Number(targetPrice), condition);
+    // Multi-condition path (pct_move / indicator)
+    if (conditionType && conditionType !== 'price') {
+      if (!conditionSpec || typeof conditionSpec !== 'object') {
+        return res.status(400).json({ error: 'conditionSpec required for non-price alerts' });
+      }
+      db.prepare(
+        `INSERT INTO price_alerts (user_id, symbol, target_price, condition, condition_type, condition_spec)
+         VALUES (?, ?, 0, 'above', ?, ?)`
+      ).run(userId, symbol, conditionType, JSON.stringify(conditionSpec));
+      logActivity(userId, 'PRICE_ALERT_SET', { symbol, conditionType, conditionSpec }, getClientIp(req));
+      return res.json({ success: true, message: `${conditionType} alert set` });
+    }
 
+    // Legacy price alert
+    if (!targetPrice || !['above', 'below'].includes(condition)) {
+      return res.status(400).json({ error: 'Valid targetPrice and condition (above/below) required' });
+    }
+    db.prepare(
+      `INSERT INTO price_alerts (user_id, symbol, target_price, condition, condition_type)
+       VALUES (?, ?, ?, ?, 'price')`
+    ).run(userId, symbol, Number(targetPrice), condition);
     logActivity(userId, 'PRICE_ALERT_SET', { symbol, targetPrice, condition }, getClientIp(req));
     res.json({ success: true, message: 'Price alert set' });
   } catch (err: any) {

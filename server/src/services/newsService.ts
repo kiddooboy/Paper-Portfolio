@@ -173,6 +173,35 @@ export async function getStockNews(symbol: string): Promise<NewsItem[]> {
       sentiment: sentiments[i].status === 'fulfilled' ? sentiments[i].value : undefined,
     }));
 
+    // Phase 3: persist a daily sentiment score for this symbol so the AI
+    // context and Dashboard widget can see it without re-running the LLM.
+    try {
+      const { db } = await import('../db/index.js');
+      const today = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
+      let positives = 0, negatives = 0, neutral = 0, top: NewsItem | null = null;
+      for (const it of items) {
+        const a = it.sentiment?.analysis;
+        const lbl = String(a?.sentiment || '').toLowerCase();
+        const score = Number(a?.impact_score ?? 0);
+        if (lbl.includes('pos')) positives++;
+        else if (lbl.includes('neg')) negatives++;
+        else neutral++;
+        const topScore = Number(top?.sentiment?.analysis?.impact_score ?? 0);
+        if (!top || Math.abs(score) > Math.abs(topScore)) top = it;
+      }
+      const total = positives + negatives + neutral;
+      const score = total === 0 ? 0 : (positives - negatives) / total;
+      db.prepare(`
+        INSERT INTO symbol_sentiment (symbol, date, score, mentions, top_title) VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT (symbol, date) DO UPDATE SET
+          score     = excluded.score,
+          mentions  = excluded.mentions,
+          top_title = excluded.top_title
+      `).run(key, today, score, total, top?.title || null);
+    } catch (err: any) {
+      console.warn('[news] sentiment persist failed:', err?.message);
+    }
+
     stockCache.set(key, { data: items, at: Date.now() });
     return items;
   } catch (e: any) {

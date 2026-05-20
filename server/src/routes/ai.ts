@@ -63,6 +63,20 @@ async function getUserContext(userId: number): Promise<string> {
         ctx += `\nBest performer: ${sorted[0].symbol} ${pct(sorted[0].pnlPct)}\n`;
         ctx += `Worst performer: ${sorted[sorted.length - 1].symbol} ${pct(sorted[sorted.length - 1].pnlPct)}\n`;
       }
+
+      // Phase 3: today's per-symbol news sentiment for held stocks
+      const today = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
+      const sentRows = db.prepare(`
+        SELECT symbol, score, mentions, top_title FROM symbol_sentiment
+        WHERE date = ? AND symbol IN (${holdings.map(() => '?').join(',')})
+      `).all(today, ...holdings.map((h) => h.symbol)) as any[];
+      if (sentRows.length) {
+        ctx += `\n## TODAY'S NEWS SENTIMENT (on your holdings)\n`;
+        for (const s of sentRows) {
+          const tone = s.score > 0.2 ? '🟢 positive' : s.score < -0.2 ? '🔴 negative' : '⚪ neutral';
+          ctx += `- ${s.symbol}: ${tone} (${s.mentions} mentions) — "${s.top_title || ''}"\n`;
+        }
+      }
     }
 
     if (recentOrders.length) {

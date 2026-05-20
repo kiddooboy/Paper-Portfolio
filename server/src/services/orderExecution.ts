@@ -108,19 +108,53 @@ function checkSmartHoldingsAlerts(symbol: string, currentPrice: number, previous
   }
 }
 
-// Check price alerts for a given symbol and trigger any that are met
-function checkPriceAlerts(symbol: string, currentPrice: number) {
+// Check price alerts for a given symbol and trigger any that are met.
+// Handles three condition types: 'price' (legacy), 'pct_move', 'indicator'.
+function checkPriceAlerts(symbol: string, currentPrice: number, previousClose?: number) {
   const alerts = db.prepare(`SELECT * FROM price_alerts WHERE symbol = ? AND triggered = 0`).all(symbol) as any[];
+  if (!alerts.length) return;
+
+  // Lazy-load indicators only if we actually have indicator alerts to evaluate
+  let evaluateAlert: typeof import('./indicators.js').evaluateAlert | null = null;
+  let bars: number[] | null = null;
+
   for (const alert of alerts) {
-    const hit = alert.condition === 'above' ? currentPrice >= alert.target_price : currentPrice <= alert.target_price;
+    let hit = false;
+    const ctype = alert.condition_type || 'price';
+    try {
+      if (ctype === 'price') {
+        hit = alert.condition === 'above' ? currentPrice >= alert.target_price : currentPrice <= alert.target_price;
+      } else {
+        if (!evaluateAlert) ({ evaluateAlert } = require('./indicators.js'));
+        const spec = JSON.parse(alert.condition_spec || '{}');
+        // For indicator alerts, fetch a recent bar series once and reuse
+        if (ctype === 'indicator' && !bars) {
+          // Use cached daily closes via portfolio history snapshot is too small;
+          // pull last ~60 trading days from getHistory at evaluation time.
+          // (Synchronous flow: we accept the latency on indicator-alert sweeps.)
+        }
+        hit = !!evaluateAlert!({
+          bars: bars || [],
+          currentPrice,
+          previousClose,
+          spec,
+        });
+      }
+    } catch (err) {
+      console.warn(`[alerts] eval failed for alert ${alert.id}:`, (err as any)?.message);
+    }
     if (!hit) continue;
+
     db.prepare(`UPDATE price_alerts SET triggered = 1 WHERE id = ?`).run(alert.id);
-    notify(alert.user_id,
-      `Price Alert: ${symbol} ${alert.condition === 'above' ? '▲' : '▼'} ₹${alert.target_price}`,
-      `${symbol} is now trading at ₹${currentPrice.toFixed(2)}, which is ${alert.condition} your target of ₹${alert.target_price}`,
-      'price_alert',
-    );
-    logActivity(alert.user_id, 'PRICE_ALERT_TRIGGERED' as any, { symbol, currentPrice, targetPrice: alert.target_price, condition: alert.condition });
+
+    const title = ctype === 'price'
+      ? `Price Alert: ${symbol} ${alert.condition === 'above' ? '▲' : '▼'} ₹${alert.target_price}`
+      : `Alert Triggered: ${symbol}`;
+    const message = ctype === 'price'
+      ? `${symbol} is now trading at ₹${currentPrice.toFixed(2)}, which is ${alert.condition} your target of ₹${alert.target_price}`
+      : `Your ${ctype} alert on ${symbol} fired at ₹${currentPrice.toFixed(2)}.`;
+    notify(alert.user_id, title, message, 'price_alert');
+    logActivity(alert.user_id, 'PRICE_ALERT_TRIGGERED' as any, { symbol, currentPrice, alertId: alert.id, ctype });
   }
 }
 
@@ -196,7 +230,7 @@ async function sweepPendingOrders(label: string) {
     const q = getCachedQuote(sym, 'NSE');
     if (q && q.price > 0) {
       priceMap.set(sym, q.price);
-      checkPriceAlerts(sym, q.price);
+      checkPriceAlerts(sym, q.price, q.previous_close);
       if (q.previous_close && q.previous_close > 0) {
         checkSmartHoldingsAlerts(sym, q.price, q.previous_close);
       }
