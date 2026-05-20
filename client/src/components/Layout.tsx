@@ -9,7 +9,7 @@ import MobileNav from './MobileNav';
 import GlobalSearch from './GlobalSearch';
 import SetMpinModal from './SetMpinModal';
 import IdleLock from './IdleLock';
-import { Bell, TrendingUp, Moon, Sun, ListOrdered, BarChart3, LogOut, ChevronRight, User, Check, ShoppingBag, TrendingDown, Info, ShieldCheck, Wallet } from 'lucide-react';
+import { Bell, TrendingUp, Moon, Sun, ListOrdered, BarChart3, LogOut, ChevronRight, User, Check, ShoppingBag, TrendingDown, Info, ShieldCheck, Wallet, Triangle } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 
 export default function Layout() {
@@ -75,6 +75,25 @@ export default function Layout() {
             <GlobalSearch />
           </div>
           <div className="flex items-center gap-3 shrink-0">
+            {/* Greeqs Options Terminal — external link */}
+            <a
+              href="https://greeqs.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open Greeqs Options Terminal"
+              className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-tv bg-gray-900 hover:bg-black dark:bg-black/60 dark:hover:bg-black border border-gray-800 dark:border-gray-700 transition group"
+            >
+              <Triangle
+                className="w-4 h-4 text-gold-400 group-hover:text-gold-300 transition"
+                strokeWidth={2}
+              />
+              <div className="flex flex-col leading-none">
+                <span className="text-[13px] font-bold text-white tracking-tight">Greeqs</span>
+                <span className="text-[8.5px] font-semibold uppercase tracking-[0.12em] text-gray-400 group-hover:text-gray-300 mt-0.5">
+                  Options Terminal
+                </span>
+              </div>
+            </a>
             <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
               <span className="font-mono">{currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</span>
               <span className="text-[10px] uppercase tracking-wide">IST</span>
