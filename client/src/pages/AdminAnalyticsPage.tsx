@@ -54,7 +54,7 @@ function isoDaysAgo(n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-const PIE_COLORS = ['D5367FF', 'DD4AF37', 'DFF725E', 'DFFC107', 'D9C6BFF', 'D26C6DA', 'DEC407A', 'D66BB6A', 'DFFA726', 'D42A5F5', 'DAB47BC', 'D26A69A'];
+const PIE_COLORS = ['#5367FF', '#00D09C', '#FF725E', '#FFC107', '#9C6BFF', '#26C6DA', '#EC407A', '#66BB6A', '#FFA726', '#42A5F5', '#AB47BC', '#26A69A'];
 
 // ── Reusable bits ──
 function KpiCard({
@@ -322,15 +322,15 @@ export default function AdminAnalyticsPage() {
                 <AreaChart data={data.series.dailyTrades} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="volFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="D5367FF" stopOpacity={0.4} />
-                      <stop offset="100%" stopColor="D5367FF" stopOpacity={0} />
+                      <stop offset="0%" stopColor="#5367FF" stopOpacity={0.4} />
+                      <stop offset="100%" stopColor="#5367FF" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
                   <XAxis dataKey="day" tick={{ fontSize: 10 }} tickFormatter={shortDay} />
                   <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => compactNum(v)} />
                   <Tooltip formatter={(v: any) => formatCurrency(Number(v))} labelFormatter={(l) => `Day ${l}`} />
-                  <Area type="monotone" dataKey="volume" stroke="D5367FF" fill="url(DvolFill)" />
+                  <Area type="monotone" dataKey="volume" stroke="#5367FF" fill="url(#volFill)" />
                 </AreaChart>
               </ResponsiveContainer>
             )}
@@ -349,8 +349,8 @@ export default function AdminAnalyticsPage() {
                   <YAxis tick={{ fontSize: 10 }} />
                   <Tooltip />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="buys" stackId="a" fill="DD4AF37" name="Buys" />
-                  <Bar dataKey="sells" stackId="a" fill="DFF725E" name="Sells" />
+                  <Bar dataKey="buys" stackId="a" fill="#00D09C" name="Buys" />
+                  <Bar dataKey="sells" stackId="a" fill="#FF725E" name="Sells" />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -370,7 +370,7 @@ export default function AdminAnalyticsPage() {
                   <Tooltip formatter={(v: any) => formatCurrency(Number(v))} />
                   <Bar dataKey="realized" name="Realized P&L">
                     {data.series.dailyRealized.map((d, i) => (
-                      <Cell key={i} fill={d.realized >= 0 ? 'DD4AF37' : 'DFF725E'} />
+                      <Cell key={i} fill={d.realized >= 0 ? '#00D09C' : '#FF725E'} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -394,8 +394,8 @@ export default function AdminAnalyticsPage() {
                   <YAxis tick={{ fontSize: 10 }} />
                   <Tooltip />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Line type="monotone" dataKey="active" stroke="D5367FF" strokeWidth={2} dot={false} name="Active users" />
-                  <Line type="monotone" dataKey="new" stroke="DD4AF37" strokeWidth={2} dot={false} name="New signups" />
+                  <Line type="monotone" dataKey="active" stroke="#5367FF" strokeWidth={2} dot={false} name="Active users" />
+                  <Line type="monotone" dataKey="new" stroke="#00D09C" strokeWidth={2} dot={false} name="New signups" />
                 </LineChart>
               </ResponsiveContainer>
             )}
@@ -413,7 +413,7 @@ export default function AdminAnalyticsPage() {
                   <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v) => compactNum(v)} />
                   <YAxis type="category" dataKey="symbol" tick={{ fontSize: 10 }} width={70} />
                   <Tooltip formatter={(v: any) => formatCurrency(Number(v))} />
-                  <Bar dataKey="volume" fill="D5367FF" name="Volume" />
+                  <Bar dataKey="volume" fill="#5367FF" name="Volume" />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -470,7 +470,7 @@ export default function AdminAnalyticsPage() {
                     tickFormatter={(s: string) => s.replace(/_/g, ' ').toLowerCase()}
                   />
                   <Tooltip />
-                  <Bar dataKey="count" fill="D9C6BFF" name="Count" />
+                  <Bar dataKey="count" fill="#9C6BFF" name="Count" />
                 </BarChart>
               </ResponsiveContainer>
             )}

@@ -84,7 +84,7 @@ export default function Layout() {
               className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-tv bg-gray-900 hover:bg-black dark:bg-black/60 dark:hover:bg-black border border-gray-800 dark:border-gray-700 transition group"
             >
               <Triangle
-                className="w-4 h-4 text-gold-400 group-hover:text-gold-300 transition"
+                className="w-4 h-4 text-amber-400 group-hover:text-amber-300 transition"
                 strokeWidth={2}
               />
               <div className="flex flex-col leading-none">
