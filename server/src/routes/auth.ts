@@ -52,7 +52,7 @@ router.post('/register', async (req, res) => {
     logActivity(userId, 'REGISTER', { name, email }, getClientIp(req));
 
     res.cookie('auth_token', token, { httpOnly: true, secure: req.secure || req.headers['x-forwarded-proto'] === 'https', sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 });
-    res.json({ token, user: { id: userId, name, email, role, balance: 100000 } });
+    res.json({ token, user: { id: userId, name, email, role, balance: 100000, tour_seen: false } });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Invalid data' });
   }
@@ -78,10 +78,16 @@ router.post('/login', async (req, res) => {
     logActivity(user.id, 'LOGIN', { method: 'password' }, getClientIp(req));
 
     res.cookie('auth_token', token, { httpOnly: true, secure: req.secure || req.headers['x-forwarded-proto'] === 'https', sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 });
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role, balance: user.balance, has_mpin: !!user.mpin_hash } });
+    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role, balance: user.balance, has_mpin: !!user.mpin_hash, tour_seen: !!user.tour_seen } });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Invalid data' });
   }
+});
+
+// POST /auth/tour-seen — mark the onboarding tour as completed for this user
+router.post('/tour-seen', authMiddleware, async (req: AuthRequest, res) => {
+  await db.prepare('UPDATE users SET tour_seen = 1 WHERE id = ?').run(req.user!.id);
+  res.json({ success: true });
 });
 
 // POST /auth/set-mpin — set or change MPIN (requires auth)
@@ -133,7 +139,7 @@ router.post('/login-mpin', async (req, res) => {
 
 router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
   const user = (await db.prepare(
-    'SELECT id, name, email, role, balance, mpin_hash, last_login, created_at FROM users WHERE id = ?'
+    'SELECT id, name, email, role, balance, mpin_hash, tour_seen, last_login, created_at FROM users WHERE id = ?'
   ).get(req.user!.id)) as any;
   if (!user) return res.status(401).json({ error: 'User not found' });
   res.json({
@@ -144,6 +150,7 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
       role: user.role || 'user',
       balance: user.balance,
       has_mpin: !!user.mpin_hash,
+      tour_seen: !!user.tour_seen,
       last_login: user.last_login,
       created_at: user.created_at,
     },
@@ -186,12 +193,12 @@ router.post('/firebase', async (req, res) => {
 
     // Re-fetch to get mpin_hash for new users too
     const fresh = (await db.prepare(
-      'SELECT id, name, email, role, balance, mpin_hash FROM users WHERE id = ?'
+      'SELECT id, name, email, role, balance, mpin_hash, tour_seen FROM users WHERE id = ?'
     ).get(user.id)) as any;
 
     const token = generateToken(fresh.id, fresh.email, fresh.role);
     res.cookie('auth_token', token, { httpOnly: true, secure: req.secure || req.headers['x-forwarded-proto'] === 'https', sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 });
-    res.json({ token, user: { id: fresh.id, name: fresh.name, email: fresh.email, role: fresh.role, balance: fresh.balance, has_mpin: !!fresh.mpin_hash } });
+    res.json({ token, user: { id: fresh.id, name: fresh.name, email: fresh.email, role: fresh.role, balance: fresh.balance, has_mpin: !!fresh.mpin_hash, tour_seen: !!fresh.tour_seen } });
   } catch (err: any) {
     const msg: string = err?.message || '';
     if (msg === 'FIREBASE_NOT_CONFIGURED') {

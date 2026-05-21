@@ -9,6 +9,7 @@ interface User {
   role: string;
   balance: number;
   has_mpin?: boolean;
+  tour_seen?: boolean;
 }
 
 interface AuthState {

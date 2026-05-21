@@ -25,23 +25,27 @@ export default function Layout() {
   const fetchNotifications = useNotificationsStore((s) => s.fetch);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [tourOpen, setTourOpen] = useState(false);
+  const setUser = useAuthStore((s) => s.setUser);
 
-  // Auto-start the product tour once for new users; allow replay via a window
-  // event ("pp:start-tour") dispatched from the profile menu.
+  // Auto-start the product tour ONLY for first-time users — i.e. brand-new
+  // accounts whose server-side `tour_seen` flag is false. Existing users were
+  // backfilled to true and never see it automatically. Replay is available
+  // any time via the "pp:start-tour" window event from the profile menu.
   useEffect(() => {
-    if (!isAuthenticated) return;
-    let done = false;
-    try { done = localStorage.getItem('pp_tour_done') === '1'; } catch {}
+    if (!isAuthenticated || !user) return;
     const startNow = () => setTourOpen(true);
     window.addEventListener('pp:start-tour', startNow);
     let t: ReturnType<typeof setTimeout> | undefined;
-    if (!done) t = setTimeout(() => setTourOpen(true), 900);
+    if (user.tour_seen === false) t = setTimeout(() => setTourOpen(true), 900);
     return () => { window.removeEventListener('pp:start-tour', startNow); if (t) clearTimeout(t); };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, user?.id, user?.tour_seen]);
 
   const closeTour = () => {
-    try { localStorage.setItem('pp_tour_done', '1'); } catch {}
     setTourOpen(false);
+    if (user && user.tour_seen === false) {
+      axios.post('/api/auth/tour-seen').catch(() => {});
+      setUser({ ...user, tour_seen: true });
+    }
   };
 
   useEffect(() => {

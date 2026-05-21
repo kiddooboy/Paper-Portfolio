@@ -370,6 +370,18 @@ export async function initSchema() {
 
   // ── Phase 2c: New feature tables ──
 
+  // Onboarding tour — per-account "seen" flag. Existing users are backfilled
+  // to 1 (they are NOT first-timers); only newly registered accounts default
+  // to 0 and therefore get the guided tour exactly once.
+  {
+    const hadTourSeen =
+      (raw.prepare(`SELECT COUNT(*) AS c FROM pragma_table_info('users') WHERE name='tour_seen'`).get() as any)?.c > 0;
+    safeExec(`ALTER TABLE users ADD COLUMN tour_seen INTEGER NOT NULL DEFAULT 0`, 'migration: users.tour_seen');
+    if (!hadTourSeen) {
+      safeExec(`UPDATE users SET tour_seen = 1`, 'backfill: existing users tour_seen=1');
+    }
+  }
+
   // GTT / AMO flags on orders
   safeExec(`ALTER TABLE orders ADD COLUMN is_gtt INTEGER NOT NULL DEFAULT 0`, 'migration: orders.is_gtt');
   safeExec(`ALTER TABLE orders ADD COLUMN gtt_valid_till TEXT`, 'migration: orders.gtt_valid_till');
