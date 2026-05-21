@@ -8,7 +8,8 @@ export type Block =
   | { type: 'list'; items: string[] }
   | { type: 'tip'; text: string }
   | { type: 'warn'; text: string }
-  | { type: 'term'; term: string; def: string };
+  | { type: 'term'; term: string; def: string }
+  | { type: 'visual'; name: string; caption?: string };
 
 export interface Lesson { title: string; blocks: Block[] }
 export interface QuizQuestion { q: string; options: string[]; answer: number; explain: string }
@@ -53,6 +54,7 @@ export const MODULES: Module[] = [
             'More sellers than buyers → price falls.',
             'Demand is driven by earnings, news, sentiment, interest rates and the economy.',
           ] },
+          { type: 'visual', name: 'bull-bear', caption: 'A rising market is "bullish"; a falling market is "bearish".' },
           { type: 'p', text: 'Over the long run, prices tend to follow a company’s earnings and growth. Over the short run, they swing on emotion and news.' },
         ],
       },
@@ -92,6 +94,7 @@ export const MODULES: Module[] = [
         blocks: [
           { type: 'term', term: 'Bid', def: 'The highest price a buyer is currently willing to pay.' },
           { type: 'term', term: 'Ask (Offer)', def: 'The lowest price a seller is currently willing to accept.' },
+          { type: 'visual', name: 'bid-ask', caption: 'The bid is the top buy price, the ask the lowest sell price — the gap is the spread.' },
           { type: 'p', text: 'The gap between them is the spread. Highly traded stocks have a tiny spread; thinly traded ones have a wide spread.' },
           { type: 'term', term: 'LTP', def: 'Last Traded Price — the price of the most recent executed trade.' },
         ],
@@ -270,7 +273,10 @@ export const MODULES: Module[] = [
         title: 'Candlesticks & trends',
         blocks: [
           { type: 'p', text: 'A candlestick shows the open, high, low and close for a period. Green = close above open; red = close below open.' },
+          { type: 'visual', name: 'candle-anatomy', caption: 'Anatomy of a candlestick — body shows open→close, wicks show the high & low.' },
           { type: 'term', term: 'Trend', def: 'The general direction of price. Uptrend = higher highs & higher lows; downtrend = lower highs & lower lows.' },
+          { type: 'visual', name: 'uptrend', caption: 'Uptrend: each swing makes a higher high and a higher low.' },
+          { type: 'visual', name: 'downtrend', caption: 'Downtrend: each swing makes a lower high and a lower low.' },
           { type: 'tip', text: '"The trend is your friend" — trading with the trend has better odds than fighting it.' },
         ],
       },
@@ -279,6 +285,7 @@ export const MODULES: Module[] = [
         blocks: [
           { type: 'term', term: 'Support', def: 'A price level where buying tends to appear and halt a fall.' },
           { type: 'term', term: 'Resistance', def: 'A price level where selling tends to appear and cap a rise.' },
+          { type: 'visual', name: 'support-resistance', caption: 'Price oscillates between support (floor) and resistance (ceiling).' },
           { type: 'p', text: 'When price breaks decisively above resistance or below support, that level often flips role (a "breakout").' },
         ],
       },
@@ -286,7 +293,9 @@ export const MODULES: Module[] = [
         title: 'Indicators',
         blocks: [
           { type: 'term', term: 'Moving Average (MA/EMA)', def: 'The average price over N periods, smoothing noise to reveal trend direction.' },
+          { type: 'visual', name: 'moving-average', caption: 'A moving average smooths the candles into a single trend line.' },
           { type: 'term', term: 'RSI', def: 'Relative Strength Index (0–100). Above 70 = potentially overbought; below 30 = potentially oversold.' },
+          { type: 'visual', name: 'rsi', caption: 'RSI oscillates 0–100; the 70 and 30 bands flag overbought/oversold.' },
           { type: 'term', term: 'MACD', def: 'Tracks momentum via the difference between two EMAs and a signal line.' },
           { type: 'warn', text: 'Indicators are tools, not crystal balls. Combine them with price action and context.' },
         ],
@@ -322,6 +331,7 @@ export const MODULES: Module[] = [
         blocks: [
           { type: 'term', term: 'Position sizing', def: 'Deciding how much to put into a single trade based on your risk per trade.' },
           { type: 'p', text: 'A common rule: risk no more than 1–2% of your capital on any single trade. If a trade hits your stop, you lose only that small slice.' },
+          { type: 'visual', name: 'risk-reward', caption: 'Aim for trades where the potential reward outweighs the risk (e.g. 1:2).' },
           { type: 'tip', text: 'Position size = (capital × risk%) ÷ (entry − stop-loss). Bigger stop → smaller position.' },
         ],
       },
@@ -330,6 +340,7 @@ export const MODULES: Module[] = [
         blocks: [
           { type: 'term', term: 'Risk/Reward', def: 'Potential loss vs potential gain. A 1:2 ratio means risking ₹1 to make ₹2.' },
           { type: 'term', term: 'Diversification', def: 'Spreading capital across stocks/sectors so one bad bet can’t sink the portfolio.' },
+          { type: 'visual', name: 'diversification', caption: 'One concentrated bet is fragile; spreading across many positions is resilient.' },
           { type: 'warn', text: 'Avoid putting more than ~25% in one stock or ~30% in one sector — concentration cuts both ways.' },
         ],
       },
@@ -365,7 +376,9 @@ export const MODULES: Module[] = [
           { type: 'term', term: 'Value investing', def: 'Buying solid companies trading below their intrinsic worth, and waiting.' },
           { type: 'term', term: 'Momentum', def: 'Buying what’s already strong, betting strength persists.' },
           { type: 'term', term: 'Breakout', def: 'Entering when price breaks above resistance (or below support) on strong volume.' },
+          { type: 'visual', name: 'breakout', caption: 'Breakout: price coils below resistance, then a strong candle clears it.' },
           { type: 'term', term: 'Mean reversion', def: 'Betting that an over-extended price snaps back to its average.' },
+          { type: 'visual', name: 'mean-reversion', caption: 'Mean reversion: price stretched far from its average tends to snap back.' },
         ],
       },
       {
@@ -456,6 +469,7 @@ export const MODULES: Module[] = [
           { type: 'term', term: 'Put option (PE)', def: 'The right to SELL the underlying at the strike. Bearish / protective.' },
           { type: 'term', term: 'Premium', def: 'The price you pay to buy an option — the most a buyer can lose.' },
           { type: 'term', term: 'Strike & Expiry', def: 'Strike = the contract’s price level; Expiry = the date the contract settles.' },
+          { type: 'visual', name: 'option-payoff', caption: 'Option payoff at expiry — a call profits as price rises, a put as it falls; the buyer’s loss is capped at the premium.' },
         ],
       },
       {

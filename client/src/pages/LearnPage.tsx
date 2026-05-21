@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import notify from '../lib/notify';
+import LearnVisual from '../components/LearnVisuals';
 import { MODULES, PASS_PCT, type Module, type Block } from '../lib/learnContent';
 
 const ICONS: Record<string, any> = {
@@ -382,5 +383,7 @@ function BlockView({ block }: { block: Block }) {
           <p className="text-[13px] text-amber-700 dark:text-amber-300 leading-relaxed">{block.text}</p>
         </div>
       );
+    case 'visual':
+      return <LearnVisual name={block.name} caption={block.caption} />;
   }
 }
