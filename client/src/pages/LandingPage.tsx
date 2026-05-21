@@ -166,7 +166,12 @@ export default function LandingPage() {
           background: var(--lp-bg);
           color: var(--lp-text);
           font-family: 'Inter', system-ui, sans-serif;
-          overflow-x: hidden;
+          /* `overflow-x: hidden` forces overflow-y to compute as `auto`,
+             turning this element into a scroll container that traps the
+             page scroll. `clip` clips horizontally while leaving vertical
+             scrolling on the document/body, so the page scrolls normally. */
+          overflow-x: clip;
+          overflow-y: visible;
           min-height: 100vh;
         }
 
