@@ -13,11 +13,11 @@ export default {
       colors: {
         groww: {
           primary: '#00B386',
-          dark: '#0B0F19',
-          card: '#1A1F2E',
+          dark: '#0A0A0A',
+          card: '#171717',
           cardLight: '#F8F9FB',
           text: '#EAECEF',
-          textLight: '#1A1F2E',
+          textLight: '#171717',
           muted: '#8A8F99',
           gain: '#00B386',
           loss: '#EB5B3C',
