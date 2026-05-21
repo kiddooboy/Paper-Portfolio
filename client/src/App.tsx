@@ -30,6 +30,7 @@ const AdminAnalyticsPage = lazy(() => import('./pages/AdminAnalyticsPage'));
 const AIChatPage         = lazy(() => import('./pages/AIChatPage'));
 const SectorsPage        = lazy(() => import('./pages/SectorsPage'));
 const NewsPage           = lazy(() => import('./pages/NewsPage'));
+const LearnPage          = lazy(() => import('./pages/LearnPage'));
 const ScreenerPage       = lazy(() => import('./pages/ScreenerPage'));
 const CompanyPage        = lazy(() => import('./pages/CompanyPage'));
 const AchievementsPage   = lazy(() => import('./pages/AchievementsPage'));
@@ -88,6 +89,7 @@ function App() {
           <Route path="/ai-chat"         element={<AIChatPage />} />
           <Route path="/sectors"         element={<SectorsPage />} />
           <Route path="/news"            element={<NewsPage />} />
+          <Route path="/learn"           element={<LearnPage />} />
           <Route path="/screener"        element={<ScreenerPage />} />
           <Route path="/company/:symbol" element={<CompanyPage />} />
           <Route path="/achievements"    element={<AchievementsPage />} />

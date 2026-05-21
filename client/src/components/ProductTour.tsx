@@ -26,6 +26,7 @@ const STEPS: Step[] = [
   { sel: '[data-tour="/leaderboard"]', title: 'Leaderboard', body: 'See how your returns stack up against everyone else and climb the ranks.' },
   { sel: '[data-tour="/achievements"]', title: 'Achievements', body: 'Earn badges as you hit trading milestones.' },
   { sel: '[data-tour="/news"]', title: 'News', body: 'Curated market news with AI sentiment — and the AI assistant factors news on your holdings into its answers.' },
+  { sel: '[data-tour="/learn"]', title: 'Trading Academy', body: 'New to markets? Take the interactive course — equity basics, terms, analysis, risk, strategy & psychology — with quizzes and progress tracking.' },
   { sel: '[data-tour="greeqs"]', title: 'Greeqs Options Terminal', body: 'Jump to the dedicated Greeqs options terminal for advanced F&O analysis.' },
   { sel: '[data-tour="notifications"]', title: 'Notifications & Alerts', body: 'Order fills, price/indicator alerts and AI insights land in your notification centre. Set alerts on any stock’s page.' },
   { sel: null, title: "You're all set! 🚀", body: 'Explore at your own pace — and remember, every rupee is virtual. You can replay this tour anytime from your profile menu.' },

@@ -382,6 +382,22 @@ export async function initSchema() {
     }
   }
 
+  // Learning Academy — per-user module progress
+  safeExec(`
+    CREATE TABLE IF NOT EXISTS learning_progress (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      module_id    TEXT NOT NULL,
+      completed    INTEGER NOT NULL DEFAULT 0,
+      score        INTEGER NOT NULL DEFAULT 0,
+      total        INTEGER NOT NULL DEFAULT 0,
+      completed_at TEXT,
+      updated_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(user_id, module_id)
+    )
+  `, 'table: learning_progress');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_learning_progress_user ON learning_progress(user_id)`, 'index: learning_progress_user');
+
   // GTT / AMO flags on orders
   safeExec(`ALTER TABLE orders ADD COLUMN is_gtt INTEGER NOT NULL DEFAULT 0`, 'migration: orders.is_gtt');
   safeExec(`ALTER TABLE orders ADD COLUMN gtt_valid_till TEXT`, 'migration: orders.gtt_valid_till');
