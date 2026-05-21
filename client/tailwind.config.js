@@ -8,7 +8,10 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'DM Sans', 'system-ui', 'sans-serif'],
+        // 'AppDigits' (JetBrains Mono, digits-only via unicode-range) sits first
+        // so every number renders monospaced; letters fall through to Inter.
+        sans: ['AppDigits', 'Inter', 'DM Sans', 'system-ui', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
       colors: {
         // Remap Tailwind's default `gray` (a cool, blue-tinted grey) to the

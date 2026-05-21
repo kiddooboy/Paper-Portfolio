@@ -2,9 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Numeric font: JetBrains Mono for ALL digits across the project ──────────
+   "AppDigits" only covers digits and number punctuation (via unicode-range),
+   so when it sits FIRST in the font stack the browser renders 0-9 . , + - in
+   JetBrains Mono and falls through to Inter for every other glyph. This makes
+   every number in the app monospaced without touching individual components. */
+@font-face {
+  font-family: 'AppDigits';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: local('JetBrains Mono'),
+       url('https://cdn.jsdelivr.net/npm/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0030-0039, U+002C, U+002E, U+002B, U+002D;
+}
+
 @layer base {
   body {
-    font-family: 'Inter', 'DM Sans', system-ui, sans-serif;
+    font-family: 'AppDigits', 'Inter', 'DM Sans', system-ui, sans-serif;
     @apply bg-gray-50 text-gray-900 dark:bg-groww-dark dark:text-groww-text;
   }
 }
