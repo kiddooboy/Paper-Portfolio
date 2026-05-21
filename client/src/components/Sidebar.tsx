@@ -70,6 +70,7 @@ export default function Sidebar({ activePath }: { activePath: string }) {
                     <Link
                       key={item.path}
                       to={item.path}
+                      data-tour={item.path}
                       className={cn(
                         'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
                         active

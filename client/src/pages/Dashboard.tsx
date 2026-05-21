@@ -7,7 +7,6 @@ import { useMarketStore } from '../store/marketStore';
 import { usePortfolioStore } from '../store/portfolioStore';
 import StockLogo from '../components/StockLogo';
 import AIChatPanel from '../components/AIChatPanel';
-import PortfolioHealth from '../components/PortfolioHealth';
 import axios from 'axios';
 
 interface SectorQuote {
@@ -209,9 +208,6 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
-
-      {/* ── Portfolio Health (benchmark vs Nifty + risk alerts) ── */}
-      <PortfolioHealth />
 
       {/* ── Row 2: Gainers | Losers | Most Active ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 lg:flex-1 lg:min-h-0">

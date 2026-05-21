@@ -8,6 +8,7 @@ import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import StockLogo from '../components/StockLogo';
+import PortfolioHealth from '../components/PortfolioHealth';
 import {
   ArrowUpRight, TrendingUp,
   Shield, Target, Award, AlertTriangle, Activity,
@@ -170,6 +171,9 @@ export default function PortfolioPage() {
           </div>
         </div>
       </div>
+
+      {/* Portfolio Health — benchmark vs Nifty, drawdown & risk alerts */}
+      <PortfolioHealth />
 
       {isEmpty ? (
         <div className="text-center py-20 bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800">

@@ -9,6 +9,7 @@ import MobileNav from './MobileNav';
 import GlobalSearch from './GlobalSearch';
 import SetMpinModal from './SetMpinModal';
 import IdleLock from './IdleLock';
+import ProductTour from './ProductTour';
 import { Bell, TrendingUp, Moon, Sun, ListOrdered, BarChart3, LogOut, ChevronRight, User, Check, ShoppingBag, TrendingDown, Info, ShieldCheck, Wallet, Triangle } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 
@@ -23,6 +24,25 @@ export default function Layout() {
   });
   const fetchNotifications = useNotificationsStore((s) => s.fetch);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [tourOpen, setTourOpen] = useState(false);
+
+  // Auto-start the product tour once for new users; allow replay via a window
+  // event ("pp:start-tour") dispatched from the profile menu.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let done = false;
+    try { done = localStorage.getItem('pp_tour_done') === '1'; } catch {}
+    const startNow = () => setTourOpen(true);
+    window.addEventListener('pp:start-tour', startNow);
+    let t: ReturnType<typeof setTimeout> | undefined;
+    if (!done) t = setTimeout(() => setTourOpen(true), 900);
+    return () => { window.removeEventListener('pp:start-tour', startNow); if (t) clearTimeout(t); };
+  }, [isAuthenticated]);
+
+  const closeTour = () => {
+    try { localStorage.setItem('pp_tour_done', '1'); } catch {}
+    setTourOpen(false);
+  };
 
   useEffect(() => {
     if (!isInitializing && !isAuthenticated) navigate('/');
@@ -71,7 +91,7 @@ export default function Layout() {
             <span className="font-bold text-lg tracking-tight hidden sm:inline">Paper Portfolio</span>
           </div>
           <MarketBadge />
-          <div className="flex-1 flex justify-center">
+          <div className="flex-1 flex justify-center" data-tour="search">
             <GlobalSearch />
           </div>
           <div className="flex items-center gap-3 shrink-0">
@@ -81,6 +101,7 @@ export default function Layout() {
               target="_blank"
               rel="noopener noreferrer"
               title="Open Greeqs Options Terminal"
+              data-tour="greeqs"
               className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 transition group"
             >
               <Triangle
@@ -105,7 +126,7 @@ export default function Layout() {
             >
               {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
-            <NotificationDropdown />
+            <span data-tour="notifications"><NotificationDropdown /></span>
             <ProfileMenu dark={dark} onToggleDark={() => setDark(!dark)} />
           </div>
         </header>
@@ -131,6 +152,7 @@ export default function Layout() {
 
       {isAuthenticated && user?.has_mpin === false && <SetMpinModal />}
       <IdleLock />
+      {tourOpen && <ProductTour onClose={closeTour} />}
       {!isFullscreen && <MobileNav activePath={location.pathname} />}
 
     </div>
@@ -267,6 +289,15 @@ function ProfileMenu({ dark, onToggleDark }: { dark: boolean; onToggleDark: () =
               </button>
             ))}
           </div>
+
+          {/* Take a tour */}
+          <button
+            onClick={() => { setOpen(false); window.dispatchEvent(new Event('pp:start-tour')); }}
+            className="w-full border-t border-gray-100 dark:border-gray-800 px-5 py-3 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
+          >
+            <Info className="w-4 h-4" />
+            Take a tour
+          </button>
 
           {/* Theme + Logout */}
           <div className="border-t border-gray-100 dark:border-gray-800 px-5 py-3 flex items-center justify-between">
