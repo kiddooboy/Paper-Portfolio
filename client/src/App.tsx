@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import { useEffect, lazy, Suspense } from 'react';
 import Layout from './components/Layout';
 import { useAuthStore } from './store/authStore';
@@ -7,6 +7,7 @@ import { bootstrap, teardown, installFocusRevalidation } from './store/bootstrap
 // ── Critical path: load eagerly (these pages are hit immediately on first visit) ──
 import LandingPage    from './pages/LandingPage';
 import Login          from './pages/Login';
+import Register       from './pages/Register';
 import MpinLoginPage  from './pages/MpinLoginPage';
 import SetupMpinPage  from './pages/SetupMpinPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
@@ -65,8 +66,7 @@ function App() {
       <Routes>
         <Route path="/"             element={<LandingPage />} />
         <Route path="/login"        element={<Login />} />
-        {/* Register is merged into the landing page — redirect legacy links */}
-        <Route path="/register"     element={<Navigate to="/" replace />} />
+        <Route path="/register"     element={<Register />} />
         <Route path="/mpin-login"   element={<MpinLoginPage />} />
         <Route path="/setup-mpin"   element={<SetupMpinPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
