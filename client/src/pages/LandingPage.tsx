@@ -317,6 +317,9 @@ export default function LandingPage() {
         .lp-reveal.d1 { transition-delay: 0.1s; } .lp-reveal.d2 { transition-delay: 0.2s; } .lp-reveal.d3 { transition-delay: 0.3s; }
         .lp-reveal.lp-v { opacity: 1; transform: none; }
 
+        /* Nav CTA shows full text on desktop, short label on phones */
+        .lp-cta-short { display: none; }
+
         @media(max-width:960px){
           .lp-hero { grid-template-columns:1fr; padding:60px 24px; }
           .lp-hero-right { display:none; }
@@ -325,6 +328,40 @@ export default function LandingPage() {
           .lp-nav { padding:0 20px; }
           .lp-footer { padding:28px 24px; flex-direction:column; align-items:flex-start; }
           .lp-cta-card { padding:40px 24px; }
+        }
+
+        /* ── Phones ── */
+        @media(max-width:640px){
+          /* Ticker: tighten */
+          .lp-ticker-badge { padding: 0 10px; font-size: 9px; }
+
+          /* Nav: compact, single row, shorter CTA label */
+          .lp-nav { padding: 0 14px; height: 54px; }
+          .lp-logo { font-size: 14px; gap: 6px; }
+          .lp-nav-right { gap: 8px; }
+          .lp-btn-ghost { padding: 7px 12px; font-size: 12px; }
+          .lp-btn-green { padding: 7px 14px; font-size: 12px; white-space: nowrap; }
+          .lp-cta-full { display: none; }
+          .lp-cta-short { display: inline; }
+
+          /* Hero: smaller heading, full-width stacked buttons */
+          .lp-hero { padding: 40px 18px 48px; min-height: auto; gap: 28px; }
+          .lp-hero-tag { font-size: 11px; margin-bottom: 18px; }
+          .lp-h1 { font-size: clamp(30px, 9vw, 40px); letter-spacing: -1px; margin-bottom: 16px; }
+          .lp-hero-desc { font-size: 15px; margin-bottom: 26px; }
+          .lp-hero-btns { gap: 10px; margin-bottom: 30px; }
+          .lp-hero-btns > a { width: 100%; justify-content: center; }
+          .lp-btn-big, .lp-btn-outline { padding: 13px 20px; font-size: 14px; width: 100%; text-align: center; }
+          .lp-trust { gap: 10px 14px; }
+          .lp-trust-item { font-size: 12px; }
+
+          /* Sections / stats / CTA */
+          .lp-sec, .lp-cta-sec { padding: 44px 18px; }
+          .lp-s-num { font-size: 40px; }
+          .lp-cta-sec { padding: 60px 18px; }
+          .lp-cta-card { padding: 32px 20px; border-radius: 16px; }
+          .lp-cta-card p { font-size: 14px; margin-bottom: 26px; }
+          .lp-cta-btn-big { width: 100%; justify-content: center; padding: 14px 24px; }
         }
       `}</style>
 
@@ -354,7 +391,10 @@ export default function LandingPage() {
           </div>
           <div className="lp-nav-right">
             <Link to="/login" className="lp-btn-ghost">Login</Link>
-            <Link to="/register" className="lp-btn-green">Create Account — It's Free</Link>
+            <Link to="/register" className="lp-btn-green">
+              <span className="lp-cta-full">Create Account — It's Free</span>
+              <span className="lp-cta-short">Sign Up</span>
+            </Link>
           </div>
         </nav>
 

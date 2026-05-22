@@ -66,7 +66,7 @@ export default function Register() {
       } else if (err?.response?.data?.error) {
         toast.error(err.response.data.error);
       } else {
-        toast.error('Google sign-in failed. Please try again.');
+        toast.error(`Google sign-in failed: ${err?.message || code || 'unknown error'}`);
       }
       setLoading(false);
     }
