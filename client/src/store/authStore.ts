@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import axios from 'axios';
+import { clearToken } from '../lib/authToken';
 
 interface User {
   id: number;
@@ -59,6 +60,7 @@ export const useAuthStore = create<AuthState>()(
         // so that other stores can clean up while still authenticated context exists.
         runLogoutCleanups();
         set({ user: null, isAuthenticated: false });
+        clearToken();
         axios.post('/api/auth/logout').catch(() => {});
       },
       updateBalance: (balance) => set((state) => ({

@@ -93,7 +93,7 @@ export default function Layout() {
   return (
     <div className={cn('min-h-screen bg-gray-50 dark:bg-groww-dark text-gray-900 dark:text-groww-text transition-colors', dark ? 'dark' : '')}>
       <div className="sticky top-0 z-50">
-        <header className="bg-white/95 dark:bg-groww-dark/95 backdrop-blur border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center gap-3 sm:gap-4">
+        <header className="bg-white/95 dark:bg-groww-dark/95 backdrop-blur border-b border-gray-200 dark:border-gray-800 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] flex items-center gap-3 sm:gap-4">
           {/* Hamburger — opens the full nav drawer (mobile/tablet only) */}
           {!isFullscreen && (
             <button
