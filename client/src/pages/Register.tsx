@@ -2,7 +2,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { signInWithPopup, signInWithRedirect, getRedirectResult } from 'firebase/auth';
-import { auth, googleProvider } from '../lib/firebase';
+import { auth, googleProvider, preferRedirect } from '../lib/firebase';
 import { useAuthStore } from '../store/authStore';
 import { bootstrap } from '../store/bootstrap';
 import { Eye, EyeOff } from 'lucide-react';
@@ -49,7 +49,12 @@ export default function Register() {
   const handleGoogleSignIn = async () => {
     setLoading(true);
     try {
-      // Popup is instant and works on most browsers
+      // On mobile, popups are unreliable — go straight to the redirect flow.
+      if (preferRedirect) {
+        await signInWithRedirect(auth, googleProvider);
+        return; // page navigates away; loading stays true
+      }
+      // Desktop: popup is instant and works on most browsers
       const result = await signInWithPopup(auth, googleProvider);
       const idToken = await result.user.getIdToken();
       const res = await axios.post('/api/auth/firebase', { idToken });

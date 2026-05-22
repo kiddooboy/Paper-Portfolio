@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, browserLocalPersistence, setPersistence } from 'firebase/auth';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyCnzdiueoe9Rb4fIzOUIfUFfa1COHP-rXU',
@@ -12,4 +12,16 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+
+// Keep the session across the redirect round-trip and reloads.
+setPersistence(auth, browserLocalPersistence).catch(() => {});
+
 export const googleProvider = new GoogleAuthProvider();
+// Always show the account chooser so users can pick/switch accounts.
+googleProvider.setCustomParameters({ prompt: 'select_account' });
+
+// Popups are unreliable on mobile browsers — prefer the redirect flow there.
+export const preferRedirect =
+  typeof window !== 'undefined' &&
+  (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+    (typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches));

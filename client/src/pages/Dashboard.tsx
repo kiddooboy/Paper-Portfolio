@@ -122,40 +122,40 @@ export default function Dashboard() {
 
             {p ? (
               <>
-                <div className="flex items-start justify-between mb-5">
-                  <p className="text-4xl font-bold tracking-tight">{formatCurrency(p.currentValue || 0)}</p>
-                  <div className="text-right">
+                <div className="flex items-start justify-between gap-3 mb-5">
+                  <p className="text-3xl sm:text-4xl font-bold tracking-tight tabular-nums min-w-0 break-words">{formatCurrency(p.currentValue || 0)}</p>
+                  <div className="text-right shrink-0">
                     <span className={cn(
-                      'inline-flex items-center px-3 py-1.5 rounded-full text-sm font-bold',
+                      'inline-flex items-center px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-xs sm:text-sm font-bold whitespace-nowrap',
                       (p.dayChangePct ?? 0) >= 0
                         ? 'bg-green-100 dark:bg-green-900/30 text-gain'
                         : 'bg-red-100 dark:bg-red-900/20 text-loss'
                     )}>
                       {(p.dayChangePct ?? 0) >= 0 ? '+' : ''}{(p.dayChangePct ?? 0).toFixed(2)}% today
                     </span>
-                    <p className={cn('text-sm font-semibold mt-1 tabular-nums', (p.dayChangeTotal ?? 0) >= 0 ? 'text-gain' : 'text-loss')}>
+                    <p className={cn('text-xs sm:text-sm font-semibold mt-1 tabular-nums', (p.dayChangeTotal ?? 0) >= 0 ? 'text-gain' : 'text-loss')}>
                       {(p.dayChangeTotal ?? 0) >= 0 ? '+' : ''}{formatCurrency(p.dayChangeTotal ?? 0)}
                     </p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="border-l-2 border-gain pl-3 py-1">
-                    <p className="text-xs text-gray-400 mb-1">Total returns</p>
-                    <p className={cn('text-base font-bold tabular-nums leading-tight', (p.totalPnl || 0) >= 0 ? 'text-gain' : 'text-loss')}>
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                  <div className="border-l-2 border-gain pl-2 sm:pl-3 py-1 min-w-0">
+                    <p className="text-[11px] sm:text-xs text-gray-400 mb-1">Total returns</p>
+                    <p className={cn('text-[13px] sm:text-base font-bold tabular-nums leading-tight', (p.totalPnl || 0) >= 0 ? 'text-gain' : 'text-loss')}>
                       {(p.totalPnl || 0) >= 0 ? '+' : ''}{formatCurrency(p.totalPnl || 0)}
                     </p>
-                    <p className={cn('text-xs font-medium tabular-nums', (p.totalPnl || 0) >= 0 ? 'text-gain' : 'text-loss')}>
+                    <p className={cn('text-[10px] sm:text-xs font-medium tabular-nums', (p.totalPnl || 0) >= 0 ? 'text-gain' : 'text-loss')}>
                       {(p.totalPnlPercent || 0) >= 0 ? '+' : ''}{(p.totalPnlPercent || 0).toFixed(2)}%
                     </p>
                   </div>
-                  <div className="border-l-2 border-gray-300 dark:border-gray-600 pl-3 py-1">
-                    <p className="text-xs text-gray-400 mb-1">Invested</p>
-                    <p className="text-base font-bold tabular-nums">{formatCurrency(p.investedValue || 0)}</p>
+                  <div className="border-l-2 border-gray-300 dark:border-gray-600 pl-2 sm:pl-3 py-1 min-w-0">
+                    <p className="text-[11px] sm:text-xs text-gray-400 mb-1">Invested</p>
+                    <p className="text-[13px] sm:text-base font-bold tabular-nums leading-tight">{formatCurrency(p.investedValue || 0)}</p>
                   </div>
-                  <div className="border-l-2 border-blue-400 pl-3 py-1">
-                    <p className="text-xs text-gray-400 mb-1">Available cash</p>
-                    <p className="text-base font-bold tabular-nums text-blue-500">{formatCurrency(p.balance || 0)}</p>
+                  <div className="border-l-2 border-blue-400 pl-2 sm:pl-3 py-1 min-w-0">
+                    <p className="text-[11px] sm:text-xs text-gray-400 mb-1">Available cash</p>
+                    <p className="text-[13px] sm:text-base font-bold tabular-nums leading-tight text-blue-500">{formatCurrency(p.balance || 0)}</p>
                   </div>
                 </div>
 
