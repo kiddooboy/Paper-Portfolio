@@ -14,6 +14,12 @@ const config: CapacitorConfig = {
       backgroundColor: '#000000',
       showSpinner: false,
     },
+    FirebaseAuthentication: {
+      // Native Google sign-in for the Android app (the in-WebView web flow is
+      // blocked by Google). Uses the OAuth client from google-services.json.
+      skipNativeAuth: false,
+      providers: ['google.com'],
+    },
   },
 };
 

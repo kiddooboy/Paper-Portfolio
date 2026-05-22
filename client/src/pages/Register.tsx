@@ -1,8 +1,9 @@
 ﻿import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { signInWithPopup, signInWithRedirect, getRedirectResult } from 'firebase/auth';
-import { auth, googleProvider, preferRedirect } from '../lib/firebase';
+import { getRedirectResult } from 'firebase/auth';
+import { auth } from '../lib/firebase';
+import { googleSignIn } from '../lib/googleAuth';
 import { useAuthStore } from '../store/authStore';
 import { bootstrap } from '../store/bootstrap';
 import { Eye, EyeOff } from 'lucide-react';
@@ -49,14 +50,8 @@ export default function Register() {
   const handleGoogleSignIn = async () => {
     setLoading(true);
     try {
-      // On mobile, popups are unreliable — go straight to the redirect flow.
-      if (preferRedirect) {
-        await signInWithRedirect(auth, googleProvider);
-        return; // page navigates away; loading stays true
-      }
-      // Desktop: popup is instant and works on most browsers
-      const result = await signInWithPopup(auth, googleProvider);
-      const idToken = await result.user.getIdToken();
+      const idToken = await googleSignIn();
+      if (!idToken) return; // web redirect started; getRedirectResult finishes it
       const res = await axios.post('/api/auth/firebase', { idToken });
       login(res.data.user);
       await bootstrap();
@@ -64,20 +59,9 @@ export default function Register() {
       navigate('/dashboard');
     } catch (err: any) {
       const code: string = err?.code || '';
-      console.error('[google-auth popup]', code, err?.message);
-
-      if (code === 'auth/popup-blocked' || code === 'auth/popup-closed-by-user') {
-        // Popup was blocked — fall back to redirect flow
-        try {
-          await signInWithRedirect(auth, googleProvider);
-          return; // page navigates away, loading stays true
-        } catch (redirectErr: any) {
-          console.error('[google-auth redirect]', redirectErr?.code, redirectErr?.message);
-          toast.error('Google sign-in failed. Try allowing popups or use a different browser.');
-        }
-      } else if (code === 'auth/unauthorized-domain') {
+      console.error('[google-auth]', code, err?.message);
+      if (code === 'auth/unauthorized-domain') {
         const host = window.location.hostname;
-        console.error('[google-auth] unauthorized domain:', host, '— add this to Firebase Console → Authentication → Authorized domains');
         toast.error(`Domain "${host}" is not authorized. Admin: add it to Firebase → Authentication → Authorized domains.`);
       } else if (err?.response?.data?.error) {
         toast.error(err.response.data.error);
