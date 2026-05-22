@@ -10,7 +10,7 @@ import GlobalSearch from './GlobalSearch';
 import SetMpinModal from './SetMpinModal';
 import IdleLock from './IdleLock';
 import ProductTour from './ProductTour';
-import { Bell, TrendingUp, Moon, Sun, ListOrdered, BarChart3, LogOut, ChevronRight, User, Check, ShoppingBag, TrendingDown, Info, ShieldCheck, Wallet, Triangle } from 'lucide-react';
+import { Bell, TrendingUp, Moon, Sun, ListOrdered, BarChart3, LogOut, ChevronRight, User, Check, ShoppingBag, TrendingDown, Info, ShieldCheck, Wallet, Triangle, Menu, X } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 
 export default function Layout() {
@@ -25,7 +25,11 @@ export default function Layout() {
   const fetchNotifications = useNotificationsStore((s) => s.fetch);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [tourOpen, setTourOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const setUser = useAuthStore((s) => s.setUser);
+
+  // Close the mobile nav drawer whenever the route changes.
+  useEffect(() => { setMobileNavOpen(false); }, [location.pathname]);
 
   // Auto-start the product tour ONLY for first-time users — i.e. brand-new
   // accounts whose server-side `tour_seen` flag is false. Existing users were
@@ -89,7 +93,17 @@ export default function Layout() {
   return (
     <div className={cn('min-h-screen bg-gray-50 dark:bg-groww-dark text-gray-900 dark:text-groww-text transition-colors', dark ? 'dark' : '')}>
       <div className="sticky top-0 z-50">
-        <header className="bg-white/95 dark:bg-groww-dark/95 backdrop-blur border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center gap-4">
+        <header className="bg-white/95 dark:bg-groww-dark/95 backdrop-blur border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center gap-3 sm:gap-4">
+          {/* Hamburger — opens the full nav drawer (mobile/tablet only) */}
+          {!isFullscreen && (
+            <button
+              onClick={() => setMobileNavOpen(true)}
+              className="lg:hidden p-2 -ml-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200"
+              aria-label="Open menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+          )}
           <div className="flex items-center gap-2 shrink-0">
             <TrendingUp className="w-6 h-6 text-groww-primary" />
             <span className="font-bold text-lg tracking-tight hidden sm:inline">Paper Portfolio</span>
@@ -153,6 +167,45 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {/* ── Mobile navigation drawer (full nav for mweb / tablet) ── */}
+      {!isFullscreen && (
+        <div className={cn('fixed inset-0 z-[60] lg:hidden', mobileNavOpen ? '' : 'pointer-events-none')}>
+          {/* backdrop */}
+          <div
+            className={cn('absolute inset-0 bg-black/50 transition-opacity duration-300', mobileNavOpen ? 'opacity-100' : 'opacity-0')}
+            onClick={() => setMobileNavOpen(false)}
+          />
+          {/* panel */}
+          <div
+            className={cn(
+              'absolute left-0 top-0 h-full w-72 max-w-[82%] bg-white dark:bg-groww-card border-r border-gray-200 dark:border-gray-800 shadow-2xl flex flex-col transition-transform duration-300 ease-out',
+              mobileNavOpen ? 'translate-x-0' : '-translate-x-full'
+            )}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800 shrink-0">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-groww-primary" />
+                <span className="font-bold tracking-tight">Paper Portfolio</span>
+              </div>
+              <button
+                onClick={() => setMobileNavOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500"
+                aria-label="Close menu"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            {/* Full nav — close drawer when any link is tapped */}
+            <div
+              className="flex-1 overflow-y-auto"
+              onClick={(e) => { if ((e.target as HTMLElement).closest('a')) setMobileNavOpen(false); }}
+            >
+              <Sidebar activePath={location.pathname} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {isAuthenticated && user?.has_mpin === false && <SetMpinModal />}
       <IdleLock />
