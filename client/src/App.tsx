@@ -3,6 +3,7 @@ import { useEffect, lazy, Suspense } from 'react';
 import Layout from './components/Layout';
 import { useAuthStore } from './store/authStore';
 import { bootstrap, teardown, installFocusRevalidation } from './store/bootstrap';
+import { useNativeShell } from './lib/nativeShell';
 
 // ── Critical path: load eagerly (these pages are hit immediately on first visit) ──
 import LandingPage    from './pages/LandingPage';
@@ -48,6 +49,7 @@ function PageLoader() {
 
 function App() {
   const hydrated = useAuthStore((s) => s.hydrated);
+  useNativeShell();
 
   useEffect(() => {
     if (!hydrated) return;
