@@ -99,9 +99,9 @@ A modern paper trading platform with real-time market data, MPIN authentication,
    ```
 
 4. **Database Setup**
-   - PostgreSQL database required (provide connection string via DATABASE_URL)
-   - Schema is created automatically on first run
-   - For local development, you can use a local PostgreSQL instance or a cloud service like Render PostgreSQL, Supabase, or Neon
+   - Uses the built-in SQLite database (Node's `node:sqlite`) — no external DB needed
+   - The database file is created automatically on first run (default: `server/data/papertrading.db`; override with `DB_PATH`)
+   - Schema and migrations run automatically on startup
 
 ### Running the Application
 

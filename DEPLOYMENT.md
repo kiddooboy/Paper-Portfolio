@@ -3,7 +3,7 @@
 ## Prerequisites
 - Node.js 18+ installed
 - Domain: paperportfolio.in
-- Hosting provider (VPS, Railway, Render, or similar)
+- Hosting provider (Amazon EC2 / VPS, Railway, or similar)
 - Git for version control
 
 ## Local Build Preparation
@@ -119,31 +119,59 @@ sudo certbot --nginx -d paperportfolio.in -d www.paperportfolio.in
 4. Add environment variables in Railway dashboard
 5. Configure custom domain in Railway settings
 
-### Option 3: Render (Recommended for PostgreSQL)
+### Option 3: Amazon EC2 + pm2 (current production)
 
-1. **Create PostgreSQL Database**:
-   - Go to Render dashboard → New → PostgreSQL
-   - Create a new PostgreSQL instance
-   - Copy the internal DATABASE_URL from the database dashboard
+The app runs on an EC2 instance under **pm2**, with **nginx** in front for TLS
+and reverse-proxy. The server serves both the API and the built React client
+(from `client/dist`), and uses the built-in SQLite database (file on disk).
 
-2. **Create Web Service** for the backend:
-   - Build Command: `cd server && npm install && npm run build`
-   - Start Command: `node dist/index.js`
-   - Add environment variables:
-     - `DATABASE_URL` (from PostgreSQL database)
-     - `JWT_SECRET` (generate with: `openssl rand -base64 32`)
-     - `ADMIN_EMAIL` (admin email)
-     - `ADMIN_PASSWORD` (admin password)
-     - `ADMIN_NAME` (admin display name)
+1. **On the instance** (Ubuntu), install Node 18+ and pm2:
+   ```bash
+   sudo apt update && sudo apt install -y nodejs npm
+   sudo npm i -g pm2
+   ```
 
-3. **Static Site** for the frontend (React build):
-   - Build Command: `cd client && npm install && npm run build`
-   - Publish Directory: `client/dist`
-   - Add environment variables as needed
+2. **Clone & build**:
+   ```bash
+   git clone <repo> Paper-Portfolio && cd Paper-Portfolio
+   cd client && npm install && npm run build && cd ..
+   cd server && npm install && npm run build && cd ..
+   ```
 
-4. Configure custom domain in Render dashboard
+3. **Configure `server/.env`** (gitignored — created once on the box; survives `git pull`):
+   ```env
+   NODE_ENV=production
+   PORT=5000
+   JWT_SECRET=<openssl rand -base64 32>
+   ADMIN_EMAIL=...
+   ADMIN_PASSWORD=...
+   ADMIN_NAME=...
+   # Firebase (Google sign-in). Either inline JSON …
+   FIREBASE_SERVICE_ACCOUNT={...service account json on one line...}
+   # … or a file path (checked first):
+   # GOOGLE_APPLICATION_CREDENTIALS=/home/ubuntu/Paper-Portfolio/server/firebase-service-account.json
+   # SMTP_* for password-reset OTP emails
+   ```
 
-**Note**: Using Render PostgreSQL provides persistent storage that survives redeploys, unlike the free tier ephemeral storage.
+4. **Start under pm2** (from the `server/` directory):
+   ```bash
+   cd server && pm2 start dist/index.js --name paper-portfolio
+   pm2 save && pm2 startup     # restart on reboot
+   ```
+
+5. **Update / redeploy** after pushing new code:
+   ```bash
+   git pull
+   cd client && npm install && npm run build && cd ..
+   cd server && npm install && npm run build && pm2 restart paper-portfolio
+   ```
+
+6. **nginx** reverse-proxies `paperportfolio.in` → `http://localhost:5000`, and
+   **certbot** issues the TLS cert (see Option 1 above for the nginx + certbot steps).
+
+**Note**: the SQLite database file lives on the instance's disk, so keep it on a
+persistent EBS volume and back it up. Don't run `git pull` in a way that wipes it
+(the `.db` files are gitignored, so they're safe from pulls).
 
 ## Domain Configuration
 
@@ -212,10 +240,10 @@ kill -9 <PID>
 ```
 
 ### Database Issues
-- PostgreSQL connection string must be set in DATABASE_URL environment variable
-- Ensure PostgreSQL database is accessible from your deployment environment
-- For Render, use the internal DATABASE_URL from your PostgreSQL database dashboard
-- Schema is created automatically on first run
+- Uses built-in SQLite — no external database or connection string needed
+- The DB file path defaults to `server/data/papertrading.db` (override with `DB_PATH`)
+- Keep the `.db` file on a persistent EBS volume and back it up
+- Schema and migrations run automatically on first run
 
 ### Build Errors
 - Clear node_modules and reinstall: `rm -rf node_modules && npm install`
