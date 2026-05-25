@@ -3,6 +3,7 @@ import { db } from '../db/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { getQuote, getCachedQuote, isMarketOpen } from '../services/marketData.js';
 import { computeCharges } from '../services/fees.js';
+import { pushToUser } from '../services/push.js';
 import { z } from 'zod';
 import { logActivity, getClientIp } from '../services/activityLogger.js';
 
@@ -562,13 +563,12 @@ export async function fillOrder(orderId: number, userId: number, symbolRaw: stri
       }
     }
 
+    const fillTitle = `Order Filled: ${transactionType} ${symbol}`;
+    const fillMsg = `Your ${transactionType} order for ${quantity} shares of ${symbol} has been executed at ₹${price.toFixed(2)}${targetNote}`;
     try {
-      db.prepare(`INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, 'order')`).run(
-        userId,
-        `Order Filled: ${transactionType} ${symbol}`,
-        `Your ${transactionType} order for ${quantity} shares of ${symbol} has been executed at ₹${price.toFixed(2)}${targetNote}`,
-      );
+      db.prepare(`INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, 'order')`).run(userId, fillTitle, fillMsg);
     } catch {}
+    pushToUser(userId, fillTitle, fillMsg, { type: 'order', symbol }).catch(() => {});
   });
 }
 

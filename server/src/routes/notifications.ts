@@ -1,8 +1,24 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { registerDevice, unregisterDevice } from '../services/push.js';
 
 const router = Router();
+
+// POST /api/notifications/register-device — store an FCM token for push
+router.post('/register-device', authMiddleware, (req: AuthRequest, res) => {
+  const { token, platform } = req.body || {};
+  if (!token || typeof token !== 'string') return res.status(400).json({ error: 'token required' });
+  registerDevice(req.user!.id, token, typeof platform === 'string' ? platform : undefined);
+  res.json({ success: true });
+});
+
+// POST /api/notifications/unregister-device — remove an FCM token (on logout)
+router.post('/unregister-device', authMiddleware, (req: AuthRequest, res) => {
+  const { token } = req.body || {};
+  if (token) unregisterDevice(token);
+  res.json({ success: true });
+});
 
 // GET /api/notifications — Notification Center inbox
 // Query params: type, read (0|1), symbol, days, limit, offset

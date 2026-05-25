@@ -57,6 +57,8 @@ function App() {
       useAuthStore.getState().setInitialized();
       if (useAuthStore.getState().isAuthenticated) {
         installFocusRevalidation();
+        // Register this device for push notifications (native app only)
+        import('./lib/push').then((m) => m.initPush()).catch(() => {});
       } else {
         teardown();
       }

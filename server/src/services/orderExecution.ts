@@ -3,6 +3,7 @@ import { getCachedQuote, isMarketOpen } from './marketData.js';
 import { fillOrder } from '../routes/orders.js';
 import { logActivity } from './activityLogger.js';
 import { executeDueSIPs } from '../routes/sip.js';
+import { pushToUser } from './push.js';
 
 interface PendingOrder {
   id: number;
@@ -27,6 +28,8 @@ async function notify(userId: number, title: string, message: string, type: 'ord
   try {
     db.prepare(`INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)`).run(userId, title, message, type);
   } catch {}
+  // Deliver as a device push too (best-effort; no-op without device tokens)
+  pushToUser(userId, title, message, { type }).catch(() => {});
 }
 
 async function failOrder(order: PendingOrder, reason: string) {

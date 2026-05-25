@@ -382,6 +382,19 @@ export async function initSchema() {
     }
   }
 
+  // Push notifications — FCM device tokens per user
+  safeExec(`
+    CREATE TABLE IF NOT EXISTS device_tokens (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token       TEXT NOT NULL UNIQUE,
+      platform    TEXT,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `, 'table: device_tokens');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_device_tokens_user ON device_tokens(user_id)`, 'index: device_tokens_user');
+
   // Learning Academy — per-user module progress
   safeExec(`
     CREATE TABLE IF NOT EXISTS learning_progress (
