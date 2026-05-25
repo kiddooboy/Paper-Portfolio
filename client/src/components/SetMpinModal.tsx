@@ -4,9 +4,11 @@ import toast from 'react-hot-toast';
 import { Lock, Eye, EyeOff } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuthStore } from '../store/authStore';
+import { enableBiometricMpin } from '../lib/biometric';
 
 export default function SetMpinModal() {
   const setHasMpin = useAuthStore((s) => s.setHasMpin);
+  const user = useAuthStore((s) => s.user);
   const [mpin, setMpin] = useState('');
   const [showMpin, setShowMpin] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -38,6 +40,7 @@ export default function SetMpinModal() {
     try {
       await axios.post('/api/auth/set-mpin', { mpin });
       setHasMpin();
+      try { await enableBiometricMpin(user?.email || localStorage.getItem('last_email') || '', mpin); } catch {}
       toast.success('MPIN set! You can now use it for quick login.');
     } catch (err: any) {
       toast.error(err?.response?.data?.error || 'Failed to set MPIN');

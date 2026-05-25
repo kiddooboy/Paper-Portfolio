@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { ArrowLeft, Lock, Eye, EyeOff } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuthStore } from '../store/authStore';
+import { enableBiometricMpin } from '../lib/biometric';
 
 export default function SetupMpinPage() {
   const [mpin, setMpin] = useState('');
@@ -43,6 +44,11 @@ export default function SetupMpinPage() {
     try {
       await axios.post('/api/auth/set-mpin', { mpin });
       setHasMpin();
+      // Enable Face ID / fingerprint unlock for next time (native app only)
+      try {
+        const email = useAuthStore.getState().user?.email || localStorage.getItem('last_email') || '';
+        await enableBiometricMpin(email, mpin);
+      } catch {}
       toast.success('MPIN set successfully');
       navigate('/dashboard');
     } catch (err: any) {

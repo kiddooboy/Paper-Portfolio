@@ -16,6 +16,7 @@
     "@capacitor/ios": "^8.3.4",
     "@capacitor/splash-screen": "^8.0.1",
     "@capacitor/status-bar": "^8.0.2",
+    "@capgo/capacitor-native-biometric": "^8.4.5",
     "axios": "^1.6.8",
     "clsx": "^2.1.0",
     "date-fns": "^3.6.0",

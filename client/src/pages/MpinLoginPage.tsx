@@ -2,11 +2,12 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { Lock, Eye, EyeOff } from 'lucide-react';
+import { Lock, Eye, EyeOff, ScanFace } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuthStore } from '../store/authStore';
 import { bootstrap } from '../store/bootstrap';
 import AuthLayout from '../components/AuthLayout';
+import { getBiometry, hasBiometricMpin, unlockWithBiometric, enableBiometricMpin } from '../lib/biometric';
 
 export default function MpinLoginPage() {
   const stored = typeof window !== 'undefined' ? localStorage.getItem('last_email') || '' : '';
@@ -14,6 +15,7 @@ export default function MpinLoginPage() {
   const [mpin, setMpin] = useState('');
   const [showMpin, setShowMpin] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [bio, setBio] = useState<{ available: boolean; label: string }>({ available: false, label: '' });
   const navigate = useNavigate();
   const login = useAuthStore((s) => s.login);
   const mpinInputRef = useRef<HTMLInputElement>(null);
@@ -46,6 +48,16 @@ export default function MpinLoginPage() {
     return () => clearTimeout(t);
   }, []);
 
+  const doLogin = async (loginEmail: string, loginMpin: string) => {
+    const res = await axios.post('/api/auth/login-mpin', { email: loginEmail, mpin: loginMpin });
+    login(res.data.user);
+    await bootstrap();
+    // Refresh the saved biometric credential on every successful MPIN login
+    enableBiometricMpin(loginEmail, loginMpin).catch(() => {});
+    toast.success('Welcome back!');
+    navigate('/dashboard');
+  };
+
   const handleSubmit = async () => {
     if (!email || mpin.length !== 4) {
       toast.error('Enter email and 4-digit MPIN');
@@ -53,17 +65,40 @@ export default function MpinLoginPage() {
     }
     setLoading(true);
     try {
-      const res = await axios.post('/api/auth/login-mpin', { email, mpin });
-      login(res.data.user);
-      await bootstrap();
-      toast.success('Welcome back!');
-      navigate('/dashboard');
+      await doLogin(email, mpin);
     } catch (err: any) {
       toast.error(err?.response?.data?.error || 'Invalid MPIN');
     } finally {
       setLoading(false);
     }
   };
+
+  const handleBiometric = async () => {
+    const creds = await unlockWithBiometric(`Sign in to Paper Portfolio`);
+    if (!creds) return; // cancelled / unavailable
+    setLoading(true);
+    try {
+      await doLogin(creds.email, creds.mpin);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Biometric sign-in failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // On mount: if biometrics + a saved credential exist, offer it and auto-prompt once.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const info = await getBiometry();
+      const enrolled = info.available && (await hasBiometricMpin());
+      if (cancelled || !enrolled) return;
+      setBio(info);
+      handleBiometric(); // auto-prompt Face ID / fingerprint
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <AuthLayout>
@@ -157,6 +192,17 @@ export default function MpinLoginPage() {
         >
           {loading ? 'Signing in...' : 'Sign in'}
         </button>
+
+        {bio.available && (
+          <button
+            onClick={handleBiometric}
+            disabled={loading}
+            className="w-full py-2.5 rounded-lg border border-groww-primary/40 text-groww-primary font-semibold flex items-center justify-center gap-2 hover:bg-groww-primary/5 transition disabled:opacity-50"
+          >
+            <ScanFace className="w-5 h-5" />
+            Unlock with {bio.label}
+          </button>
+        )}
 
         <div className="text-center text-sm text-gray-500 dark:text-gray-400">
           <Link to="/login" className="text-groww-primary font-medium hover:underline">

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import axios from 'axios';
 import { clearToken } from '../lib/authToken';
+import { clearBiometricMpin } from '../lib/biometric';
 
 interface User {
   id: number;
@@ -61,6 +62,7 @@ export const useAuthStore = create<AuthState>()(
         runLogoutCleanups();
         set({ user: null, isAuthenticated: false });
         clearToken();
+        clearBiometricMpin();
         axios.post('/api/auth/logout').catch(() => {});
       },
       updateBalance: (balance) => set((state) => ({

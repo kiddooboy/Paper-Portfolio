@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Lock } from 'lucide-react';
+import { Lock, ScanFace } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { cn } from '../lib/utils';
+import { getBiometry, hasBiometricMpin, unlockWithBiometric, enableBiometricMpin } from '../lib/biometric';
 
 const IDLE_LIMIT_MS = 30 * 60 * 1000; // 30 minutes
 const STORAGE_KEY = 'pp_last_active';
@@ -19,6 +20,7 @@ export default function IdleLock() {
   const [locked, setLocked] = useState(false);
   const [mpin, setMpin] = useState('');
   const [verifying, setVerifying] = useState(false);
+  const [bio, setBio] = useState<{ available: boolean; label: string }>({ available: false, label: '' });
   const mpinInputRef = useRef<HTMLInputElement>(null);
 
   // Activity tracking — only when authenticated user has an MPIN.
@@ -77,6 +79,32 @@ export default function IdleLock() {
     return () => clearTimeout(t);
   }, [locked]);
 
+  // When locked, offer biometric unlock and auto-prompt once.
+  useEffect(() => {
+    if (!locked) return;
+    let cancelled = false;
+    (async () => {
+      const info = await getBiometry();
+      const enrolled = info.available && (await hasBiometricMpin());
+      if (cancelled || !enrolled) return;
+      setBio(info);
+      handleBiometric();
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locked]);
+
+  async function handleBiometric() {
+    const creds = await unlockWithBiometric('Unlock Paper Portfolio');
+    if (!creds) return; // cancelled — fall back to MPIN
+    // Biometric is local identity proof; the session/JWT is still valid, so
+    // unlock locally without a round-trip.
+    recordActivity();
+    setLocked(false);
+    setMpin('');
+    toast.success('Welcome back!');
+  }
+
   async function verify() {
     if (!user?.email || mpin.length !== 4) return;
     setVerifying(true);
@@ -85,6 +113,8 @@ export default function IdleLock() {
       recordActivity();
       setLocked(false);
       setMpin('');
+      // keep the biometric credential fresh after a successful MPIN unlock
+      enableBiometricMpin(user.email, mpin).catch(() => {});
       toast.success('Welcome back!');
     } catch (err: any) {
       toast.error(err?.response?.data?.error || 'Invalid MPIN');
@@ -157,6 +187,16 @@ export default function IdleLock() {
         >
           {verifying ? 'Verifying…' : 'Unlock'}
         </button>
+
+        {bio.available && (
+          <button
+            onClick={handleBiometric}
+            className="w-full py-2.5 rounded-lg border border-groww-primary/40 text-groww-primary font-semibold flex items-center justify-center gap-2 hover:bg-groww-primary/5 transition"
+          >
+            <ScanFace className="w-5 h-5" />
+            Unlock with {bio.label}
+          </button>
+        )}
 
         <button
           onClick={() => { logout(); setLocked(false); window.location.href = '/login'; }}

@@ -41,6 +41,9 @@ workflows:
           # ios/ is generated on the Mac runner (it can't be created on Windows)
           [ -d ios ] || npx cap add ios
           npx cap sync ios
+          # Face ID needs a usage-description string or iOS denies it
+          /usr/libexec/PlistBuddy -c "Add :NSFaceIDUsageDescription string 'Use Face ID to unlock Paper Portfolio'" ios/App/App/Info.plist 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Set :NSFaceIDUsageDescription 'Use Face ID to unlock Paper Portfolio'" ios/App/App/Info.plist
 
       - name: Add Firebase config (GoogleService-Info.plist)
         script: |
