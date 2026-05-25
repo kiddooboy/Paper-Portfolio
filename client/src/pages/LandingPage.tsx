@@ -403,7 +403,7 @@ export default function LandingPage() {
           <div className="lp-hero-left">
             <div className="lp-hero-tag">India's Paper Trading Platform</div>
             <h1 className="lp-h1">Trade Smarter.<br /><span className="g">Zero Risk.</span><br /><span className="d">Real Experience.</span></h1>
-            <p className="lp-hero-desc">Practice NSE &amp; BSE trading with ₹5,00,000 virtual cash. Real market prices, real charts — without spending a single rupee.</p>
+            <p className="lp-hero-desc">Practice NSE &amp; BSE trading with ₹1,00,000 virtual cash. Real market prices, real charts — without spending a single rupee.</p>
             <div className="lp-hero-btns">
               <Link to="/register" className="lp-btn-big">
                 <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M7.5 1v13M1 7.5h13" stroke="#000" strokeWidth="2.5" strokeLinecap="round"/></svg>
@@ -514,7 +514,7 @@ export default function LandingPage() {
           <div className="lp-ey lp-reveal">Simple to Start</div>
           <h2 className="lp-sec-title lp-reveal">From signup to first trade in 2 minutes</h2>
           <div className="lp-steps">
-            <div className="lp-step lp-reveal"><div className="lp-step-n">1</div><div className="lp-step-t">Create Your Account</div><p className="lp-step-d">Sign up free. Get ₹5,00,000 virtual cash instantly. No wallet, no KYC, no credit card needed.</p></div>
+            <div className="lp-step lp-reveal"><div className="lp-step-n">1</div><div className="lp-step-t">Create Your Account</div><p className="lp-step-d">Sign up free. Get ₹1,00,000 virtual cash instantly. No wallet, no KYC, no credit card needed.</p></div>
             <div className="lp-step lp-reveal d1"><div className="lp-step-n">2</div><div className="lp-step-t">Search &amp; Analyse Stocks</div><p className="lp-step-d">Browse NSE &amp; BSE live. View charts, sector data, top gainers and losers to make your picks.</p></div>
             <div className="lp-step lp-reveal d2"><div className="lp-step-n">3</div><div className="lp-step-t">Trade &amp; Track Progress</div><p className="lp-step-d">Place orders, monitor your portfolio, and climb the leaderboard. Build confidence before going real.</p></div>
           </div>

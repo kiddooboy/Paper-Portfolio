@@ -5,7 +5,7 @@ import { formatCurrency, formatPercent, cn } from '../lib/utils';
 import { useMarketStore } from '../store/marketStore';
 import StockLogo from '../components/StockLogo';
 import DatePicker from '../components/DatePicker';
-import { TrendingUp, TrendingDown, ArrowUpRight, Search, ArrowDownUp } from 'lucide-react';
+import { Search, ArrowDownUp } from 'lucide-react';
 
 type SortKey = 'symbol' | 'qty' | 'invested' | 'avg' | 'current' | 'pnl' | 'pnl_pct' | 'day_change';
 type SortDir = 'asc' | 'desc';
@@ -199,15 +199,6 @@ export default function PositionsPage() {
 
   const totalPnlPercent = totals.invested > 0 ? (totals.pnl / totals.invested) * 100 : 0;
 
-  function handleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortKey(key);
-      setSortDir('desc');
-    }
-  }
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -269,38 +260,23 @@ export default function PositionsPage() {
         <DatePicker selectedDate={selectedDate} onDateChange={setSelectedDate} maxDate={new Date()} />
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white dark:bg-groww-card rounded-xl p-4 border border-gray-100 dark:border-gray-800">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-              <TrendingUp className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            </div>
-            <span className="text-sm font-medium text-gray-500">Invested</span>
-          </div>
-          <p className="text-2xl font-bold">{formatCurrency(totals.invested)}</p>
+      {/* Summary Cards — compact, fit 3-up even on phones */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="bg-white dark:bg-groww-card rounded-xl p-3 border border-gray-100 dark:border-gray-800 min-w-0">
+          <span className="text-[11px] font-medium text-gray-500">Invested</span>
+          <p className="text-base sm:text-xl font-bold tabular-nums leading-tight mt-1">{formatCurrency(totals.invested)}</p>
         </div>
-        <div className="bg-white dark:bg-groww-card rounded-xl p-4 border border-gray-100 dark:border-gray-800">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
-              <ArrowUpRight className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-            </div>
-            <span className="text-sm font-medium text-gray-500">Current Value</span>
-          </div>
-          <p className="text-2xl font-bold">{formatCurrency(totals.currentValue)}</p>
+        <div className="bg-white dark:bg-groww-card rounded-xl p-3 border border-gray-100 dark:border-gray-800 min-w-0">
+          <span className="text-[11px] font-medium text-gray-500">Current</span>
+          <p className="text-base sm:text-xl font-bold tabular-nums leading-tight mt-1">{formatCurrency(totals.currentValue)}</p>
         </div>
-        <div className="bg-white dark:bg-groww-card rounded-xl p-4 border border-gray-100 dark:border-gray-800">
-          <div className="flex items-center gap-2 mb-2">
-            <div className={cn('p-2 rounded-lg', totals.pnl >= 0 ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30')}>
-              {totals.pnl >= 0 ? <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" /> : <TrendingDown className="w-4 h-4 text-red-600 dark:text-red-400" />}
-            </div>
-            <span className="text-sm font-medium text-gray-500">Total P&L</span>
-          </div>
-          <p className={cn('text-2xl font-bold', totals.pnl >= 0 ? 'text-green-600' : 'text-red-500')}>
+        <div className="bg-white dark:bg-groww-card rounded-xl p-3 border border-gray-100 dark:border-gray-800 min-w-0">
+          <span className="text-[11px] font-medium text-gray-500">Total P&L</span>
+          <p className={cn('text-base sm:text-xl font-bold tabular-nums leading-tight mt-1', totals.pnl >= 0 ? 'text-green-600' : 'text-red-500')}>
             {totals.pnl >= 0 ? '+' : ''}{formatCurrency(totals.pnl)}
           </p>
-          <p className={cn('text-sm', totals.pnl >= 0 ? 'text-green-600' : 'text-red-500')}>
-            ({totalPnlPercent >= 0 ? '+' : ''}{formatPercent(totalPnlPercent)})
+          <p className={cn('text-[11px] tabular-nums', totals.pnl >= 0 ? 'text-green-600' : 'text-red-500')}>
+            {totalPnlPercent >= 0 ? '+' : ''}{formatPercent(totalPnlPercent)}
           </p>
         </div>
       </div>
@@ -339,71 +315,72 @@ export default function PositionsPage() {
         </div>
       </div>
 
-      {/* Positions Table */}
-      <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-100 dark:border-gray-800">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Stock</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800" onClick={() => handleSort('qty')}>
-                  Qty {sortKey === 'qty' && (sortDir === 'asc' ? '↑' : '↓')}
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800" onClick={() => handleSort('invested')}>
-                  Invested {sortKey === 'invested' && (sortDir === 'asc' ? '↑' : '↓')}
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800" onClick={() => handleSort('current')}>
-                  Current {sortKey === 'current' && (sortDir === 'asc' ? '↑' : '↓')}
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800" onClick={() => handleSort('pnl')}>
-                  P&L {sortKey === 'pnl' && (sortDir === 'asc' ? '↑' : '↓')}
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800" onClick={() => handleSort('pnl_pct')}>
-                  P&L % {sortKey === 'pnl_pct' && (sortDir === 'asc' ? '↑' : '↓')}
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800" onClick={() => handleSort('day_change')}>
-                  Day % {sortKey === 'day_change' && (sortDir === 'asc' ? '↑' : '↓')}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredPositions.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
-                    No positions found
-                  </td>
-                </tr>
-              ) : (
-                filteredPositions.map((position: any) => (
-                  <tr key={position.symbol} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
-                    <td className="px-4 py-3">
-                      <Link to={`/terminal/${position.symbol}?fullscreen=1`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3">
-                        <StockLogo symbol={position.symbol} size={40} />
-                        <div>
-                          <p className="font-medium text-sm">{position.name || position.symbol}</p>
-                          <p className="text-xs text-gray-500">{position.symbol}</p>
-                        </div>
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-right font-medium">{position.quantity}</td>
-                    <td className="px-4 py-3 text-right font-medium">{formatCurrency(position.invested)}</td>
-                    <td className="px-4 py-3 text-right font-medium">{formatCurrency(position.currentPrice)}</td>
-                    <td className={cn('px-4 py-3 text-right font-medium', position.pnl >= 0 ? 'text-green-600' : 'text-red-500')}>
-                      {position.pnl >= 0 ? '+' : ''}{formatCurrency(position.pnl)}
-                    </td>
-                    <td className={cn('px-4 py-3 text-right font-medium', position.pnlPercent >= 0 ? 'text-green-600' : 'text-red-500')}>
-                      {position.pnlPercent >= 0 ? '+' : ''}{formatPercent(position.pnlPercent)}
-                    </td>
-                    <td className={cn('px-4 py-3 text-right font-medium', position.dayChange >= 0 ? 'text-green-600' : 'text-red-500')}>
-                      {position.dayChange >= 0 ? '+' : ''}{formatPercent(position.dayChange)}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+      {/* Sort control */}
+      <div className="flex items-center gap-2 text-xs text-gray-500">
+        <span>Sort:</span>
+        <select
+          value={sortKey}
+          onChange={(e) => setSortKey(e.target.value as SortKey)}
+          className="px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs outline-none"
+        >
+          <option value="pnl">P&L</option>
+          <option value="pnl_pct">P&L %</option>
+          <option value="current">Current value</option>
+          <option value="invested">Invested</option>
+          <option value="qty">Quantity</option>
+          <option value="day_change">Day change</option>
+        </select>
+        <button
+          onClick={() => setSortDir(sortDir === 'asc' ? 'desc' : 'asc')}
+          className="px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+          title="Toggle sort direction"
+        >
+          {sortDir === 'asc' ? '↑ Asc' : '↓ Desc'}
+        </button>
       </div>
+
+      {/* Holdings — compact responsive cards */}
+      {filteredPositions.length === 0 ? (
+        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 py-12 text-center text-gray-500 text-sm">
+          No holdings found
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
+          {filteredPositions.map((position: any) => (
+            <Link
+              key={position.symbol}
+              to={`/terminal/${position.symbol}?fullscreen=1`}
+              target="_blank" rel="noopener noreferrer"
+              className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-3 hover:border-groww-primary/50 hover:shadow-sm transition block"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <StockLogo symbol={position.symbol} size={36} />
+                  <div className="min-w-0">
+                    <p className="font-semibold text-sm truncate">{position.symbol}</p>
+                    <p className="text-[11px] text-gray-500 truncate">
+                      {position.quantity} qty · Avg {formatCurrency(position.avg_buy_price || 0)}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="font-bold text-sm tabular-nums">{formatCurrency(position.currentValue)}</p>
+                  <p className={cn('text-[11px] font-medium tabular-nums', position.pnl >= 0 ? 'text-green-600' : 'text-red-500')}>
+                    {position.pnl >= 0 ? '+' : ''}{formatCurrency(position.pnl)} ({position.pnlPercent >= 0 ? '+' : ''}{formatPercent(position.pnlPercent)})
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100 dark:border-gray-800 text-[11px] text-gray-500">
+                <span>Invested <span className="tabular-nums text-gray-700 dark:text-gray-300">{formatCurrency(position.invested)}</span></span>
+                <span>LTP <span className="tabular-nums text-gray-700 dark:text-gray-300">{formatCurrency(position.currentPrice)}</span></span>
+                <span className={cn('tabular-nums font-medium', position.dayChange >= 0 ? 'text-green-600' : 'text-red-500')}>
+                  {position.dayChange >= 0 ? '+' : ''}{formatPercent(position.dayChange)} today
+                </span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
       </>
       )}
     </div>
