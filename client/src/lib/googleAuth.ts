@@ -13,7 +13,11 @@ import { auth, googleProvider, preferRedirect } from './firebase';
 export async function googleSignIn(): Promise<string | null> {
   if (Capacitor.isNativePlatform()) {
     const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
-    await FirebaseAuthentication.signInWithGoogle();
+    // useCredentialManager:false → classic Google Sign-In flow. The newer
+    // Credential Manager API isn't available on many devices/emulators
+    // ("device doesn't support credential manager"), so use the legacy flow
+    // which works wherever Google Play services are present.
+    await FirebaseAuthentication.signInWithGoogle({ useCredentialManager: false });
     const { token } = await FirebaseAuthentication.getIdToken();
     return token;
   }
