@@ -1,0 +1,98 @@
+{
+  "project_info": {
+    "project_number": "563092918942",
+    "project_id": "paperportfolio-4c978",
+    "storage_bucket": "paperportfolio-4c978.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:563092918942:android:c9311491d949bacdce618f",
+        "android_client_info": {
+          "package_name": "com.sccl.paperportfolio"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "563092918942-l8e3j8920eq059quaavptphe4enmmvg0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sccl.paperportfolio",
+            "certificate_hash": "2236f49ff65c5f28a8a54640b72cac870dbcb619"
+          }
+        },
+        {
+          "client_id": "563092918942-gtthtdn41p3p8ev2narfguaihn12f14m.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAiWMFGzBc-96Zn8OOXjYuESooL6RvWHHw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "563092918942-gtthtdn41p3p8ev2narfguaihn12f14m.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "563092918942-he30oi5oci40bhmveokcdb2g3phq7283.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.sccl.paperportfolio"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:563092918942:android:9d49720a8b6d95f0ce618f",
+        "android_client_info": {
+          "package_name": "in.paperportfolio.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "563092918942-l4hohul8qjm2t9fkss3ani2u69u5jdav.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "in.paperportfolio.app",
+            "certificate_hash": "8c43c27c34e4d5c2f4019781e73359b8f3f70896"
+          }
+        },
+        {
+          "client_id": "563092918942-gtthtdn41p3p8ev2narfguaihn12f14m.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAiWMFGzBc-96Zn8OOXjYuESooL6RvWHHw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "563092918942-gtthtdn41p3p8ev2narfguaihn12f14m.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "563092918942-he30oi5oci40bhmveokcdb2g3phq7283.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.sccl.paperportfolio"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
