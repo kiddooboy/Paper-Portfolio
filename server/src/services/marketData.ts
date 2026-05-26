@@ -36,7 +36,9 @@ export function getISTDate(): Date {
 }
 
 export function isMarketOpen(): boolean {
-  if (process.env.BYPASS_MARKET_HOURS !== 'false') return true;
+  // Opt-in bypass for the AI-Trade sandbox / UAT only. Production (flag unset)
+  // enforces real NSE hours so out-of-hours orders queue for the next open.
+  if (process.env.BYPASS_MARKET_HOURS === 'true') return true;
   const ist = getISTDate();
   const day = ist.getDay(); // 0=Sun, 6=Sat
   if (day === 0 || day === 6) return false;
