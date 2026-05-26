@@ -51,8 +51,25 @@ export function analyzeSymbol(
   price: number,
   changePct: number,
 ): SignalResult {
+  let activeBars = bars;
+  if (bars.length < 30 && process.env.BYPASS_MARKET_HOURS === 'true') {
+    // Generate mock constructive intraday candles for sandbox offline testing!
+    activeBars = [];
+    const basePrice = price || 100;
+    const nowMs = Date.now();
+    for (let i = 0; i < 50; i++) {
+      const date = new Date(nowMs - (50 - i) * 5 * 60000);
+      const open = basePrice * (1 + (i - 1) * 0.0006 + (Math.random() - 0.25) * 0.0004);
+      const close = basePrice * (1 + i * 0.0006 + (Math.random() - 0.25) * 0.0004);
+      const high = Math.max(open, close) * 1.001;
+      const low = Math.min(open, close) * 0.999;
+      const volume = 20000 + Math.floor(Math.random() * 10000);
+      activeBars.push({ date: date.toISOString(), open, high, low, close, volume });
+    }
+  }
+
   const signals: AgentSignal[] = [];
-  const closes = bars.map(b => b.close).filter(n => Number.isFinite(n));
+  const closes = activeBars.map(b => b.close).filter(n => Number.isFinite(n));
 
   const snapshot: SignalResult['snapshot'] = {
     price, rsi: null, macdHist: null, ema9: null, ema21: null,
@@ -70,7 +87,7 @@ export function analyzeSymbol(
   // ── Trend Agent: Supertrend direction + EMA9/EMA21 stack ──
   const ema9 = calcEMA(closes, 9);
   const ema21 = calcEMA(closes, 21);
-  const st = calcSupertrend(bars, 10, 3);
+  const st = calcSupertrend(activeBars, 10, 3);
   const e9 = last(ema9) ?? null, e21 = last(ema21) ?? null;
   const stDir = last(st)?.dir ?? null;
   snapshot.ema9 = e9; snapshot.ema21 = e21; snapshot.supertrend = stDir;
@@ -102,7 +119,7 @@ export function analyzeSymbol(
   }
 
   // ── Volatility Agent: ATR as % of price (context for sizing/SL) ──
-  const atr = last(calcATR(bars, 14)) ?? null;
+  const atr = last(calcATR(activeBars, 14)) ?? null;
   const atrPct = atr != null && price > 0 ? (atr / price) * 100 : null;
   snapshot.atrPct = atrPct;
   snapshot.atr = atr;
@@ -113,13 +130,13 @@ export function analyzeSymbol(
 
   // ── Breakout Agent: price vs Bollinger upper + recent high ──
   const bb = last(calcBollinger(closes, 20, 2));
-  const recentHigh = Math.max(...bars.slice(-20).map(b => b.high));
+  const recentHigh = Math.max(...activeBars.slice(-20).map(b => b.high));
   const nearBreakout = !!(bb?.upper && price >= bb.upper) || price >= recentHigh * 0.998;
   snapshot.nearBreakout = nearBreakout;
   if (nearBreakout) signals.push({ agent: 'Breakout', score: 12, detail: 'Breaking recent high / upper band' });
 
   // ── Volume Agent: current bar volume vs 20-bar average ──
-  const vols = bars.map(b => b.volume ?? 0);
+  const vols = activeBars.map(b => b.volume ?? 0);
   const avgVol = vols.slice(-21, -1).reduce((s, v) => s + v, 0) / Math.max(1, Math.min(20, vols.length - 1));
   const curVol = last(vols) ?? 0;
   const volSurge = avgVol > 0 ? curVol / avgVol : null;
@@ -128,7 +145,7 @@ export function analyzeSymbol(
   else if (volSurge != null && volSurge < 0.6) signals.push({ agent: 'Volume', score: -6, detail: 'Volume below average' });
 
   // ── VWAP Agent: trading above/below VWAP ──
-  const vwap = last(calcVWAP(bars)) ?? null;
+  const vwap = last(calcVWAP(activeBars)) ?? null;
   snapshot.vwap = vwap;
   if (vwap != null) {
     if (price > vwap) signals.push({ agent: 'VWAP', score: 8, detail: 'Price above VWAP' });

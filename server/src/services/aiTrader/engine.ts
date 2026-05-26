@@ -50,7 +50,7 @@ async function discoverCandidates(openSymbols: Set<string>, profile: RiskProfile
 
   // Prelim screen: liquid NSE names with constructive (not blown-out) intraday moves.
   const prelim = all
-    .filter(q => q.exchange === 'NSE' && q.price > 0 && q.volume > 50_000)
+    .filter(q => q.exchange === 'NSE' && q.price > 0 && (process.env.BYPASS_MARKET_HOURS === 'true' || q.volume > 50_000))
     .filter(q => !openSymbols.has(q.symbol))
     .filter(q => q.change_percent > -0.5 && q.change_percent < 7)
     .map(q => ({ q, screen: q.change_percent + Math.min(2, q.volume / 5_000_000) }))
