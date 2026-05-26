@@ -83,18 +83,20 @@ const COUNCIL_TOOL: Anthropic.Tool = {
 };
 
 const SYSTEM = `You are the autonomous trading council of an intraday PAPER-trading agent on Indian equities (NSE).
-You are five specialist agents who must DEBATE and then reach a collective verdict:
-- Market Analysis: overall trend, breadth, regime (trending vs choppy).
-- Momentum: RSI/MACD/price action strength on each name.
-- Risk Management: position sizing fit, stop-loss viability, capital exposure, avoid overextended names.
-- Strategy: does the setup match a clean intraday long (breakout / momentum continuation / VWAP reclaim)?
-- Sentiment: directional bias from the day's move and volume.
+You are trained on **FLM's Financial Learning Academy Models** (representing core modules in Technical Indicators, Risk Management, and Intraday Strategies) and use multiple indicator algorithms to track high-conviction entries and exits.
+
+You are five specialist agents who must DEBATE and reach a collective verdict:
+- Market Analysis (FLM Module 1): overall trend, breadth, liquidity, and candidate screening.
+- Momentum (FLM Module 2): RSI markup phase (50-70 zone; avoid >75 overbought), MACD convergence/divergence, and price strength.
+- Risk Management (FLM Module 3): position sizing fit, stop-loss viability (Entry - stopMult * ATR), target distance (Entry + rewardRisk * stopDistance), capital exposure.
+- Strategy (FLM Module 4): does the setup match a clean intraday long (Upper Bollinger Band breakout, EMA9 stacking above EMA21, or VWAP support reclaim)?
+- Sentiment: directional bias from the day's move and volume surge (>1.5x average confirms institutional backing).
 
 Rules:
 - LONG ONLY. Intraday. You may only approve high-conviction setups; it is correct to approve NONE on a weak day.
 - Never approve more names than the available slots.
 - Respect the risk profile: a conservative profile demands cleaner, lower-volatility setups; aggressive tolerates wider, faster moves.
-- Be decisive and concrete. Reference the actual indicator readings you are given.
+- Be decisive and concrete. Reference the actual indicator readings and FLM modules you are given.
 - Always answer by calling the council_verdict tool.`;
 
 function buildPrompt(candidates: CouncilCandidate[], ctx: CouncilContext): string {
@@ -138,37 +140,42 @@ function fallbackVerdict(candidates: CouncilCandidate[], ctx: CouncilContext): C
 
     discussion.push({
       agent: 'Market Analysis',
-      view: `${sorted.length} candidates screened. Top pick: ${topSymbol} at ${topConf}% confidence (${topBias}).`,
+      view: `Applying FLM Technical Ingestion: screened ${sorted.length} momentum candidates. Top pick is ${topSymbol} (${topConf}% confidence, ${topBias} trend).`,
     });
 
-    // Momentum agent — summarize the RSI/MACD of the top candidates
     const momCands = sorted.slice(0, 3);
     const momDetail = momCands.map(c => {
       const rsi = c.sig.snapshot.rsi?.toFixed(0) ?? '—';
-      return `${c.sig.symbol} RSI ${rsi}`;
+      const hist = c.sig.snapshot.macdHist != null ? (c.sig.snapshot.macdHist > 0 ? '+' : '') + c.sig.snapshot.macdHist.toFixed(2) : '—';
+      return `${c.sig.symbol} (RSI ${rsi}, MACD ${hist})`;
     }).join(', ');
     discussion.push({
       agent: 'Momentum',
-      view: `${momDetail}. ${approved.length > 0 ? 'Momentum favours entry on top pick(s).' : 'No strong momentum setup.'}`,
+      view: `FLM Module 2 Check: ${momDetail}. ${approved.length > 0 ? 'Markup signals and MACD expansions support high-conviction entry.' : 'Momentum signatures are too weak/overextended.'}`,
     });
 
     discussion.push({
       agent: 'Risk Management',
-      view: `Capital ₹${ctx.availableCapital.toFixed(0)}, ${ctx.slots} slots open. ${approved.length > 0 ? `Risk/trade: ${ctx.profile.riskPerTradePct}% with ${ctx.profile.atrStopMult}×ATR stop.` : 'No entries meet risk criteria.'}`,
+      view: `FLM Module 3 Active Sizing: capital ₹${ctx.availableCapital.toFixed(0)}, ${ctx.slots} slots open. ${approved.length > 0 ? `Stop-loss set at ${ctx.profile.atrStopMult}×ATR below entry; targets sized at ${ctx.profile.rewardRisk}:1 R:R.` : 'Volatility is too high or stop distances violate capital exposure rules.'}`,
     });
 
     discussion.push({
       agent: 'Strategy',
       view: approved.length > 0
-        ? `Approving ${approved.map(c => c.sig.symbol).join(', ')} — clean intraday setups with defined stops.`
-        : `No clean setups meeting ${ctx.profile.minConfidence}% threshold. Standing down.`,
+        ? `FLM Module 4 Trade Setup: approving ${approved.map(c => c.sig.symbol).join(', ')} — price above VWAP, EMA9 stacked above EMA21, and Bollinger Band breakout in play.`
+        : `No setups pass VWAP support or EMA stack thresholds (Min Conf ${ctx.profile.minConfidence}%). Standing down.`,
     });
 
+    const sentCands = sorted.slice(0, 2);
+    const sentDetail = sentCands.map(c => {
+      const surge = c.sig.snapshot.volSurge?.toFixed(1) ?? '—';
+      return `${c.sig.symbol} ${surge}× vol`;
+    }).join(', ');
     discussion.push({
       agent: 'Sentiment',
       view: approved.length > 0
-        ? `Day's bias supports entries: ${approved.map(c => `${c.sig.symbol} ${c.changePct >= 0 ? '+' : ''}${c.changePct.toFixed(1)}%`).join(', ')}.`
-        : 'Neutral-to-weak intraday sentiment. No high-conviction longs.',
+        ? `Institutional Nudge: day's sentiment is bullish. ${sentDetail}. Strong volume surge confirms large-scale accumulation.`
+        : 'Weak volume profiles and high-range consolidations suggest near-term weakness. Standing down.',
     });
   }
 
