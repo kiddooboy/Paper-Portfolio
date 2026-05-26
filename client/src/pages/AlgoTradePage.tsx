@@ -148,248 +148,424 @@ export default function AlgoTradePage() {
   const halted = !!cfg.kill_switch;
 
   return (
-    <div className="space-y-4 max-w-6xl mx-auto pb-8">
+    <div className="space-y-6 max-w-[1400px] mx-auto px-4 pb-12">
       {/* ── Header ── */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
           <div className="relative">
-            <div className={cn('w-11 h-11 rounded-2xl flex items-center justify-center',
-              enabled ? 'bg-groww-primary' : 'bg-gray-100 dark:bg-gray-800')}>
-              <Bot className={cn('w-6 h-6', enabled ? 'text-white' : 'text-groww-primary')} />
+            <div className={cn('w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300 shadow-sm',
+              enabled ? 'bg-groww-primary shadow-groww-primary/20 scale-105' : 'bg-gray-100 dark:bg-gray-800')}>
+              <Bot className={cn('w-6.5 h-6.5 transition-transform duration-500', enabled ? 'text-white rotate-12' : 'text-groww-primary')} />
             </div>
-            {enabled && <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-gain animate-pulse ring-2 ring-white dark:ring-groww-dark" />}
+            {enabled && <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-gain animate-pulse ring-2 ring-white dark:ring-groww-dark" />}
           </div>
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">AI Trade
-              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-groww-primary/10 text-groww-primary border border-groww-primary/30">Autonomous</span>
+            <h1 className="text-2xl font-bold flex items-center gap-2 tracking-tight text-gray-900 dark:text-white">
+              AI Command Center
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-groww-primary/10 text-groww-primary border border-groww-primary/20">
+                Fully Autonomous
+              </span>
             </h1>
-            <p className="text-sm text-gray-500 mt-0.5">Multi-agent council finds, trades & manages intraday positions on its own</p>
+            <p className="text-sm text-gray-500 mt-0.5">Autonomous intraday trading bot driven by a multi-agent Claude council</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <button onClick={killSwitch}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-loss/10 text-loss border border-loss/30 text-sm font-semibold hover:bg-loss/20 transition">
-            <ShieldAlert className="w-4 h-4" /> Kill Switch
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-loss/10 text-loss border border-loss/20 text-sm font-semibold hover:bg-loss/20 active:scale-95 transition-all duration-200">
+            <ShieldAlert className="w-4.5 h-4.5" /> Force Kill Switch
           </button>
           <button onClick={toggleAi}
-            className={cn('flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition text-white hover:brightness-110',
-              enabled ? 'bg-gain' : 'bg-groww-primary')}>
-            <Power className="w-4 h-4" /> {enabled ? 'AI Active' : 'Activate AI'}
+            className={cn('flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold active:scale-95 transition-all duration-200 text-white shadow-sm hover:brightness-105',
+              enabled ? 'bg-gain shadow-gain/20' : 'bg-groww-primary shadow-groww-primary/20')}>
+            <Power className="w-4.5 h-4.5" /> {enabled ? 'Deactivate Bot' : 'Activate Trading Bot'}
           </button>
         </div>
       </div>
 
       {halted && (
-        <div className="flex items-center gap-2 text-sm bg-loss/10 border border-loss/30 text-loss rounded-xl px-4 py-2.5">
-          <AlertTriangle className="w-4 h-4 shrink-0" /> Kill switch is engaged. Re-activate AI to resume autonomous trading.
+        <div className="flex items-center gap-2.5 text-sm bg-loss/10 border border-loss/20 text-loss rounded-xl px-4 py-3 animate-fade-in">
+          <AlertTriangle className="w-4.5 h-4.5 shrink-0" />
+          <span className="font-medium">Kill switch has been engaged manually. Re-activate AI to resume autonomous trading.</span>
         </div>
       )}
 
       {/* ── Top stat bar ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <StatCard icon={Wallet} label="Wallet Balance" value={formatCurrency(state?.wallet_balance ?? 0)} tone="default" />
         <StatCard icon={CircleDollarSign} label="Active Capital" value={formatCurrency(state?.active_capital ?? 0)} tone="primary" />
         <StatCard icon={Activity} label="Daily P&L"
           value={`${(state?.daily_pnl ?? 0) >= 0 ? '+' : ''}${formatCurrency(state?.daily_pnl ?? 0)}`}
           tone={(state?.daily_pnl ?? 0) >= 0 ? 'gain' : 'loss'} />
-        <StatCard icon={Layers} label="Open Trades" value={String(state?.open_trades ?? 0)}
-          sub={`${state?.trades_today ?? 0}/${state?.max_trades_per_day ?? 0} today`} tone="default" />
+        <StatCard icon={Layers} label="Open Positions" value={String(state?.open_trades ?? 0)}
+          sub={`${state?.trades_today ?? 0}/${state?.max_trades_per_day ?? 0} trades today`} tone="default" />
         <AgentStatusCard status={state?.status ?? 'Off'} enabled={enabled} />
       </div>
 
-      {/* ── Main split ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,320px)_1fr] gap-4">
-        {/* LEFT — Capital + Risk only */}
-        <div className="space-y-4">
-          <Panel title="Capital Allocation" icon={CircleDollarSign}>
-            <label className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Capital to deploy (₹)</label>
-            <input type="number" min={0} step={1000}
-              value={cfg.capital_amount ?? ''}
-              placeholder={`${Math.round((state?.wallet_balance ?? 0) * cfg.allocation_pct / 100)}`}
-              onChange={e => setCfg({ ...cfg, capital_amount: e.target.value ? parseFloat(e.target.value) : null })}
-              onBlur={e => patch({ capital_amount: e.target.value ? parseFloat(e.target.value) : null })}
-              className="w-full mt-1 px-3 py-2 text-sm tabular-nums rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30" />
-            <p className="text-[11px] text-gray-500 mt-1.5">
-              Leave blank to use {cfg.allocation_pct}% of wallet. Available: {formatCurrency(state?.wallet_balance ?? 0)}
-            </p>
-          </Panel>
-
-          <Panel title="Risk Category" icon={ShieldCheck}>
-            <div className="space-y-2">
-              {RISK_ORDER.map(r => {
-                const pr = profiles?.[r];
-                const active = cfg.risk_level === r;
-                return (
-                  <button key={r} onClick={() => patch({ risk_level: r })}
-                    className={cn('w-full text-left rounded-xl border p-3 transition',
-                      active ? 'border-groww-primary bg-groww-primary/5' : 'border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700')}>
-                    <div className="flex items-center justify-between">
-                      <span className={cn('font-bold text-sm', active ? 'text-groww-primary' : 'text-gray-700 dark:text-gray-200')}>{pr?.label ?? r}</span>
-                      {active && <span className="text-[10px] font-bold text-groww-primary">SELECTED</span>}
-                    </div>
-                    {pr && (
-                      <div className="grid grid-cols-2 gap-x-2 gap-y-1 mt-2 text-[10px] text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-800/60 pt-2">
-                        <span className="flex items-center gap-1">💰 Risk/Trade: <strong className="text-gray-700 dark:text-gray-300 font-semibold">{pr.riskPerTradePct}%</strong></span>
-                        <span className="flex items-center gap-1">🛡 Stop: <strong className="text-gray-700 dark:text-gray-300 font-semibold">{pr.atrStopMult}× ATR</strong></span>
-                        <span className="flex items-center gap-1">🎯 R:R Ratio: <strong className="text-gray-700 dark:text-gray-300 font-semibold">{pr.rewardRisk}:1</strong></span>
-                        <span className="flex items-center gap-1">📉 Trailing: <strong className="text-gray-700 dark:text-gray-300 font-semibold">{pr.trailAtrMult}× ATR</strong></span>
-                        <span className="flex items-center gap-1">📦 Max Slots: <strong className="text-gray-700 dark:text-gray-300 font-semibold">{pr.maxPositions}</strong></span>
-                        <span className="flex items-center gap-1">⚡ Max/Day: <strong className="text-gray-700 dark:text-gray-300 font-semibold">{pr.maxTradesPerDay}</strong></span>
-                        <span className="flex items-center gap-1">📊 Min Conf: <strong className="text-gray-700 dark:text-gray-300 font-semibold">{pr.minConfidence}%</strong></span>
-                        <span className="flex items-center gap-1">🔒 Position Cap: <strong className="text-gray-700 dark:text-gray-300 font-semibold">{pr.maxPositionPct}%</strong></span>
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </Panel>
-
-          <Panel title="Advanced Autonomy Settings" icon={Bot}>
-            <div className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Min Confidence (%)</label>
-                  <input type="number" min={40} max={95} step={1}
-                    value={cfg.min_confidence ?? ''}
-                    onChange={e => setCfg({ ...cfg, min_confidence: e.target.value ? parseInt(e.target.value) : 60 })}
-                    onBlur={e => patch({ min_confidence: e.target.value ? parseInt(e.target.value) : 60 })}
-                    className="w-full mt-1 px-3 py-2 text-sm tabular-nums rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30" />
-                </div>
-                <div>
-                  <label className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Max Trades/Day</label>
-                  <input type="number" min={1} max={50} step={1}
-                    value={cfg.max_trades_per_day ?? ''}
-                    onChange={e => setCfg({ ...cfg, max_trades_per_day: e.target.value ? parseInt(e.target.value) : 10 })}
-                    onBlur={e => patch({ max_trades_per_day: e.target.value ? parseInt(e.target.value) : 10 })}
-                    className="w-full mt-1 px-3 py-2 text-sm tabular-nums rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30" />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Daily Loss Limit (₹)</label>
-                <input type="number" min={0} step={500}
-                  value={cfg.max_daily_loss ?? ''}
-                  placeholder="No Limit"
-                  onChange={e => setCfg({ ...cfg, max_daily_loss: e.target.value ? parseFloat(e.target.value) : null })}
-                  onBlur={e => patch({ max_daily_loss: e.target.value ? parseFloat(e.target.value) : null })}
-                  className="w-full mt-1 px-3 py-2 text-sm tabular-nums rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30" />
-                <p className="text-[9px] text-gray-500 mt-1">Stops bot for the day once realized loss hits this cap.</p>
-              </div>
-
-              <div className="border-t border-gray-100 dark:border-gray-800/60 pt-3 space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Trading Window</span>
-                  <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">{cfg.session_start} - {cfg.session_end} IST</span>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[9px] uppercase tracking-wide text-gray-400 font-semibold">Start Time</label>
-                    <input type="time"
-                      value={cfg.session_start}
-                      onChange={e => setCfg({ ...cfg, session_start: e.target.value })}
-                      onBlur={e => patch({ session_start: e.target.value })}
-                      className="w-full mt-1 px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30 cursor-pointer" />
-                  </div>
-                  <div>
-                    <label className="text-[9px] uppercase tracking-wide text-gray-400 font-semibold">End Time</label>
-                    <input type="time"
-                      value={cfg.session_end}
-                      onChange={e => setCfg({ ...cfg, session_end: e.target.value })}
-                      onBlur={e => patch({ session_end: e.target.value })}
-                      className="w-full mt-1 px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30 cursor-pointer" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t border-gray-100 dark:border-gray-800/60 pt-3">
-                <div className="flex justify-between items-center gap-3">
-                  <div>
-                    <label className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold flex items-center gap-1">Auto Square-Off</label>
-                    <p className="text-[9px] text-gray-500">Closes open positions at market price.</p>
-                  </div>
-                  <input type="time"
-                    value={cfg.squareoff_time}
-                    onChange={e => setCfg({ ...cfg, squareoff_time: e.target.value })}
-                    onBlur={e => patch({ squareoff_time: e.target.value })}
-                    className="w-32 px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30 cursor-pointer" />
-                </div>
-              </div>
-            </div>
-          </Panel>
-
-          <div className="flex items-start gap-2 text-[11px] text-gray-500 bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 rounded-xl px-3 py-2.5">
-            <Bot className="w-3.5 h-3.5 shrink-0 mt-0.5 text-groww-primary" />
-            <span>Set capital & risk, then activate. The agent scans the whole market itself, the council deliberates, and it trades & manages exits autonomously.</span>
-          </div>
+      {/* ── Section 1: Autonomous Control Center (Full Width) ── */}
+      <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-5 lg:p-6 space-y-6 shadow-sm">
+        <div className="flex items-center gap-2.5 border-b border-gray-100 dark:border-gray-800 pb-3">
+          <Bot className="w-5 h-5 text-groww-primary" />
+          <h2 className="text-base font-bold text-gray-800 dark:text-gray-100">Autonomous Settings & Limits</h2>
         </div>
 
-        {/* RIGHT — Council Console + Open Positions */}
-        <div className="space-y-4">
-          {/* Live console */}
-          <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-gray-800">
-              <div className="flex items-center gap-2 text-sm font-bold text-gray-700 dark:text-gray-200">
-                <Terminal className="w-4 h-4 text-groww-primary" /> Agent Console
-              </div>
-              <span className={cn('flex items-center gap-1.5 text-[11px] font-medium',
-                enabled ? 'text-groww-primary' : 'text-gray-400')}>
-                <span className={cn('w-1.5 h-1.5 rounded-full', enabled ? 'bg-gain animate-pulse' : 'bg-gray-400')} />
-                {enabled ? 'LIVE' : 'IDLE'}
-              </span>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Col 1: Capital & Risk Selection */}
+          <div className="space-y-5">
+            <div>
+              <label className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500 font-bold flex items-center gap-1.5 mb-1.5">
+                <CircleDollarSign className="w-3.5 h-3.5 text-groww-primary" /> Capital Allocation Limit (₹)
+              </label>
+              <input type="number" min={0} step={1000}
+                value={cfg.capital_amount ?? ''}
+                placeholder={`${Math.round((state?.wallet_balance ?? 0) * cfg.allocation_pct / 100)}`}
+                onChange={e => setCfg({ ...cfg, capital_amount: e.target.value ? parseFloat(e.target.value) : null })}
+                onBlur={e => patch({ capital_amount: e.target.value ? parseFloat(e.target.value) : null })}
+                className="w-full px-3.5 py-2.5 text-sm tabular-nums rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30 transition-all duration-200 font-medium" />
+              <p className="text-[10px] text-gray-500 dark:text-gray-450 mt-1.5 leading-relaxed">
+                Enter flat cash cap. Leave blank to default to {cfg.allocation_pct}% of wallet. Available: {formatCurrency(state?.wallet_balance ?? 0)}
+              </p>
             </div>
-            <div ref={consoleRef} className="h-[420px] overflow-y-auto px-4 py-3 font-mono text-xs space-y-1 bg-gray-50 dark:bg-groww-dark">
-              {logs.length === 0 ? (
-                <p className="text-gray-400 dark:text-gray-600">{enabled ? 'Waiting for the next market scan…' : 'Activate AI to start the engine. The agent council\'s deliberation will stream here in real time.'}</p>
-              ) : logs.map(l => (
-                <div key={l.id} className="flex gap-2 leading-relaxed">
-                  <span className="text-gray-400 dark:text-gray-600 shrink-0">{new Date(l.created_at + 'Z').toLocaleTimeString('en-IN', { hour12: false })}</span>
-                  {l.agent && <span className="text-gray-400 dark:text-gray-500 shrink-0">[{l.agent}]</span>}
-                  <span className={LEVEL_STYLE[l.level] ?? 'text-gray-600 dark:text-gray-300'}>{l.message}</span>
-                </div>
-              ))}
-            </div>
-          </div>
 
-          {/* Open positions */}
-          <Panel title={`Open Positions (${positions.length})`} icon={Layers}>
-            {positions.length === 0 ? (
-              <p className="text-sm text-gray-500 py-4 text-center">No open AI positions.</p>
-            ) : (
-              <div className="space-y-2">
-                {positions.map(p => {
-                  const pnl = p.unrealized_pnl ?? 0;
+            <div>
+              <label className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500 font-bold flex items-center gap-1.5 mb-2">
+                <ShieldCheck className="w-3.5 h-3.5 text-groww-primary" /> Risk Profile Category
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {RISK_ORDER.map(r => {
+                  const pr = profiles?.[r];
+                  const active = cfg.risk_level === r;
                   return (
-                    <div key={p.id} className="flex items-center gap-3 rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 px-3 py-2.5">
-                      <StockLogo symbol={p.symbol} size={32} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-sm">{p.symbol}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-groww-primary/10 text-groww-primary">conf {p.confidence}%</span>
-                        </div>
-                        <p className="text-[11px] text-gray-500">
-                          {p.quantity} @ ₹{p.entry_price.toFixed(2)} · SL ₹{p.stop_loss.toFixed(2)} · TGT ₹{p.target.toFixed(2)}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs text-gray-500 tabular-nums">₹{(p.current_price ?? p.entry_price).toFixed(2)}</p>
-                        <p className={cn('text-sm font-bold tabular-nums', pnl >= 0 ? 'text-gain' : 'text-loss')}>
-                          {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}
-                        </p>
-                      </div>
-                    </div>
+                    <button key={r} onClick={() => patch({ risk_level: r })}
+                      className={cn('text-center rounded-xl border py-3 px-2 transition-all duration-300 flex flex-col items-center justify-center gap-1.5',
+                        active
+                          ? 'border-groww-primary bg-groww-primary/5 text-groww-primary shadow-sm shadow-groww-primary/5 font-bold scale-[1.02]'
+                          : 'border-gray-250 dark:border-gray-800 text-gray-500 hover:border-gray-300 dark:hover:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/40 font-medium'
+                      )}>
+                      <span className="text-xs uppercase tracking-wider">{pr?.label.split(' ')[0] ?? r}</span>
+                      <span className="text-[9px] opacity-80 leading-none">{pr?.minConfidence ? `Min Conf ${pr.minConfidence}%` : ''}</span>
+                    </button>
                   );
                 })}
               </div>
-            )}
-          </Panel>
+              
+              {/* Profile Details Sub-Card */}
+              {profiles?.[cfg.risk_level] && (
+                <div className="mt-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/60 p-3 space-y-2 text-[11px]">
+                  <div className="flex justify-between items-center text-gray-500 dark:text-gray-450">
+                    <span className="font-semibold text-gray-700 dark:text-gray-350">{profiles[cfg.risk_level].label} Active Metrics</span>
+                    <span className="text-[9px] uppercase font-bold text-groww-primary">Live Rules</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 pt-1.5 border-t border-gray-100 dark:border-gray-800/60 text-gray-600 dark:text-gray-300">
+                    <div className="flex justify-between">
+                      <span className="opacity-80">Risk / Trade:</span>
+                      <span className="font-bold text-gray-900 dark:text-white">{profiles[cfg.risk_level].riskPerTradePct}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="opacity-80">Stop Distance:</span>
+                      <span className="font-bold text-gray-900 dark:text-white">{profiles[cfg.risk_level].atrStopMult}× ATR</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="opacity-80">Reward Ratio:</span>
+                      <span className="font-bold text-gray-900 dark:text-white">{profiles[cfg.risk_level].rewardRisk}:1 RR</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="opacity-80">Trailing Stop:</span>
+                      <span className="font-bold text-gray-900 dark:text-white">{profiles[cfg.risk_level].trailAtrMult}× ATR</span>
+                    </div>
+                    <div className="flex justify-between col-span-2">
+                      <span className="opacity-80">Max Slots & Day Limit:</span>
+                      <span className="font-bold text-gray-900 dark:text-white">{profiles[cfg.risk_level].maxPositions} open slots · {profiles[cfg.risk_level].maxTradesPerDay} max/day</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Col 2: Advanced Guardrails */}
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500 font-bold mb-1.5 block">Min Confidence (%)</label>
+                <input type="number" min={40} max={95} step={1}
+                  value={cfg.min_confidence ?? ''}
+                  onChange={e => setCfg({ ...cfg, min_confidence: e.target.value ? parseInt(e.target.value) : 60 })}
+                  onBlur={e => patch({ min_confidence: e.target.value ? parseInt(e.target.value) : 60 })}
+                  className="w-full px-3.5 py-2.5 text-sm tabular-nums rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30 font-medium" />
+              </div>
+              <div>
+                <label className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500 font-bold mb-1.5 block">Max Trades / Day</label>
+                <input type="number" min={1} max={50} step={1}
+                  value={cfg.max_trades_per_day ?? ''}
+                  onChange={e => setCfg({ ...cfg, max_trades_per_day: e.target.value ? parseInt(e.target.value) : 10 })}
+                  onBlur={e => patch({ max_trades_per_day: e.target.value ? parseInt(e.target.value) : 10 })}
+                  className="w-full px-3.5 py-2.5 text-sm tabular-nums rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30 font-medium" />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500 font-bold flex items-center gap-1 mb-1.5">
+                Daily Realized Loss Limit (₹)
+              </label>
+              <input type="number" min={0} step={500}
+                value={cfg.max_daily_loss ?? ''}
+                placeholder="No hard limit"
+                onChange={e => setCfg({ ...cfg, max_daily_loss: e.target.value ? parseFloat(e.target.value) : null })}
+                onBlur={e => patch({ max_daily_loss: e.target.value ? parseFloat(e.target.value) : null })}
+                className="w-full px-3.5 py-2.5 text-sm tabular-nums rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30 font-medium" />
+              <p className="text-[10px] text-gray-500 dark:text-gray-450 mt-1.5">
+                Stops active bot scanner immediately if net realized losses exceed this threshold today.
+              </p>
+            </div>
+            
+            <div className="flex items-start gap-2.5 text-[11px] text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/20 border border-gray-100 dark:border-gray-800/60 rounded-xl px-4 py-3 leading-relaxed">
+              <Bot className="w-4 h-4 shrink-0 mt-0.5 text-groww-primary" />
+              <span>
+                Bot monitors live technical signals, evaluates them in the LLM Council, sizes trades by capital limit, and exits on target/SL rules autonomously.
+              </span>
+            </div>
+          </div>
+
+          {/* Col 3: Trading Sessions & Auto Square-off */}
+          <div className="space-y-4">
+            <div className="border border-gray-100 dark:border-gray-800 rounded-xl p-4 space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500 font-bold">Intraday Trading Window</span>
+                <span className="text-[10px] bg-groww-primary/10 text-groww-primary px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">IST Time</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3 pt-1 border-t border-gray-100 dark:border-gray-850">
+                <div>
+                  <label className="text-[9px] uppercase tracking-wide text-gray-400 dark:text-gray-500 font-bold">Start Scanning</label>
+                  <input type="time"
+                    value={cfg.session_start}
+                    onChange={e => setCfg({ ...cfg, session_start: e.target.value })}
+                    onBlur={e => patch({ session_start: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30 cursor-pointer font-medium" />
+                </div>
+                <div>
+                  <label className="text-[9px] uppercase tracking-wide text-gray-400 dark:text-gray-500 font-bold">Stop Scanning</label>
+                  <input type="time"
+                    value={cfg.session_end}
+                    onChange={e => setCfg({ ...cfg, session_end: e.target.value })}
+                    onBlur={e => patch({ session_end: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30 cursor-pointer font-medium" />
+                </div>
+              </div>
+            </div>
+
+            <div className="border border-gray-150 dark:border-gray-800 rounded-xl p-4">
+              <div className="flex justify-between items-center gap-3">
+                <div className="space-y-0.5">
+                  <label className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500 font-bold flex items-center gap-1">
+                    Auto Square-Off Time
+                  </label>
+                  <p className="text-[9px] text-gray-500 leading-normal">Exit all active open positions at market price.</p>
+                </div>
+                <input type="time"
+                  value={cfg.squareoff_time}
+                  onChange={e => setCfg({ ...cfg, squareoff_time: e.target.value })}
+                  onBlur={e => patch({ squareoff_time: e.target.value })}
+                  className="w-28 px-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30 cursor-pointer font-semibold" />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="flex items-start gap-2 text-xs text-gray-500 bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 rounded-xl px-4 py-3">
-        <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-500" />
-        <span>Paper-trading simulation. A Claude multi-agent council makes the decisions using technical signals + risk rules on virtual money — not financial advice. Trades route through the paper broker; real-broker integration is pluggable but not enabled.</span>
+      {/* ── Section 2: Active Positions (Full Width) ── */}
+      <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-5 lg:p-6 space-y-4 shadow-sm">
+        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-3">
+          <div className="flex items-center gap-2.5">
+            <Layers className="w-5 h-5 text-groww-primary" />
+            <h2 className="text-base font-bold text-gray-800 dark:text-gray-100">
+              Active Positions <span className="ml-1 px-2 py-0.5 text-xs font-bold rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">{positions.length}</span>
+            </h2>
+          </div>
+          {positions.length > 0 && (
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider animate-pulse flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-groww-primary" /> Auto-monitoring target / stop levels
+            </span>
+          )}
+        </div>
+
+        {positions.length === 0 ? (
+          <div className="py-12 flex flex-col items-center justify-center border border-dashed border-gray-200 dark:border-gray-800 rounded-2xl bg-gray-50/50 dark:bg-groww-dark/30">
+            <div className="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-gray-800/80 flex items-center justify-center mb-3">
+              <Bot className="w-6 h-6 text-gray-400 dark:text-gray-500" />
+            </div>
+            <p className="text-sm font-semibold text-gray-600 dark:text-gray-300">No active autonomous positions</p>
+            <p className="text-xs text-gray-455 dark:text-gray-500 mt-1 max-w-sm text-center">
+              The AI trade bot scans the market every tick and will execute dynamic positions as qualifying setups emerge.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {positions.map(p => {
+              const pnl = p.unrealized_pnl ?? 0;
+              const isProfit = pnl >= 0;
+              const pctPnl = p.entry_price > 0 ? (pnl / (p.entry_price * p.quantity)) * 100 : 0;
+              
+              return (
+                <div key={p.id} 
+                  className={cn(
+                    'group relative rounded-2xl border p-4 transition-all duration-300 hover:shadow-md flex flex-col justify-between gap-4',
+                    isProfit 
+                      ? 'border-gain/10 bg-gain/[0.01] hover:border-gain/35 dark:hover:bg-gain/[0.02]' 
+                      : 'border-loss/10 bg-loss/[0.01] hover:border-loss/35 dark:hover:bg-loss/[0.02]'
+                  )}>
+                  
+                  {/* Card Header */}
+                  <div className="flex items-start justify-between gap-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <StockLogo symbol={p.symbol} size={36} />
+                      <div className="min-w-0">
+                        <p className="font-bold text-sm text-gray-900 dark:text-white truncate">{p.symbol}</p>
+                        <span className="text-[9px] font-bold text-groww-primary bg-groww-primary/10 px-1.5 py-0.5 rounded uppercase tracking-wide">
+                          Confidence {p.confidence}%
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider font-semibold">Live LTP</p>
+                      <p className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">
+                        ₹{(p.current_price ?? p.entry_price).toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Pricing Matrix */}
+                  <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 pt-3 border-t border-gray-150 dark:border-gray-800 text-[11px] text-gray-500 dark:text-gray-400">
+                    <div className="flex justify-between pr-1.5 border-r border-gray-150 dark:border-gray-800">
+                      <span>Shares:</span>
+                      <strong className="text-gray-800 dark:text-gray-200 tabular-nums">{p.quantity}</strong>
+                    </div>
+                    <div className="flex justify-between pl-1.5">
+                      <span>Avg Buy:</span>
+                      <strong className="text-gray-800 dark:text-gray-200 tabular-nums font-semibold text-gray-900 dark:text-white">₹{p.entry_price.toFixed(2)}</strong>
+                    </div>
+                    <div className="flex justify-between pr-1.5 border-r border-gray-150 dark:border-gray-800">
+                      <span>Stop Loss:</span>
+                      <strong className="text-loss tabular-nums font-semibold">₹{p.stop_loss.toFixed(2)}</strong>
+                    </div>
+                    <div className="flex justify-between pl-1.5">
+                      <span>Target:</span>
+                      <strong className="text-gain tabular-nums font-semibold">₹{p.target.toFixed(2)}</strong>
+                    </div>
+                  </div>
+
+                  {/* Unrealized P&L block */}
+                  <div className={cn(
+                    'mt-2 rounded-xl px-3 py-2.5 flex items-center justify-between text-xs font-bold transition-all duration-300',
+                    isProfit 
+                      ? 'bg-gain/10 text-gain' 
+                      : 'bg-loss/10 text-loss'
+                  )}>
+                    <span>Unrealized P&L</span>
+                    <div className="text-right tabular-nums">
+                      <span>{isProfit ? '+' : ''}{formatCurrency(pnl)}</span>
+                      <span className="block text-[10px] font-medium opacity-85 mt-0.5">({isProfit ? '+' : ''}{pctPnl.toFixed(2)}%)</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Section 3: Live Agent Deliberation Terminal (Full Width) ── */}
+      <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden shadow-sm">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-groww-card/50">
+          <div className="flex items-center gap-2.5">
+            <Terminal className="w-5 h-5 text-groww-primary animate-pulse" />
+            <h3 className="text-sm font-bold text-gray-800 dark:text-gray-155 uppercase tracking-wider">
+              Agent Deliberation Terminal
+            </h3>
+          </div>
+          <span className={cn('flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-0.5 rounded-full border tracking-wider',
+            enabled 
+              ? 'text-groww-primary border-groww-primary/20 bg-groww-primary/5' 
+              : 'text-gray-400 border-gray-100 dark:border-gray-800/80 bg-gray-50/20 dark:bg-groww-dark/20')}>
+            <span className={cn('w-1.5 h-1.5 rounded-full', enabled ? 'bg-gain animate-pulse' : 'bg-gray-400')} />
+            {enabled ? 'LIVE MONITORING' : 'OFFLINE / IDLE'}
+          </span>
+        </div>
+        
+        {/* Logger console */}
+        <div ref={consoleRef} 
+          className="h-[500px] overflow-y-auto px-5 py-4 font-mono text-xs space-y-2 bg-[#090D16] dark:bg-[#070A11] border-t border-gray-950 scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent">
+          {logs.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-center text-gray-500 py-20 font-sans">
+              <Terminal className="w-8 h-8 text-gray-650 dark:text-gray-800 mb-2" />
+              <p className="font-semibold text-gray-450 dark:text-gray-600">Waiting for next market scan tick…</p>
+              <p className="text-xs text-gray-500 dark:text-gray-700 mt-1 max-w-sm">
+                {enabled 
+                  ? 'Council is starting up. Real-time reasoning and agent trades will stream here momentarily.' 
+                  : 'Activate AI to launch the multi-agent council. Their full debate and technical reasons will render here live.'}
+              </p>
+            </div>
+          ) : (
+            logs.map(l => {
+              // Extract agent styling details
+              const agentStyles: Record<string, string> = {
+                'Market Analysis': 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+                'Momentum': 'bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20',
+                'Risk Management': 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+                'Strategy': 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
+                'Sentiment': 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+                'Council': 'bg-pink-500/10 text-pink-400 border-pink-500/20',
+                'Execution': 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+                'Monitoring': 'bg-slate-500/10 text-slate-400 border-slate-500/20',
+              };
+              
+              const isTrade = l.level === 'trade';
+              const isWarn = l.level === 'warn';
+              const isError = l.level === 'error';
+              
+              return (
+                <div key={l.id} 
+                  className={cn(
+                    'flex items-start gap-2.5 py-1 px-1.5 rounded transition-all duration-150 hover:bg-white/[0.02]',
+                    isTrade && 'bg-emerald-500/[0.03] border-l-2 border-emerald-500 pl-1',
+                    isWarn && 'bg-amber-550/[0.03] border-l-2 border-amber-500 pl-1',
+                    isError && 'bg-rose-550/[0.03] border-l-2 border-rose-500 pl-1'
+                  )}>
+                  
+                  {/* Timestamp */}
+                  <span className="text-gray-600 dark:text-gray-650 shrink-0 select-none mt-0.5">
+                    {new Date(l.created_at + 'Z').toLocaleTimeString('en-IN', { hour12: false })}
+                  </span>
+                  
+                  {/* Agent Tag */}
+                  {l.agent && (
+                    <span className={cn(
+                      'text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border shrink-0',
+                      agentStyles[l.agent] ?? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                    )}>
+                      {l.agent}
+                    </span>
+                  )}
+                  
+                  {/* Log Message */}
+                  <span className={cn('leading-relaxed break-words font-mono', 
+                    LEVEL_STYLE[l.level] ?? 'text-gray-300'
+                  )}>
+                    {l.message}
+                  </span>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {/* Disclaimer */}
+      <div className="flex items-start gap-3 text-xs text-gray-500 dark:text-gray-450 bg-gray-50 dark:bg-gray-800/10 border border-gray-150 dark:border-gray-850 rounded-2xl px-4.5 py-3.5 shadow-inner">
+        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+        <span className="leading-relaxed">
+          <strong>Paper-Trading Autonomous Simulator:</strong> This workspace operates as a virtual risk environment on Indian Equities (NSE). The multi-agent Claude Council makes decisions in real time using automated technical indicators and volatility filters. No actual funds are at risk; real-broker APIs can be registered via standard interfaces but remain disabled in simulation.
+        </span>
       </div>
     </div>
   );
@@ -427,11 +603,3 @@ function AgentStatusCard({ status, enabled }: { status: string; enabled: boolean
   );
 }
 
-function Panel({ title, icon: Icon, children }: { title: string; icon: any; children: React.ReactNode }) {
-  return (
-    <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-4">
-      <h3 className="flex items-center gap-2 text-sm font-bold text-gray-700 dark:text-gray-200 mb-3"><Icon className="w-4 h-4 text-groww-primary" />{title}</h3>
-      {children}
-    </div>
-  );
-}
