@@ -120,10 +120,11 @@ function getBotUserId(): number {
   const existing = db.prepare(`SELECT id FROM users WHERE email = 'communitybot@paperportfolio.app'`).get() as any;
   if (existing) return existing.id;
 
-  const bcrypt = { hashSync: (p: string) => p }; // placeholder — bot never logs in
+  // Bot never logs in: a non-bcrypt password string can't match any login.
+  // role must satisfy CHECK(role IN ('user','admin')).
   const result = db.prepare(`
-    INSERT INTO users (name, email, password_hash, balance, role)
-    VALUES ('PaperBot', 'communitybot@paperportfolio.app', 'bot-no-login', 0, 'bot')
+    INSERT INTO users (name, email, password, balance, role)
+    VALUES ('PaperBot', 'communitybot@paperportfolio.app', 'bot-no-login', 0, 'user')
   `).run();
   return result.lastInsertRowid as number;
 }
