@@ -39,14 +39,19 @@ interface RiskProfile {
 const RISK_ORDER: RiskLevel[] = ['conservative', 'moderate', 'aggressive'];
 const NIFTY_SUGGESTIONS = ['RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'SBIN', 'BHARTIARTL', 'ITC', 'BAJFINANCE', 'LT'];
 
+// Console log colours — readable in both light and dark themes.
 const LEVEL_STYLE: Record<string, string> = {
-  info:   'text-gray-400',
-  signal: 'text-sky-400',
-  trade:  'text-emerald-400',
-  agent:  'text-violet-400',
-  warn:   'text-amber-400',
-  error:  'text-red-400',
+  info:   'text-gray-500 dark:text-gray-400',
+  signal: 'text-sky-600 dark:text-sky-400',
+  trade:  'text-groww-primary',
+  agent:  'text-blue-600 dark:text-blue-400',
+  warn:   'text-amber-600 dark:text-amber-400',
+  error:  'text-loss',
 };
+
+// Shared surface styles to match the rest of the app.
+const CARD = 'bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800';
+const INPUT = 'rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30';
 
 // ── Main ───────────────────────────────────────────────────────────────────────
 export default function AlgoTradePage() {
@@ -76,7 +81,7 @@ export default function AlgoTradePage() {
     })();
   }, []);
 
-  // ── Live polling: state, positions, console, signals ──
+  // ── Live polling: state, positions, console ──
   const refresh = useCallback(async () => {
     try {
       const [s, pos, log] = await Promise.all([
@@ -157,7 +162,7 @@ export default function AlgoTradePage() {
 
   if (loading || !cfg) return (
     <div className="flex items-center justify-center h-64">
-      <div className="w-8 h-8 border-4 border-violet-500 border-t-transparent rounded-full animate-spin" />
+      <div className="w-8 h-8 border-4 border-groww-primary border-t-transparent rounded-full animate-spin" />
     </div>
   );
 
@@ -166,40 +171,40 @@ export default function AlgoTradePage() {
   const activeProfile = profiles?.[cfg.risk_level];
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto pb-8">
+    <div className="space-y-4 max-w-6xl mx-auto pb-8">
       {/* ── Header ── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="relative">
             <div className={cn('w-11 h-11 rounded-2xl flex items-center justify-center',
-              enabled ? 'bg-gradient-to-br from-violet-500 to-indigo-600' : 'bg-gray-800')}>
-              <Bot className="w-6 h-6 text-white" />
+              enabled ? 'bg-groww-primary' : 'bg-gray-100 dark:bg-gray-800')}>
+              <Bot className={cn('w-6 h-6', enabled ? 'text-white' : 'text-groww-primary')} />
             </div>
-            {enabled && <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-400 animate-pulse ring-2 ring-black" />}
+            {enabled && <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-gain animate-pulse ring-2 ring-white dark:ring-groww-dark" />}
           </div>
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">AI Trade
-              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-400 border border-violet-500/30">Autonomous</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-groww-primary/10 text-groww-primary border border-groww-primary/30">Autonomous</span>
             </h1>
-            <p className="text-sm text-gray-500">Multi-agent intraday trading · paper engine</p>
+            <p className="text-sm text-gray-500 mt-0.5">Multi-agent intraday trading · paper engine</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <button onClick={killSwitch}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-500/10 text-red-400 border border-red-500/30 text-sm font-semibold hover:bg-red-500/20 transition">
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-loss/10 text-loss border border-loss/30 text-sm font-semibold hover:bg-loss/20 transition">
             <ShieldAlert className="w-4 h-4" /> Kill Switch
           </button>
           <button onClick={toggleAi}
-            className={cn('flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition shadow-lg',
-              enabled ? 'bg-emerald-500 text-white shadow-emerald-500/20' : 'bg-violet-600 text-white shadow-violet-600/20 hover:brightness-110')}>
+            className={cn('flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition',
+              enabled ? 'bg-gain text-white hover:brightness-110' : 'bg-groww-primary text-white hover:brightness-110')}>
             <Power className="w-4 h-4" /> {enabled ? 'AI Active' : 'Activate AI'}
           </button>
         </div>
       </div>
 
       {halted && (
-        <div className="flex items-center gap-2 text-sm bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl px-4 py-2.5">
+        <div className="flex items-center gap-2 text-sm bg-loss/10 border border-loss/30 text-loss rounded-xl px-4 py-2.5">
           <AlertTriangle className="w-4 h-4 shrink-0" /> Kill switch is engaged. Re-activate AI to resume autonomous trading.
         </div>
       )}
@@ -207,7 +212,7 @@ export default function AlgoTradePage() {
       {/* ── Top stat bar ── */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <StatCard icon={Wallet} label="Wallet Balance" value={formatCurrency(state?.wallet_balance ?? 0)} tone="default" />
-        <StatCard icon={CircleDollarSign} label="Active Capital" value={formatCurrency(state?.active_capital ?? 0)} tone="violet" />
+        <StatCard icon={CircleDollarSign} label="Active Capital" value={formatCurrency(state?.active_capital ?? 0)} tone="primary" />
         <StatCard icon={Activity} label="Daily P&L"
           value={`${(state?.daily_pnl ?? 0) >= 0 ? '+' : ''}${formatCurrency(state?.daily_pnl ?? 0)}`}
           tone={(state?.daily_pnl ?? 0) >= 0 ? 'gain' : 'loss'} />
@@ -217,7 +222,7 @@ export default function AlgoTradePage() {
       </div>
 
       {/* ── Main split ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,360px)_1fr] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,340px)_1fr] gap-4">
         {/* LEFT — Rules & Configuration */}
         <div className="space-y-4">
           {/* Watchlist */}
@@ -227,24 +232,24 @@ export default function AlgoTradePage() {
                 onChange={e => setSymbolInput(e.target.value.toUpperCase())}
                 onKeyDown={e => e.key === 'Enter' && addSymbol(symbolInput)}
                 placeholder="Add symbol e.g. RELIANCE"
-                className="flex-1 px-3 py-2 rounded-lg bg-gray-900 border border-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/40" />
+                className={cn('flex-1 px-3 py-2 text-sm', INPUT)} />
               <button onClick={() => addSymbol(symbolInput)}
-                className="px-3 rounded-lg bg-violet-600 text-white hover:brightness-110"><Plus className="w-4 h-4" /></button>
+                className="px-3 rounded-lg bg-groww-primary text-white hover:brightness-110"><Plus className="w-4 h-4" /></button>
             </div>
             {cfg.watchlist.length === 0 ? (
               <div className="flex flex-wrap gap-1.5">
                 <span className="text-xs text-gray-500 w-full mb-1">Quick add:</span>
                 {NIFTY_SUGGESTIONS.map(s => (
                   <button key={s} onClick={() => addSymbol(s)}
-                    className="text-[11px] px-2 py-1 rounded-md bg-gray-800 text-gray-300 hover:bg-violet-500/20 hover:text-violet-300 transition">+ {s}</button>
+                    className="text-[11px] px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-groww-primary/10 hover:text-groww-primary transition">+ {s}</button>
                 ))}
               </div>
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {cfg.watchlist.map(s => (
-                  <span key={s} className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md bg-gray-800 text-gray-200">
+                  <span key={s} className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200">
                     <StockLogo symbol={s} size={14} /> {s}
-                    <button onClick={() => removeSymbol(s)} className="text-gray-500 hover:text-red-400"><X className="w-3 h-3" /></button>
+                    <button onClick={() => removeSymbol(s)} className="text-gray-400 hover:text-loss"><X className="w-3 h-3" /></button>
                   </span>
                 ))}
               </div>
@@ -253,13 +258,13 @@ export default function AlgoTradePage() {
 
           {/* Capital */}
           <Panel title="Capital Allocation" icon={CircleDollarSign}>
-            <label className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Capital to deploy (₹)</label>
+            <label className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Capital to deploy (₹)</label>
             <input type="number" min={0} step={1000}
               value={cfg.capital_amount ?? ''}
               placeholder={`${Math.round((state?.wallet_balance ?? 0) * cfg.allocation_pct / 100)}`}
               onChange={e => setCfg({ ...cfg, capital_amount: e.target.value ? parseFloat(e.target.value) : null })}
               onBlur={e => patch({ capital_amount: e.target.value ? parseFloat(e.target.value) : null })}
-              className="w-full mt-1 px-3 py-2 rounded-lg bg-gray-900 border border-gray-700 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-violet-500/40" />
+              className={cn('w-full mt-1 px-3 py-2 text-sm tabular-nums', INPUT)} />
             <p className="text-[11px] text-gray-500 mt-1.5">
               Leave blank to use {cfg.allocation_pct}% of wallet. Available: {formatCurrency(state?.wallet_balance ?? 0)}
             </p>
@@ -274,13 +279,13 @@ export default function AlgoTradePage() {
                 return (
                   <button key={r} onClick={() => patch({ risk_level: r })}
                     className={cn('w-full text-left rounded-xl border p-3 transition',
-                      active ? 'border-violet-500 bg-violet-500/10' : 'border-gray-800 hover:border-gray-700 bg-gray-900/40')}>
+                      active ? 'border-groww-primary bg-groww-primary/5' : 'border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700')}>
                     <div className="flex items-center justify-between">
-                      <span className={cn('font-bold text-sm', active ? 'text-violet-300' : 'text-gray-200')}>{pr?.label ?? r}</span>
-                      {active && <span className="text-[10px] font-bold text-violet-400">SELECTED</span>}
+                      <span className={cn('font-bold text-sm', active ? 'text-groww-primary' : 'text-gray-700 dark:text-gray-200')}>{pr?.label ?? r}</span>
+                      {active && <span className="text-[10px] font-bold text-groww-primary">SELECTED</span>}
                     </div>
                     {pr && (
-                      <div className="grid grid-cols-3 gap-1 mt-2 text-[10px] text-gray-400">
+                      <div className="grid grid-cols-3 gap-1 mt-2 text-[10px] text-gray-500 dark:text-gray-400">
                         <span>🎯 Tgt {pr.targetPct}%</span>
                         <span>🛡 SL {pr.stopLossPct}%</span>
                         <span>📉 Trail {pr.trailingPct}%</span>
@@ -318,25 +323,25 @@ export default function AlgoTradePage() {
         {/* RIGHT — Console + Activity */}
         <div className="space-y-4">
           {/* Live console */}
-          <div className="rounded-2xl border border-gray-800 bg-[#0a0b0f] overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-800 bg-gray-900/50">
-              <div className="flex items-center gap-2 text-sm font-semibold text-gray-200">
-                <Terminal className="w-4 h-4 text-emerald-400" /> AI Console
+          <div className={cn(CARD, 'overflow-hidden')}>
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-gray-800">
+              <div className="flex items-center gap-2 text-sm font-bold text-gray-700 dark:text-gray-200">
+                <Terminal className="w-4 h-4 text-groww-primary" /> AI Console
               </div>
               <span className={cn('flex items-center gap-1.5 text-[11px] font-medium',
-                enabled ? 'text-emerald-400' : 'text-gray-500')}>
-                <span className={cn('w-1.5 h-1.5 rounded-full', enabled ? 'bg-emerald-400 animate-pulse' : 'bg-gray-600')} />
+                enabled ? 'text-groww-primary' : 'text-gray-400')}>
+                <span className={cn('w-1.5 h-1.5 rounded-full', enabled ? 'bg-gain animate-pulse' : 'bg-gray-400')} />
                 {enabled ? 'LIVE' : 'IDLE'}
               </span>
             </div>
-            <div ref={consoleRef} className="h-[300px] overflow-y-auto px-4 py-3 font-mono text-xs space-y-1">
+            <div ref={consoleRef} className="h-[300px] overflow-y-auto px-4 py-3 font-mono text-xs space-y-1 bg-gray-50 dark:bg-groww-dark">
               {logs.length === 0 ? (
-                <p className="text-gray-600">{enabled ? 'Waiting for market activity…' : 'Activate AI to start the engine. Logs will stream here in real time.'}</p>
+                <p className="text-gray-400 dark:text-gray-600">{enabled ? 'Waiting for market activity…' : 'Activate AI to start the engine. Logs will stream here in real time.'}</p>
               ) : logs.map(l => (
                 <div key={l.id} className="flex gap-2 leading-relaxed">
-                  <span className="text-gray-600 shrink-0">{new Date(l.created_at + 'Z').toLocaleTimeString('en-IN', { hour12: false })}</span>
-                  {l.agent && <span className="text-gray-500 shrink-0">[{l.agent}]</span>}
-                  <span className={LEVEL_STYLE[l.level] ?? 'text-gray-300'}>{l.message}</span>
+                  <span className="text-gray-400 dark:text-gray-600 shrink-0">{new Date(l.created_at + 'Z').toLocaleTimeString('en-IN', { hour12: false })}</span>
+                  {l.agent && <span className="text-gray-400 dark:text-gray-500 shrink-0">[{l.agent}]</span>}
+                  <span className={LEVEL_STYLE[l.level] ?? 'text-gray-600 dark:text-gray-300'}>{l.message}</span>
                 </div>
               ))}
             </div>
@@ -351,20 +356,20 @@ export default function AlgoTradePage() {
                 {positions.map(p => {
                   const pnl = p.unrealized_pnl ?? 0;
                   return (
-                    <div key={p.id} className="flex items-center gap-3 rounded-xl bg-gray-900/50 border border-gray-800 px-3 py-2.5">
+                    <div key={p.id} className="flex items-center gap-3 rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 px-3 py-2.5">
                       <StockLogo symbol={p.symbol} size={32} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-sm">{p.symbol}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300">conf {p.confidence}%</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-groww-primary/10 text-groww-primary">conf {p.confidence}%</span>
                         </div>
                         <p className="text-[11px] text-gray-500">
                           {p.quantity} @ ₹{p.entry_price.toFixed(2)} · SL ₹{p.stop_loss.toFixed(2)} · TGT ₹{p.target.toFixed(2)}
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-xs text-gray-400 tabular-nums">₹{(p.current_price ?? p.entry_price).toFixed(2)}</p>
-                        <p className={cn('text-sm font-bold tabular-nums', pnl >= 0 ? 'text-emerald-400' : 'text-red-400')}>
+                        <p className="text-xs text-gray-500 tabular-nums">₹{(p.current_price ?? p.entry_price).toFixed(2)}</p>
+                        <p className={cn('text-sm font-bold tabular-nums', pnl >= 0 ? 'text-gain' : 'text-loss')}>
                           {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}
                         </p>
                       </div>
@@ -405,14 +410,14 @@ export default function AlgoTradePage() {
                 <div key={s.symbol} className="flex items-center gap-2 text-sm">
                   <StockLogo symbol={s.symbol} size={22} />
                   <span className="font-medium w-20 truncate">{s.symbol}</span>
-                  <div className="flex-1 h-1.5 rounded-full bg-gray-800 overflow-hidden">
+                  <div className="flex-1 h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
                     <div className={cn('h-full rounded-full',
-                      s.confidence >= 65 ? 'bg-emerald-400' : s.confidence >= 50 ? 'bg-amber-400' : 'bg-red-400')}
+                      s.confidence >= 65 ? 'bg-gain' : s.confidence >= 50 ? 'bg-amber-400' : 'bg-loss')}
                       style={{ width: `${s.confidence}%` }} />
                   </div>
-                  <span className="text-xs tabular-nums w-9 text-right text-gray-300">{s.confidence}%</span>
-                  {s.bias === 'bullish' ? <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-                    : s.bias === 'bearish' ? <TrendingDown className="w-3.5 h-3.5 text-red-400" />
+                  <span className="text-xs tabular-nums w-9 text-right text-gray-500">{s.confidence}%</span>
+                  {s.bias === 'bullish' ? <TrendingUp className="w-3.5 h-3.5 text-gain" />
+                    : s.bias === 'bearish' ? <TrendingDown className="w-3.5 h-3.5 text-loss" />
                     : <span className="w-3.5 h-3.5 inline-block" />}
                 </div>
               ))}
@@ -421,7 +426,7 @@ export default function AlgoTradePage() {
         </Panel>
       </div>
 
-      <div className="flex items-start gap-2 text-xs text-gray-500 bg-gray-900/40 border border-gray-800 rounded-xl px-4 py-3">
+      <div className="flex items-start gap-2 text-xs text-gray-500 bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 rounded-xl px-4 py-3">
         <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-500" />
         <span>Paper-trading simulation. The AI uses technical signals + risk rules to trade virtual money — not financial advice. Trades route through the paper broker; real-broker integration is pluggable but not enabled.</span>
       </div>
@@ -432,28 +437,28 @@ export default function AlgoTradePage() {
 // ── Small components ─────────────────────────────────────────────────────────
 function StatCard({ icon: Icon, label, value, sub, tone }: {
   icon: any; label: string; value: string; sub?: string;
-  tone: 'default' | 'gain' | 'loss' | 'violet';
+  tone: 'default' | 'gain' | 'loss' | 'primary';
 }) {
-  const toneCls = tone === 'gain' ? 'text-emerald-400' : tone === 'loss' ? 'text-red-400' : tone === 'violet' ? 'text-violet-400' : 'text-gray-100';
+  const toneCls = tone === 'gain' ? 'text-gain' : tone === 'loss' ? 'text-loss' : tone === 'primary' ? 'text-groww-primary' : 'text-gray-900 dark:text-white';
   return (
-    <div className="rounded-2xl border border-gray-800 bg-gray-900/40 p-3.5">
-      <div className="flex items-center gap-1.5 text-gray-500 mb-1.5"><Icon className="w-3.5 h-3.5" /><span className="text-[11px] font-medium">{label}</span></div>
+    <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-3.5">
+      <div className="flex items-center gap-1.5 text-gray-400 mb-1.5"><Icon className="w-3.5 h-3.5" /><span className="text-[11px] font-medium">{label}</span></div>
       <p className={cn('text-lg font-bold tabular-nums', toneCls)}>{value}</p>
-      {sub && <p className="text-[10px] text-gray-500 mt-0.5">{sub}</p>}
+      {sub && <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>}
     </div>
   );
 }
 
 function AgentStatusCard({ status, enabled }: { status: string; enabled: boolean }) {
   const map: Record<string, string> = {
-    Active: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10',
-    Off: 'text-gray-400 border-gray-800 bg-gray-900/40',
-    Halted: 'text-red-400 border-red-500/30 bg-red-500/10',
-    Idle: 'text-gray-400 border-gray-800 bg-gray-900/40',
+    Active: 'text-groww-primary border-groww-primary/30 bg-groww-primary/5',
+    Off: 'text-gray-400 border-gray-100 dark:border-gray-800 bg-white dark:bg-groww-card',
+    Halted: 'text-loss border-loss/30 bg-loss/5',
+    Idle: 'text-gray-400 border-gray-100 dark:border-gray-800 bg-white dark:bg-groww-card',
   };
   return (
     <div className={cn('rounded-2xl border p-3.5', map[status] ?? map.Off)}>
-      <div className="flex items-center gap-1.5 text-gray-500 mb-1.5"><Bot className="w-3.5 h-3.5" /><span className="text-[11px] font-medium">Agent Status</span></div>
+      <div className="flex items-center gap-1.5 text-gray-400 mb-1.5"><Bot className="w-3.5 h-3.5" /><span className="text-[11px] font-medium">Agent Status</span></div>
       <p className="text-lg font-bold flex items-center gap-2">
         {enabled && <span className="w-2 h-2 rounded-full bg-current animate-pulse" />} {status}
       </p>
@@ -463,8 +468,8 @@ function AgentStatusCard({ status, enabled }: { status: string; enabled: boolean
 
 function Panel({ title, icon: Icon, children }: { title: string; icon: any; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-gray-800 bg-gray-900/40 p-4">
-      <h3 className="flex items-center gap-2 text-sm font-bold text-gray-200 mb-3"><Icon className="w-4 h-4 text-violet-400" />{title}</h3>
+    <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-4">
+      <h3 className="flex items-center gap-2 text-sm font-bold text-gray-700 dark:text-gray-200 mb-3"><Icon className="w-4 h-4 text-groww-primary" />{title}</h3>
       {children}
     </div>
   );
@@ -477,14 +482,14 @@ function RangeRow({ label, value, min, max, suffix, onChange, onCommit }: {
   return (
     <div>
       <div className="flex justify-between text-xs mb-1">
-        <span className="text-gray-400">{label}</span>
-        <span className="font-bold text-violet-300">{value}{suffix}</span>
+        <span className="text-gray-500">{label}</span>
+        <span className="font-bold text-groww-primary">{value}{suffix}</span>
       </div>
       <input type="range" min={min} max={max} value={value}
         onChange={e => onChange(parseInt(e.target.value))}
         onMouseUp={e => onCommit(parseInt((e.target as HTMLInputElement).value))}
         onTouchEnd={e => onCommit(parseInt((e.target as HTMLInputElement).value))}
-        className="w-full accent-violet-500" />
+        className="w-full accent-groww-primary" />
     </div>
   );
 }
@@ -494,11 +499,11 @@ function NumRow({ label, value, placeholder, onCommit }: { label: string; value:
   useEffect(() => { setV(String(value || '')); }, [value]);
   return (
     <div className="flex items-center justify-between gap-2">
-      <span className="text-xs text-gray-400">{label}</span>
+      <span className="text-xs text-gray-500">{label}</span>
       <input type="number" value={v} placeholder={placeholder}
         onChange={e => setV(e.target.value)}
         onBlur={() => onCommit(parseFloat(v) || 0)}
-        className="w-24 px-2 py-1.5 rounded-lg bg-gray-900 border border-gray-700 text-sm text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-violet-500/40" />
+        className="w-24 px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-groww-primary/30" />
     </div>
   );
 }
@@ -506,9 +511,9 @@ function NumRow({ label, value, placeholder, onCommit }: { label: string; value:
 function TimeRow({ label, value, onCommit }: { label: string; value: string; onCommit: (v: string) => void }) {
   return (
     <div>
-      <label className="text-[10px] uppercase tracking-wide text-gray-500 flex items-center gap-1 mb-1"><Clock className="w-3 h-3" />{label}</label>
+      <label className="text-[10px] uppercase tracking-wide text-gray-400 flex items-center gap-1 mb-1"><Clock className="w-3 h-3" />{label}</label>
       <input type="time" value={value} onChange={e => onCommit(e.target.value)}
-        className="w-full px-2 py-1.5 rounded-lg bg-gray-900 border border-gray-700 text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/40" />
+        className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-groww-primary/30" />
     </div>
   );
 }
@@ -517,7 +522,7 @@ function InsightRow({ label, value, good }: { label: string; value: string; good
   return (
     <div className="flex items-center justify-between">
       <span className="text-gray-500">{label}</span>
-      <span className={cn('font-semibold', good === undefined ? 'text-gray-200' : good ? 'text-emerald-400' : 'text-gray-400')}>{value}</span>
+      <span className={cn('font-semibold', good === undefined ? 'text-gray-800 dark:text-gray-200' : good ? 'text-groww-primary' : 'text-gray-400')}>{value}</span>
     </div>
   );
 }
@@ -528,20 +533,20 @@ function SentimentGauge({ signals }: { signals: Signal[] }) {
   const bear = signals.filter(s => s.bias === 'bearish').length;
   const avg = Math.round(signals.reduce((s, x) => s + x.confidence, 0) / signals.length);
   const mood = avg >= 60 ? 'Bullish' : avg >= 45 ? 'Neutral' : 'Bearish';
-  const moodCls = avg >= 60 ? 'text-emerald-400' : avg >= 45 ? 'text-amber-400' : 'text-red-400';
+  const moodCls = avg >= 60 ? 'text-gain' : avg >= 45 ? 'text-amber-500' : 'text-loss';
   return (
     <div>
       <div className="flex items-end justify-between mb-2">
         <span className={cn('text-2xl font-bold', moodCls)}>{mood}</span>
-        <span className="text-sm text-gray-400 tabular-nums">avg {avg}%</span>
+        <span className="text-sm text-gray-500 tabular-nums">avg {avg}%</span>
       </div>
-      <div className="flex h-2.5 rounded-full overflow-hidden bg-gray-800">
-        <div className="bg-emerald-400 h-full" style={{ width: `${(bull / signals.length) * 100}%` }} />
-        <div className="bg-red-400 h-full" style={{ width: `${(bear / signals.length) * 100}%` }} />
+      <div className="flex h-2.5 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800">
+        <div className="bg-gain h-full" style={{ width: `${(bull / signals.length) * 100}%` }} />
+        <div className="bg-loss h-full" style={{ width: `${(bear / signals.length) * 100}%` }} />
       </div>
       <div className="flex justify-between text-[11px] text-gray-500 mt-1.5">
-        <span className="text-emerald-400">{bull} bullish</span>
-        <span className="text-red-400">{bear} bearish</span>
+        <span className="text-gain">{bull} bullish</span>
+        <span className="text-loss">{bear} bearish</span>
       </div>
     </div>
   );
