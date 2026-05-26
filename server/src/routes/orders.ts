@@ -544,6 +544,16 @@ export async function fillOrder(orderId: number, userId: number, symbolRaw: stri
 
     await db.prepare(`UPDATE orders SET status = 'FILLED', filled_at = CURRENT_TIMESTAMP WHERE id = ?`).run(orderId);
 
+    // OCO (one-cancels-other): if this is a bracket leg (take-profit / stop-loss),
+    // cancel its sibling so a filled target doesn't leave a stale stop-loss
+    // pending (and vice-versa).
+    const filledMeta = db.prepare('SELECT parent_order_id FROM orders WHERE id = ?').get(orderId) as any;
+    if (filledMeta?.parent_order_id) {
+      await db.prepare(
+        `UPDATE orders SET status = 'CANCELLED' WHERE parent_order_id = ? AND id != ? AND status = 'PENDING'`,
+      ).run(filledMeta.parent_order_id, orderId);
+    }
+
     let targetNote = '';
     if (transactionType === 'BUY') {
       const parentOrder = db.prepare('SELECT target_price, trigger_price, product_type FROM orders WHERE id = ?').get(orderId) as any;
