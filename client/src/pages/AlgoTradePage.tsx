@@ -3,7 +3,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import {
   Bot, Power, ShieldAlert, Wallet, CircleDollarSign, Activity, Layers,
-  Terminal, ShieldCheck, AlertTriangle, TrendingUp, Clock,
+  Terminal, ShieldCheck, AlertTriangle, Clock, Trash2,
 } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 import StockLogo from '../components/StockLogo';
@@ -52,30 +52,30 @@ const RISK_ORDER: RiskLevel[] = ['conservative', 'moderate', 'aggressive'];
 
 // Console log colours
 const LEVEL_STYLE: Record<string, string> = {
-  info:   'text-gray-400',
-  signal: 'text-sky-400',
-  trade:  'text-emerald-400',
-  agent:  'text-blue-400',
-  warn:   'text-amber-400',
-  error:  'text-rose-400',
+  info:   'text-slate-500 dark:text-gray-400',
+  signal: 'text-sky-600 dark:text-sky-400',
+  trade:  'text-emerald-600 dark:text-emerald-400',
+  agent:  'text-blue-600 dark:text-blue-400',
+  warn:   'text-amber-600 dark:text-amber-400',
+  error:  'text-rose-600 dark:text-rose-400',
 };
 
 // Agent tag pill colours
 const AGENT_STYLES: Record<string, string> = {
-  'Market Analysis': 'bg-cyan-500/15 text-cyan-400 border-cyan-500/25',
-  'Momentum': 'bg-fuchsia-500/15 text-fuchsia-400 border-fuchsia-500/25',
-  'Risk Management': 'bg-amber-500/15 text-amber-400 border-amber-500/25',
-  'Risk Monitor': 'bg-amber-500/15 text-amber-400 border-amber-500/25',
-  'Risk': 'bg-amber-500/15 text-amber-400 border-amber-500/25',
-  'Strategy': 'bg-indigo-500/15 text-indigo-400 border-indigo-500/25',
-  'Sentiment': 'bg-purple-500/15 text-purple-400 border-purple-500/25',
-  'Council': 'bg-pink-500/15 text-pink-400 border-pink-500/25',
-  'Execution': 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25',
-  'Engine': 'bg-slate-500/15 text-slate-400 border-slate-500/25',
-  'Scanner': 'bg-teal-500/15 text-teal-400 border-teal-500/25',
-  'Signal Engine': 'bg-sky-500/15 text-sky-400 border-sky-500/25',
-  'Capital': 'bg-yellow-500/15 text-yellow-400 border-yellow-500/25',
-  'Guardrail': 'bg-orange-500/15 text-orange-400 border-orange-500/25',
+  'Market Analysis': 'bg-cyan-500/10 dark:bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border-cyan-500/20 dark:border-cyan-500/25',
+  'Momentum': 'bg-fuchsia-500/10 dark:bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/20 dark:border-fuchsia-500/25',
+  'Risk Management': 'bg-amber-500/10 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20 dark:border-amber-500/25',
+  'Risk Monitor': 'bg-amber-500/10 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20 dark:border-amber-500/25',
+  'Risk': 'bg-amber-500/10 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20 dark:border-amber-500/25',
+  'Strategy': 'bg-indigo-500/10 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/20 dark:border-indigo-500/25',
+  'Sentiment': 'bg-purple-500/10 dark:bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/20 dark:border-purple-500/25',
+  'Council': 'bg-pink-500/10 dark:bg-pink-500/15 text-pink-600 dark:text-pink-400 border-pink-500/20 dark:border-pink-500/25',
+  'Execution': 'bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 dark:border-emerald-500/25',
+  'Engine': 'bg-slate-500/10 dark:bg-slate-500/15 text-slate-600 dark:text-slate-400 border-slate-500/20 dark:border-slate-500/25',
+  'Scanner': 'bg-teal-500/10 dark:bg-teal-500/15 text-teal-600 dark:text-teal-400 border-teal-500/20 dark:border-teal-500/25',
+  'Signal Engine': 'bg-sky-500/10 dark:bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/20 dark:border-sky-500/25',
+  'Capital': 'bg-yellow-500/10 dark:bg-yellow-500/15 text-yellow-600 dark:text-yellow-450 border-yellow-500/20 dark:border-yellow-500/25',
+  'Guardrail': 'bg-orange-500/10 dark:bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/20 dark:border-orange-500/25',
 };
 
 // ── Main ───────────────────────────────────────────────────────────────────────
@@ -166,6 +166,13 @@ export default function AlgoTradePage() {
   const halted = !!cfg.kill_switch;
   const profile = profiles?.[cfg.risk_level];
 
+  const allocatedCapitalVal = cfg.capital_amount && cfg.capital_amount > 0
+    ? cfg.capital_amount
+    : (state?.wallet_balance ?? 0) * (cfg.allocation_pct / 100);
+
+  const pnlVal = state?.daily_pnl ?? 0;
+  const pctRoi = allocatedCapitalVal > 0 ? (pnlVal / allocatedCapitalVal) * 100 : 0;
+
   return (
     <div className="h-[calc(100vh-64px)] flex flex-col overflow-hidden">
       {/* ── Header Bar ── */}
@@ -239,14 +246,51 @@ export default function AlgoTradePage() {
         <div className="w-full h-[50%] lg:h-full lg:w-[420px] xl:w-[480px] shrink-0 border-b lg:border-b-0 lg:border-r border-gray-100 dark:border-gray-800 overflow-y-auto bg-white dark:bg-groww-card">
           <div className="p-4 space-y-4">
 
-            {/* Stats Grid (Mobile) */}
-            <div className="grid grid-cols-2 gap-2.5 lg:hidden">
-              <MiniStat icon={Wallet} label="Balance" value={formatCurrency(state?.wallet_balance ?? 0)} />
-              <MiniStat icon={Activity} label="Day P&L"
-                value={`${(state?.daily_pnl ?? 0) >= 0 ? '+' : ''}${formatCurrency(state?.daily_pnl ?? 0)}`}
-                tone={(state?.daily_pnl ?? 0) >= 0 ? 'gain' : 'loss'} />
-              <MiniStat icon={Layers} label="Open" value={String(state?.open_trades ?? 0)} />
-              <MiniStat icon={TrendingUp} label="Today" value={`${state?.trades_today ?? 0} trades`} />
+            {/* ── AI Performance Summary Card ── */}
+            <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-gradient-to-br from-white to-gray-50/50 dark:from-groww-card dark:to-groww-card/80 p-4 shadow-sm relative overflow-hidden">
+              {/* Decorative Glow */}
+              <div className="absolute top-0 right-0 w-24 h-24 bg-groww-primary/10 rounded-full blur-2xl pointer-events-none" />
+              
+              <div className="flex items-center justify-between mb-3.5 relative z-10">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400 dark:text-gray-500">AI Bot Performance</span>
+                <span className={cn('text-[9px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1',
+                  enabled 
+                    ? 'bg-gain/10 text-gain border-gain/20'
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-450 dark:text-gray-550 border-gray-205 dark:border-gray-700'
+                )}>
+                  <span className={cn('w-1.5 h-1.5 rounded-full', enabled ? 'bg-gain animate-pulse' : 'bg-gray-400')} />
+                  {enabled ? 'Active Monitoring' : 'Offline'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 relative z-10">
+                {/* Capital Allocated */}
+                <div>
+                  <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider block mb-0.5">Allocated</span>
+                  <span className="text-sm font-extrabold text-gray-900 dark:text-white tabular-nums">
+                    {formatCurrency(allocatedCapitalVal)}
+                  </span>
+                </div>
+
+                {/* Profit/Loss with % */}
+                <div>
+                  <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider block mb-0.5">P&L / ROI</span>
+                  <span className={cn('text-sm font-extrabold tabular-nums block', pnlVal >= 0 ? 'text-gain' : 'text-loss')}>
+                    {pnlVal >= 0 ? '+' : ''}{formatCurrency(pnlVal)}
+                    <span className="text-[9px] font-bold ml-1 block sm:inline">
+                      ({pnlVal >= 0 ? '+' : ''}{pctRoi.toFixed(2)}%)
+                    </span>
+                  </span>
+                </div>
+
+                {/* Associated Stocks */}
+                <div>
+                  <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider block mb-0.5">Associated</span>
+                  <span className="text-sm font-extrabold text-gray-900 dark:text-white tabular-nums block">
+                    {state?.open_trades ?? 0} {state?.open_trades === 1 ? 'Stock' : 'Stocks'}
+                  </span>
+                </div>
+              </div>
             </div>
 
             {/* Capital Allocation */}
@@ -417,33 +461,37 @@ export default function AlgoTradePage() {
         </div>
 
         {/* ── RIGHT PANEL: Live Agent Terminal ── */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-[#0a0e1a] min-w-0">
+        <div className="flex-1 flex flex-col overflow-hidden bg-gray-50 dark:bg-[#0a0e1a] min-w-0">
           {/* Terminal Header */}
-          <div className="shrink-0 flex items-center justify-between px-4 py-2.5 border-b border-gray-800/80 bg-[#0d1220]">
+          <div className="shrink-0 flex items-center justify-between px-4 py-2.5 border-b border-gray-150 dark:border-gray-800/80 bg-white dark:bg-[#0d1220]">
             <div className="flex items-center gap-2">
               <Terminal className="w-4 h-4 text-groww-primary" />
-              <h3 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Agent Terminal</h3>
+              <h3 className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Agent Terminal</h3>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
+              <button onClick={() => { setLogs([]); toast.success('Terminal console cleared'); }}
+                className="flex items-center gap-1 text-[10px] font-bold text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 px-2 py-0.5 rounded-lg transition-all active:scale-95">
+                <Trash2 className="w-3 h-3 text-gray-500 dark:text-gray-400" /> Clear
+              </button>
               <span className={cn('flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full border',
                 enabled
-                  ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/10'
-                  : 'text-gray-500 border-gray-700 bg-gray-800/50')}>
-                <span className={cn('w-1.5 h-1.5 rounded-full', enabled ? 'bg-emerald-400 animate-pulse' : 'bg-gray-600')} />
+                  ? 'text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10'
+                  : 'text-gray-550 dark:text-gray-500 border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800/50')}>
+                <span className={cn('w-1.5 h-1.5 rounded-full', enabled ? 'bg-emerald-500 dark:bg-emerald-400 animate-pulse' : 'bg-gray-400 dark:bg-gray-600')} />
                 {enabled ? 'LIVE' : 'IDLE'}
               </span>
-              <span className="text-[10px] text-gray-600 tabular-nums">{logs.length} events</span>
+              <span className="text-[10px] text-gray-400 dark:text-gray-600 tabular-nums">{logs.length} events</span>
             </div>
           </div>
 
           {/* Terminal Body */}
           <div ref={consoleRef}
-            className="flex-1 overflow-y-auto px-4 py-3 font-mono text-[11px] leading-relaxed space-y-0.5 scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent">
+            className="flex-1 overflow-y-auto px-4 py-3 font-mono text-[11px] leading-relaxed space-y-0.5 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-800 scrollbar-track-transparent bg-white dark:bg-[#0a0e1a]">
             {logs.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center text-gray-600 font-sans">
-                <Terminal className="w-10 h-10 text-gray-800 mb-3" />
-                <p className="font-semibold text-gray-500 text-sm">Waiting for agent activity…</p>
-                <p className="text-xs text-gray-700 mt-1.5 max-w-xs leading-relaxed">
+              <div className="h-full flex flex-col items-center justify-center text-center text-gray-400 dark:text-gray-600 font-sans">
+                <Terminal className="w-10 h-10 text-gray-300 dark:text-gray-800 mb-3" />
+                <p className="font-semibold text-gray-500 dark:text-gray-400 text-sm">Waiting for agent activity…</p>
+                <p className="text-xs text-gray-550 dark:text-gray-500 mt-1.5 max-w-xs leading-relaxed">
                   {enabled
                     ? 'The AI council is scanning the market. Signals, deliberations, and trade executions will stream here in real time.'
                     : 'Activate the bot to launch the autonomous multi-agent council. Their reasoning and trade decisions will appear here.'}
@@ -462,10 +510,10 @@ export default function AlgoTradePage() {
                       isTrade && 'bg-emerald-500/[0.06] border-l-2 border-emerald-500',
                       isWarn && 'bg-amber-500/[0.04] border-l-2 border-amber-500',
                       isError && 'bg-rose-500/[0.04] border-l-2 border-rose-500',
-                      !isTrade && !isWarn && !isError && 'hover:bg-white/[0.02]'
+                      !isTrade && !isWarn && !isError && 'hover:bg-gray-50 dark:hover:bg-white/[0.02]'
                     )}>
                     {/* Timestamp */}
-                    <span className="text-gray-600 shrink-0 select-none tabular-nums text-[10px]">
+                    <span className="text-gray-400 dark:text-gray-600 shrink-0 select-none tabular-nums text-[10px]">
                       {new Date(l.created_at + 'Z').toLocaleTimeString('en-IN', { hour12: false })}
                     </span>
 
@@ -480,7 +528,7 @@ export default function AlgoTradePage() {
                     )}
 
                     {/* Message */}
-                    <span className={cn('break-words min-w-0', LEVEL_STYLE[l.level] ?? 'text-gray-300')}>
+                    <span className={cn('break-words min-w-0', LEVEL_STYLE[l.level] ?? 'text-gray-700 dark:text-gray-300')}>
                       {l.message}
                     </span>
                   </div>
@@ -494,14 +542,4 @@ export default function AlgoTradePage() {
   );
 }
 
-// ── Small components ─────────────────────────────────────────────────────────
-function MiniStat({ icon: Icon, label, value, tone }: {
-  icon: any; label: string; value: string; tone?: 'gain' | 'loss';
-}) {
-  return (
-    <div className="bg-gray-50 dark:bg-gray-800/30 rounded-xl p-2.5 border border-gray-100 dark:border-gray-800">
-      <div className="flex items-center gap-1 text-gray-400 mb-0.5"><Icon className="w-3 h-3" /><span className="text-[9px] font-medium">{label}</span></div>
-      <p className={cn('text-sm font-bold tabular-nums', tone === 'gain' ? 'text-gain' : tone === 'loss' ? 'text-loss' : 'text-gray-900 dark:text-white')}>{value}</p>
-    </div>
-  );
-}
+

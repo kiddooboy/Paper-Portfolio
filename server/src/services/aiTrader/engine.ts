@@ -55,10 +55,16 @@ async function getIntradayBars(symbol: string) {
 // the strongest intraday long candidates. No user watchlist — the agent finds
 // its own opportunities. Deterministic + cheap; the council reasons over the result.
 async function discoverCandidates(openSymbols: Set<string>, profile: RiskProfile, userId: number): Promise<CouncilCandidate[]> {
-  const all = Array.from(getAllCachedQuotes().values());
+  // FLM Module 1: Scan the entire master stocks table in the database
+  const dbStocks = db.prepare("SELECT symbol FROM stocks").all() as { symbol: string }[];
+  logConsole(userId, 'info', `Database scan: retrieved ${dbStocks.length} symbols from master stocks table`, { agent: 'Scanner' });
 
-  const nseStocks = all.filter(q => q.exchange === 'NSE' && q.price > 0);
-  logConsole(userId, 'info', `Universe: ${nseStocks.length} NSE stocks with live prices`, { agent: 'Scanner' });
+  const cachedQuotes = getAllCachedQuotes();
+  const nseStocks = dbStocks
+    .map(s => cachedQuotes.get(s.symbol))
+    .filter((q): q is any => q != null && q.exchange === 'NSE' && q.price > 0);
+
+  logConsole(userId, 'info', `Cross-referenced database with live prices: ${nseStocks.length} NSE stocks actively tracked`, { agent: 'Scanner' });
 
   // Prelim screen: liquid NSE names with constructive (not blown-out) intraday moves.
   const prelim = nseStocks
