@@ -3,7 +3,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import {
   Bot, Power, ShieldAlert, Wallet, CircleDollarSign, Activity, Layers,
-  Terminal, ShieldCheck, AlertTriangle, Clock, Trash2,
+  Terminal, ShieldCheck, AlertTriangle, Clock, Trash2, RefreshCw,
 } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 import StockLogo from '../components/StockLogo';
@@ -86,6 +86,7 @@ export default function AlgoTradePage() {
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [profiles, setProfiles] = useState<Record<string, RiskProfile> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const lastLogId = useRef(0);
   const consoleRef = useRef<HTMLDivElement>(null);
 
@@ -119,6 +120,33 @@ export default function AlgoTradePage() {
         setLogs(prev => [...prev, ...log.data].slice(-300));
       }
     } catch {}
+  }, []);
+
+  const handleManualRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refresh();
+      toast.success('Page data updated');
+    } catch {
+      toast.error('Failed to update page data');
+    } finally {
+      setTimeout(() => setRefreshing(false), 600);
+    }
+  };
+
+  const clearAndRefreshLogs = useCallback(async () => {
+    try {
+      setLogs([]);
+      lastLogId.current = 0;
+      const log = await axios.get('/api/algo/ai/console?since=0');
+      if (log.data.length) {
+        lastLogId.current = log.data[log.data.length - 1].id;
+        setLogs(log.data.slice(-300));
+      }
+      toast.success('Terminal reset and refreshed with recent lines');
+    } catch {
+      toast.error('Terminal cleared, but failed to fetch fresh lines');
+    }
   }, []);
 
   useEffect(() => {
@@ -247,45 +275,72 @@ export default function AlgoTradePage() {
           <div className="p-4 space-y-4">
 
             {/* ── AI Performance Summary Card ── */}
-            <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-gradient-to-br from-white to-gray-50/50 dark:from-groww-card dark:to-groww-card/80 p-4 shadow-sm relative overflow-hidden">
+            <div className={cn(
+              'rounded-2xl border p-4 shadow-sm relative overflow-hidden transition-all duration-300 bg-gradient-to-br',
+              enabled 
+                ? 'border-gain/25 shadow-lg shadow-gain/[0.02] from-white to-gain/[0.01] dark:from-groww-card dark:to-gain/[0.02]' 
+                : 'border-gray-200 dark:border-gray-800 from-white to-gray-50/50 dark:from-groww-card dark:to-groww-card/80'
+            )}>
               {/* Decorative Glow */}
-              <div className="absolute top-0 right-0 w-24 h-24 bg-groww-primary/10 rounded-full blur-2xl pointer-events-none" />
+              <div className={cn(
+                'absolute top-0 right-0 w-24 h-24 rounded-full blur-2xl pointer-events-none transition-all duration-500',
+                enabled ? 'bg-gain/10' : 'bg-groww-primary/10'
+              )} />
               
               <div className="flex items-center justify-between mb-3.5 relative z-10">
                 <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400 dark:text-gray-500">AI Bot Performance</span>
-                <span className={cn('text-[9px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1',
-                  enabled 
-                    ? 'bg-gain/10 text-gain border-gain/20'
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-450 dark:text-gray-550 border-gray-205 dark:border-gray-700'
-                )}>
-                  <span className={cn('w-1.5 h-1.5 rounded-full', enabled ? 'bg-gain animate-pulse' : 'bg-gray-400')} />
-                  {enabled ? 'Active Monitoring' : 'Offline'}
-                </span>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={handleManualRefresh}
+                    disabled={refreshing}
+                    className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-white bg-gray-50 hover:bg-gray-100 dark:bg-white/5 dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 transition-all active:scale-90"
+                    title="Refresh page data"
+                  >
+                    <RefreshCw className={cn('w-3 h-3', refreshing && 'animate-spin')} />
+                  </button>
+                  <span className={cn('text-[9px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 transition-all duration-300',
+                    enabled 
+                      ? 'bg-gain/10 text-gain border-gain/20'
+                      : 'bg-gray-100 dark:bg-gray-800/80 text-gray-450 dark:text-gray-500 border-gray-200 dark:border-gray-700'
+                  )}>
+                    <span className={cn('w-1.5 h-1.5 rounded-full', enabled ? 'bg-gain animate-pulse' : 'bg-gray-400')} />
+                    {enabled ? 'Active Monitoring' : 'Offline'}
+                  </span>
+                </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3 relative z-10">
                 {/* Capital Allocated */}
-                <div>
-                  <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider block mb-0.5">Allocated</span>
-                  <span className="text-sm font-extrabold text-gray-900 dark:text-white tabular-nums">
+                <div className="space-y-1">
+                  <span className="text-[9px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider flex items-center gap-1">
+                    <Wallet className="w-3 h-3 text-gray-400 dark:text-gray-500" />
+                    Allocated
+                  </span>
+                  <span className="text-sm font-extrabold text-gray-900 dark:text-white tabular-nums block">
                     {formatCurrency(allocatedCapitalVal)}
                   </span>
                 </div>
 
                 {/* Profit/Loss with % */}
-                <div>
-                  <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider block mb-0.5">P&L / ROI</span>
-                  <span className={cn('text-sm font-extrabold tabular-nums block', pnlVal >= 0 ? 'text-gain' : 'text-loss')}>
+                <div className="space-y-1">
+                  <span className="text-[9px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider flex items-center gap-1">
+                    <Activity className={cn('w-3 h-3', pnlVal >= 0 ? 'text-gain' : 'text-loss')} />
+                    P&L / ROI
+                  </span>
+                  <span className={cn('text-sm font-extrabold tabular-nums block leading-tight', pnlVal >= 0 ? 'text-gain' : 'text-loss')}>
                     {pnlVal >= 0 ? '+' : ''}{formatCurrency(pnlVal)}
-                    <span className="text-[9px] font-bold ml-1 block sm:inline">
+                    <span className="text-[9px] font-bold ml-1 block sm:inline opacity-90">
                       ({pnlVal >= 0 ? '+' : ''}{pctRoi.toFixed(2)}%)
                     </span>
                   </span>
                 </div>
 
                 {/* Associated Stocks */}
-                <div>
-                  <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider block mb-0.5">Associated</span>
+                <div className="space-y-1">
+                  <span className="text-[9px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider flex items-center gap-1">
+                    <Layers className="w-3 h-3 text-gray-400 dark:text-gray-500" />
+                    Associated
+                  </span>
                   <span className="text-sm font-extrabold text-gray-900 dark:text-white tabular-nums block">
                     {state?.open_trades ?? 0} {state?.open_trades === 1 ? 'Stock' : 'Stocks'}
                   </span>
@@ -469,9 +524,10 @@ export default function AlgoTradePage() {
               <h3 className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Agent Terminal</h3>
             </div>
             <div className="flex items-center gap-3">
-              <button onClick={() => { setLogs([]); toast.success('Terminal console cleared'); }}
-                className="flex items-center gap-1 text-[10px] font-bold text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 px-2 py-0.5 rounded-lg transition-all active:scale-95">
-                <Trash2 className="w-3 h-3 text-gray-500 dark:text-gray-400" /> Clear
+              <button onClick={clearAndRefreshLogs}
+                className="flex items-center gap-1 text-[10px] font-bold text-gray-550 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 px-2 py-0.5 rounded-lg transition-all active:scale-95"
+                title="Clear and pull latest logs">
+                <Trash2 className="w-3 h-3 text-gray-550 dark:text-gray-400" /> Clear
               </button>
               <span className={cn('flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full border',
                 enabled
