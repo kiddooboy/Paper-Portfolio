@@ -127,9 +127,9 @@ export default function AlgoTradePage() {
     return () => clearInterval(t);
   }, [refresh]);
 
-  // Auto-scroll console to bottom on new logs
+  // Auto-scroll console to top on new logs
   useEffect(() => {
-    if (consoleRef.current) consoleRef.current.scrollTop = consoleRef.current.scrollHeight;
+    if (consoleRef.current) consoleRef.current.scrollTop = 0;
   }, [logs]);
 
   // ── Config mutations ──
@@ -246,7 +246,7 @@ export default function AlgoTradePage() {
                 value={`${(state?.daily_pnl ?? 0) >= 0 ? '+' : ''}${formatCurrency(state?.daily_pnl ?? 0)}`}
                 tone={(state?.daily_pnl ?? 0) >= 0 ? 'gain' : 'loss'} />
               <MiniStat icon={Layers} label="Open" value={String(state?.open_trades ?? 0)} />
-              <MiniStat icon={TrendingUp} label="Today" value={`${state?.trades_today ?? 0}/${state?.max_trades_per_day ?? 0}`} />
+              <MiniStat icon={TrendingUp} label="Today" value={`${state?.trades_today ?? 0} trades`} />
             </div>
 
             {/* Capital Allocation */}
@@ -292,7 +292,7 @@ export default function AlgoTradePage() {
                   <div className="flex justify-between"><span className="text-gray-500">Stop:</span><strong className="text-gray-800 dark:text-gray-200">{profile.atrStopMult}× ATR</strong></div>
                   <div className="flex justify-between"><span className="text-gray-500">R:R:</span><strong className="text-gray-800 dark:text-gray-200">{profile.rewardRisk}:1</strong></div>
                   <div className="flex justify-between"><span className="text-gray-500">Trail:</span><strong className="text-gray-800 dark:text-gray-200">{profile.trailAtrMult}× ATR</strong></div>
-                  <div className="flex justify-between col-span-2"><span className="text-gray-500">Slots / Day:</span><strong className="text-gray-800 dark:text-gray-200">{profile.maxPositions} open · {profile.maxTradesPerDay} max/day</strong></div>
+                  <div className="flex justify-between col-span-2"><span className="text-gray-500">Max Slots:</span><strong className="text-gray-800 dark:text-gray-200">{profile.maxPositions} open positions</strong></div>
                 </div>
               )}
             </div>
@@ -308,23 +308,14 @@ export default function AlgoTradePage() {
                   className="w-full px-3 py-2 text-sm tabular-nums rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30 font-medium" />
               </div>
               <div>
-                <label className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1 block">Max Trades/Day</label>
-                <input type="number" min={1} max={50} step={1}
-                  value={cfg.max_trades_per_day ?? ''}
-                  onChange={e => setCfg({ ...cfg, max_trades_per_day: e.target.value ? parseInt(e.target.value) : 10 })}
-                  onBlur={e => patch({ max_trades_per_day: e.target.value ? parseInt(e.target.value) : 10 })}
+                <label className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1 block">Daily Loss Limit (₹)</label>
+                <input type="number" min={0} step={500}
+                  value={cfg.max_daily_loss ?? ''}
+                  placeholder="No limit"
+                  onChange={e => setCfg({ ...cfg, max_daily_loss: e.target.value ? parseFloat(e.target.value) : null })}
+                  onBlur={e => patch({ max_daily_loss: e.target.value ? parseFloat(e.target.value) : null })}
                   className="w-full px-3 py-2 text-sm tabular-nums rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30 font-medium" />
               </div>
-            </div>
-
-            <div>
-              <label className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1 block">Daily Loss Limit (₹)</label>
-              <input type="number" min={0} step={500}
-                value={cfg.max_daily_loss ?? ''}
-                placeholder="No limit"
-                onChange={e => setCfg({ ...cfg, max_daily_loss: e.target.value ? parseFloat(e.target.value) : null })}
-                onBlur={e => patch({ max_daily_loss: e.target.value ? parseFloat(e.target.value) : null })}
-                className="w-full px-3 py-2 text-sm tabular-nums rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30 font-medium" />
             </div>
 
             {/* Session Times */}
@@ -459,7 +450,7 @@ export default function AlgoTradePage() {
                 </p>
               </div>
             ) : (
-              logs.map(l => {
+              [...logs].reverse().map(l => {
                 const isTrade = l.level === 'trade';
                 const isWarn = l.level === 'warn';
                 const isError = l.level === 'error';

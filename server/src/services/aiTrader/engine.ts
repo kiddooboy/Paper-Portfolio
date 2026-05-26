@@ -225,11 +225,7 @@ async function tickUser(cfg: Cfg) {
     return; // daily loss limit reached — stand down for the day
   }
 
-  const todayEntries = entriesToday(cfg.user_id);
-  if (todayEntries >= cfg.max_trades_per_day) {
-    logConsole(cfg.user_id, 'info', `Max trades/day reached (${todayEntries}/${cfg.max_trades_per_day})`, { agent: 'Guardrail' });
-    return;
-  }
+
 
   const openCount = db.prepare(`SELECT COUNT(*) AS n FROM ai_positions WHERE user_id = ? AND status='open'`).get(cfg.user_id) as any;
   const slots = profile.maxPositions - (openCount?.n ?? 0);
