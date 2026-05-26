@@ -62,7 +62,7 @@ async function discoverCandidates(openSymbols: Set<string>, profile: RiskProfile
 
   // Prelim screen: liquid NSE names with constructive (not blown-out) intraday moves.
   const prelim = nseStocks
-    .filter(q => process.env.BYPASS_MARKET_HOURS === 'true' || q.volume > 50_000)
+    .filter(q => process.env.BYPASS_MARKET_HOURS !== 'false' || q.volume > 50_000)
     .filter(q => !openSymbols.has(q.symbol))
     .filter(q => q.change_percent > -0.5 && q.change_percent < 7)
     .map(q => ({ q, screen: q.change_percent + Math.min(2, q.volume / 5_000_000) }))
@@ -204,7 +204,7 @@ async function tickUser(cfg: Cfg) {
     { agent: 'Engine' });
 
   // 1) Manage existing positions (force square-off past the configured time).
-  const forceSquareOff = nowMin >= hhmmToMin(cfg.squareoff_time) && process.env.BYPASS_MARKET_HOURS !== 'true';
+  const forceSquareOff = nowMin >= hhmmToMin(cfg.squareoff_time) && process.env.BYPASS_MARKET_HOURS === 'false';
   for (const pos of open) {
     await managePosition(cfg, pos, forceSquareOff);
   }
@@ -214,7 +214,7 @@ async function tickUser(cfg: Cfg) {
     logConsole(cfg.user_id, 'warn', 'Past square-off time — no new entries', { agent: 'Guardrail' });
     return;
   }
-  if ((nowMin < hhmmToMin(cfg.session_start) || nowMin > hhmmToMin(cfg.session_end)) && process.env.BYPASS_MARKET_HOURS !== 'true') {
+  if ((nowMin < hhmmToMin(cfg.session_start) || nowMin > hhmmToMin(cfg.session_end)) && process.env.BYPASS_MARKET_HOURS === 'false') {
     logConsole(cfg.user_id, 'info', 'Outside session window — waiting', { agent: 'Guardrail' });
     return;
   }
@@ -420,7 +420,7 @@ export async function killSwitch(userId: number) {
 export function startAiTradeEngine() {
   if (timer) return;
   banner(`Engine started — tick every ${TICK_MS / 1000}s`);
-  console.log(`${DIM}  BYPASS_MARKET_HOURS=${process.env.BYPASS_MARKET_HOURS ?? 'false'}${RESET}`);
+  console.log(`${DIM}  BYPASS_MARKET_HOURS=${process.env.BYPASS_MARKET_HOURS ?? 'true (default)'}${RESET}`);
   console.log(`${DIM}  ANTHROPIC_API_KEY=${process.env.ANTHROPIC_API_KEY ? 'set (council enabled)' : 'NOT SET (using fallback)'}${RESET}`);
   timer = setInterval(() => { void tick(); }, TICK_MS);
   // Run the first tick immediately after a short delay so data is cached

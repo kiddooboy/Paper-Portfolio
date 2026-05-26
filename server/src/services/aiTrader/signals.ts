@@ -52,7 +52,7 @@ export function analyzeSymbol(
   changePct: number,
 ): SignalResult {
   let activeBars = bars;
-  if (bars.length < 30 && process.env.BYPASS_MARKET_HOURS === 'true') {
+  if (bars.length < 30 && process.env.BYPASS_MARKET_HOURS !== 'false') {
     // Generate mock constructive intraday candles for sandbox offline testing!
     activeBars = [];
     const basePrice = price || 100;
