@@ -166,14 +166,14 @@ async function tickUser(cfg: Cfg) {
   const open = db.prepare(`SELECT * FROM ai_positions WHERE user_id = ? AND status = 'open'`).all(cfg.user_id) as any[];
 
   // 1) Manage existing positions (force square-off past the configured time).
-  const forceSquareOff = nowMin >= hhmmToMin(cfg.squareoff_time);
+  const forceSquareOff = nowMin >= hhmmToMin(cfg.squareoff_time) && process.env.BYPASS_MARKET_HOURS !== 'true';
   for (const pos of open) {
     await managePosition(cfg, pos, forceSquareOff);
   }
 
   // 2) Guardrails before any new entry.
   if (forceSquareOff) return;                          // no fresh entries near close
-  if (nowMin < hhmmToMin(cfg.session_start) || nowMin > hhmmToMin(cfg.session_end)) return;
+  if ((nowMin < hhmmToMin(cfg.session_start) || nowMin > hhmmToMin(cfg.session_end)) && process.env.BYPASS_MARKET_HOURS !== 'true') return;
 
   const realized = todaysRealized(cfg.user_id);
   if (cfg.max_daily_loss != null && realized <= -Math.abs(cfg.max_daily_loss)) {

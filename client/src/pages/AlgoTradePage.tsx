@@ -203,46 +203,16 @@ export default function AlgoTradePage() {
         {/* LEFT — Capital + Risk only */}
         <div className="space-y-4">
           <Panel title="Capital Allocation" icon={CircleDollarSign}>
-            <div className="space-y-4">
-              <div>
-                <label className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Capital Limit (₹)</label>
-                <input type="number" min={0} step={1000}
-                  value={cfg.capital_amount ?? ''}
-                  placeholder="Unlimited (Uses % below)"
-                  onChange={e => setCfg({ ...cfg, capital_amount: e.target.value ? parseFloat(e.target.value) : null })}
-                  onBlur={e => patch({ capital_amount: e.target.value ? parseFloat(e.target.value) : null })}
-                  className="w-full mt-1 px-3 py-2 text-sm tabular-nums rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30" />
-              </div>
-
-              <div>
-                <div className="flex justify-between items-center">
-                  <label className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Wallet Allocation (%)</label>
-                  <span className="text-xs font-bold text-groww-primary">{cfg.allocation_pct}%</span>
-                </div>
-                <input type="range" min={5} max={100} step={5}
-                  value={cfg.allocation_pct}
-                  onChange={e => setCfg({ ...cfg, allocation_pct: parseInt(e.target.value) })}
-                  onMouseUp={e => patch({ allocation_pct: parseInt((e.target as HTMLInputElement).value) })}
-                  onTouchEnd={e => patch({ allocation_pct: parseInt((e.target as HTMLInputElement).value) })}
-                  className="w-full mt-2 accent-groww-primary cursor-pointer h-1.5 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none" />
-                <p className="text-[10px] text-gray-500 mt-1">
-                  Active Capital: <strong className="font-semibold text-gray-700 dark:text-gray-300">{formatCurrency((state?.wallet_balance ?? 0) * cfg.allocation_pct / 100)}</strong>
-                </p>
-              </div>
-
-              <div className="text-[11px] text-gray-500 border-t border-gray-100 dark:border-gray-800/60 pt-2.5 space-y-1">
-                <div className="flex justify-between">
-                  <span>Available Cash:</span>
-                  <span className="font-medium tabular-nums">{formatCurrency(state?.wallet_balance ?? 0)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Allocated Cap:</span>
-                  <span className="font-medium tabular-nums text-groww-primary">
-                    {cfg.capital_amount ? formatCurrency(cfg.capital_amount) : formatCurrency((state?.wallet_balance ?? 0) * cfg.allocation_pct / 100)}
-                  </span>
-                </div>
-              </div>
-            </div>
+            <label className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Capital to deploy (₹)</label>
+            <input type="number" min={0} step={1000}
+              value={cfg.capital_amount ?? ''}
+              placeholder={`${Math.round((state?.wallet_balance ?? 0) * cfg.allocation_pct / 100)}`}
+              onChange={e => setCfg({ ...cfg, capital_amount: e.target.value ? parseFloat(e.target.value) : null })}
+              onBlur={e => patch({ capital_amount: e.target.value ? parseFloat(e.target.value) : null })}
+              className="w-full mt-1 px-3 py-2 text-sm tabular-nums rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30" />
+            <p className="text-[11px] text-gray-500 mt-1.5">
+              Leave blank to use {cfg.allocation_pct}% of wallet. Available: {formatCurrency(state?.wallet_balance ?? 0)}
+            </p>
           </Panel>
 
           <Panel title="Risk Category" icon={ShieldCheck}>

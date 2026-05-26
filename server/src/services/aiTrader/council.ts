@@ -15,7 +15,7 @@ import type { RiskProfile } from './riskProfiles.js';
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || '' });
 
 // Strongest model for the actual decision-making.
-const COUNCIL_MODEL = 'claude-opus-4-7';
+const COUNCIL_MODEL = 'claude-3-opus-20240229';
 
 export interface CouncilCandidate {
   sig: SignalResult;
