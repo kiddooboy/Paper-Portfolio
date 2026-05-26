@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Lock, Eye, EyeOff } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 import { cn } from '../lib/utils';
 import { useAuthStore } from '../store/authStore';
 import { enableBiometricMpin } from '../lib/biometric';
@@ -128,12 +129,14 @@ export default function SetupMpinPage() {
             >
               {loading ? 'Setting MPIN...' : 'Set MPIN'}
             </button>
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="w-full py-3 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition"
-            >
-              Skip for Now
-            </button>
+            {!Capacitor.isNativePlatform() && (
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="w-full py-3 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+              >
+                Skip for Now
+              </button>
+            )}
           </div>
         </div>
       </div>

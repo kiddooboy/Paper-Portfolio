@@ -62,6 +62,23 @@ export async function unlockWithBiometric(reason = 'Unlock Paper Portfolio'): Pr
   }
 }
 
+/** Just prompt Face ID / fingerprint and report success — used to unlock an
+ *  already-authenticated session on app open (no credential needed). */
+export async function verifyBiometric(reason = 'Unlock Paper Portfolio'): Promise<boolean> {
+  if (!Capacitor.isNativePlatform()) return true;
+  try {
+    const NativeBiometric = await plugin();
+    await NativeBiometric.verifyIdentity({
+      reason,
+      title: 'Paper Portfolio',
+      subtitle: 'Confirm your identity',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** True if we have a saved credential to unlock with biometrics. */
 export async function hasBiometricMpin(): Promise<boolean> {
   if (!Capacitor.isNativePlatform()) return false;
