@@ -1,0 +1,32 @@
+diff --git a/node_modules/@capgo/capacitor-native-biometric/android/src/main/java/ee/forgr/biometric/AuthActivity.java b/node_modules/@capgo/capacitor-native-biometric/android/src/main/java/ee/forgr/biometric/AuthActivity.java
+index 8a691eb..c451991 100644
+--- a/node_modules/@capgo/capacitor-native-biometric/android/src/main/java/ee/forgr/biometric/AuthActivity.java
++++ b/node_modules/@capgo/capacitor-native-biometric/android/src/main/java/ee/forgr/biometric/AuthActivity.java
+@@ -85,10 +85,25 @@ public class AuthActivity extends AppCompatActivity {
+             // Filter authenticators based on allowed types
+             authenticators = getAllowedAuthenticators(allowedTypes);
+         }
++
++        // Device-credential (PIN/pattern/password) support: combining
++        // DEVICE_CREDENTIAL with setAllowedAuthenticators requires API 30+.
++        // Below that, drop it and keep a biometric prompt with the cancel button.
++        boolean wantsDeviceCredential = (authenticators & BiometricManager.Authenticators.DEVICE_CREDENTIAL) != 0;
++        if (wantsDeviceCredential && android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
++            authenticators &= ~BiometricManager.Authenticators.DEVICE_CREDENTIAL;
++            if (authenticators == 0) authenticators = BiometricManager.Authenticators.BIOMETRIC_WEAK;
++            wantsDeviceCredential = false;
++        }
++
+         builder.setAllowedAuthenticators(authenticators);
+ 
+-        String negativeText = getIntent().getStringExtra("negativeButtonText");
+-        builder.setNegativeButtonText(negativeText != null ? negativeText : "Cancel");
++        // DEVICE_CREDENTIAL and a negative (cancel) button are mutually exclusive
++        // in BiometricPrompt — only set the negative button when NOT allowing it.
++        if (!wantsDeviceCredential) {
++            String negativeText = getIntent().getStringExtra("negativeButtonText");
++            builder.setNegativeButtonText(negativeText != null ? negativeText : "Cancel");
++        }
+ 
+         BiometricPrompt.PromptInfo promptInfo = builder.build();
+ 

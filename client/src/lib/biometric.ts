@@ -62,20 +62,32 @@ export async function unlockWithBiometric(reason = 'Unlock Paper Portfolio'): Pr
   }
 }
 
-/** Just prompt Face ID / fingerprint and report success — used to unlock an
- *  already-authenticated session on app open (no credential needed). */
-export async function verifyBiometric(reason = 'Unlock Paper Portfolio'): Promise<boolean> {
-  if (!Capacitor.isNativePlatform()) return true;
+// BiometryType numeric values (from the plugin): 1 TouchID, 2 FaceID,
+// 3 Fingerprint, 4 FaceAuth, 5 Iris, 7 DEVICE_CREDENTIAL (PIN/pattern/password).
+const ALL_AUTHENTICATORS = [1, 2, 3, 4, 5, 7];
+
+export type VerifyResult = 'ok' | 'failed' | 'unavailable';
+
+/** Prompt the device's own lock — whatever the user has set: fingerprint, face,
+ *  iris, OR PIN/pattern/password — and report the outcome. Used to unlock an
+ *  already-authenticated session on app open (no stored credential needed).
+ *  'unavailable' means the phone has no secure lock at all (can't enforce). */
+export async function verifyBiometric(reason = 'Unlock Paper Portfolio'): Promise<VerifyResult> {
+  if (!Capacitor.isNativePlatform()) return 'ok';
   try {
     const NativeBiometric = await plugin();
     await NativeBiometric.verifyIdentity({
       reason,
       title: 'Paper Portfolio',
-      subtitle: 'Confirm your identity',
+      subtitle: 'Unlock with your screen lock',
+      useFallback: true,                       // iOS passcode fallback
+      allowedBiometryTypes: ALL_AUTHENTICATORS as any, // Android: biometrics + device credential
+      maxAttempts: 3,
     });
-    return true;
-  } catch {
-    return false;
+    return 'ok';
+  } catch (e: any) {
+    // 14 = ERROR_NO_DEVICE_CREDENTIAL → the phone has no PIN/pattern/password/biometric.
+    return String(e?.code ?? '') === '14' ? 'unavailable' : 'failed';
   }
 }
 
