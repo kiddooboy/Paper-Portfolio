@@ -11,8 +11,18 @@ import StockLogo from '../components/StockLogo';
 // ── Types ────────────────────────────────────────────────────────────────────
 type RiskLevel = 'conservative' | 'moderate' | 'aggressive';
 interface AiConfig {
-  is_enabled: number; kill_switch: number; allocation_pct: number;
-  capital_amount: number | null; risk_level: RiskLevel;
+  is_enabled: number;
+  kill_switch: number;
+  allocation_pct: number;
+  capital_amount: number | null;
+  risk_level: RiskLevel;
+  max_positions: number;
+  max_daily_loss: number | null;
+  max_trades_per_day: number;
+  squareoff_time: string;
+  session_start: string;
+  session_end: string;
+  min_confidence: number;
 }
 interface AiState {
   status: string; wallet_balance: number; active_capital: number; daily_pnl: number;
@@ -24,8 +34,18 @@ interface Position {
 }
 interface LogRow { id: number; level: string; agent: string | null; message: string; created_at: string; }
 interface RiskProfile {
-  label: string; targetPct: number; stopLossPct: number; trailingPct: number;
-  maxTradesPerDay: number; minConfidence: number; maxPositions: number;
+  level: string;
+  label: string;
+  riskPerTradePct: number;
+  atrStopMult: number;
+  rewardRisk: number;
+  trailAtrMult: number;
+  maxPositionPct: number;
+  maxConcurrentRiskPct: number;
+  maxPositions: number;
+  maxTradesPerDay: number;
+  minConfidence: number;
+  fallbackStopPct: number;
 }
 
 const RISK_ORDER: RiskLevel[] = ['conservative', 'moderate', 'aggressive'];
@@ -183,16 +203,46 @@ export default function AlgoTradePage() {
         {/* LEFT — Capital + Risk only */}
         <div className="space-y-4">
           <Panel title="Capital Allocation" icon={CircleDollarSign}>
-            <label className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Capital to deploy (₹)</label>
-            <input type="number" min={0} step={1000}
-              value={cfg.capital_amount ?? ''}
-              placeholder={`${Math.round((state?.wallet_balance ?? 0) * cfg.allocation_pct / 100)}`}
-              onChange={e => setCfg({ ...cfg, capital_amount: e.target.value ? parseFloat(e.target.value) : null })}
-              onBlur={e => patch({ capital_amount: e.target.value ? parseFloat(e.target.value) : null })}
-              className="w-full mt-1 px-3 py-2 text-sm tabular-nums rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30" />
-            <p className="text-[11px] text-gray-500 mt-1.5">
-              Leave blank to use {cfg.allocation_pct}% of wallet. Available: {formatCurrency(state?.wallet_balance ?? 0)}
-            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Capital Limit (₹)</label>
+                <input type="number" min={0} step={1000}
+                  value={cfg.capital_amount ?? ''}
+                  placeholder="Unlimited (Uses % below)"
+                  onChange={e => setCfg({ ...cfg, capital_amount: e.target.value ? parseFloat(e.target.value) : null })}
+                  onBlur={e => patch({ capital_amount: e.target.value ? parseFloat(e.target.value) : null })}
+                  className="w-full mt-1 px-3 py-2 text-sm tabular-nums rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30" />
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center">
+                  <label className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Wallet Allocation (%)</label>
+                  <span className="text-xs font-bold text-groww-primary">{cfg.allocation_pct}%</span>
+                </div>
+                <input type="range" min={5} max={100} step={5}
+                  value={cfg.allocation_pct}
+                  onChange={e => setCfg({ ...cfg, allocation_pct: parseInt(e.target.value) })}
+                  onMouseUp={e => patch({ allocation_pct: parseInt((e.target as HTMLInputElement).value) })}
+                  onTouchEnd={e => patch({ allocation_pct: parseInt((e.target as HTMLInputElement).value) })}
+                  className="w-full mt-2 accent-groww-primary cursor-pointer h-1.5 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none" />
+                <p className="text-[10px] text-gray-500 mt-1">
+                  Active Capital: <strong className="font-semibold text-gray-700 dark:text-gray-300">{formatCurrency((state?.wallet_balance ?? 0) * cfg.allocation_pct / 100)}</strong>
+                </p>
+              </div>
+
+              <div className="text-[11px] text-gray-500 border-t border-gray-100 dark:border-gray-800/60 pt-2.5 space-y-1">
+                <div className="flex justify-between">
+                  <span>Available Cash:</span>
+                  <span className="font-medium tabular-nums">{formatCurrency(state?.wallet_balance ?? 0)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Allocated Cap:</span>
+                  <span className="font-medium tabular-nums text-groww-primary">
+                    {cfg.capital_amount ? formatCurrency(cfg.capital_amount) : formatCurrency((state?.wallet_balance ?? 0) * cfg.allocation_pct / 100)}
+                  </span>
+                </div>
+              </div>
+            </div>
           </Panel>
 
           <Panel title="Risk Category" icon={ShieldCheck}>
@@ -209,18 +259,93 @@ export default function AlgoTradePage() {
                       {active && <span className="text-[10px] font-bold text-groww-primary">SELECTED</span>}
                     </div>
                     {pr && (
-                      <div className="grid grid-cols-3 gap-1 mt-2 text-[10px] text-gray-500 dark:text-gray-400">
-                        <span>🎯 Tgt {pr.targetPct}%</span>
-                        <span>🛡 SL {pr.stopLossPct}%</span>
-                        <span>📉 Trail {pr.trailingPct}%</span>
-                        <span>⚡ {pr.maxTradesPerDay}/day</span>
-                        <span>📊 Conf ≥{pr.minConfidence}</span>
-                        <span>📦 {pr.maxPositions} pos</span>
+                      <div className="grid grid-cols-2 gap-x-2 gap-y-1 mt-2 text-[10px] text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-800/60 pt-2">
+                        <span className="flex items-center gap-1">💰 Risk/Trade: <strong className="text-gray-700 dark:text-gray-300 font-semibold">{pr.riskPerTradePct}%</strong></span>
+                        <span className="flex items-center gap-1">🛡 Stop: <strong className="text-gray-700 dark:text-gray-300 font-semibold">{pr.atrStopMult}× ATR</strong></span>
+                        <span className="flex items-center gap-1">🎯 R:R Ratio: <strong className="text-gray-700 dark:text-gray-300 font-semibold">{pr.rewardRisk}:1</strong></span>
+                        <span className="flex items-center gap-1">📉 Trailing: <strong className="text-gray-700 dark:text-gray-300 font-semibold">{pr.trailAtrMult}× ATR</strong></span>
+                        <span className="flex items-center gap-1">📦 Max Slots: <strong className="text-gray-700 dark:text-gray-300 font-semibold">{pr.maxPositions}</strong></span>
+                        <span className="flex items-center gap-1">⚡ Max/Day: <strong className="text-gray-700 dark:text-gray-300 font-semibold">{pr.maxTradesPerDay}</strong></span>
+                        <span className="flex items-center gap-1">📊 Min Conf: <strong className="text-gray-700 dark:text-gray-300 font-semibold">{pr.minConfidence}%</strong></span>
+                        <span className="flex items-center gap-1">🔒 Position Cap: <strong className="text-gray-700 dark:text-gray-300 font-semibold">{pr.maxPositionPct}%</strong></span>
                       </div>
                     )}
                   </button>
                 );
               })}
+            </div>
+          </Panel>
+
+          <Panel title="Advanced Autonomy Settings" icon={Bot}>
+            <div className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Min Confidence (%)</label>
+                  <input type="number" min={40} max={95} step={1}
+                    value={cfg.min_confidence ?? ''}
+                    onChange={e => setCfg({ ...cfg, min_confidence: e.target.value ? parseInt(e.target.value) : 60 })}
+                    onBlur={e => patch({ min_confidence: e.target.value ? parseInt(e.target.value) : 60 })}
+                    className="w-full mt-1 px-3 py-2 text-sm tabular-nums rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30" />
+                </div>
+                <div>
+                  <label className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Max Trades/Day</label>
+                  <input type="number" min={1} max={50} step={1}
+                    value={cfg.max_trades_per_day ?? ''}
+                    onChange={e => setCfg({ ...cfg, max_trades_per_day: e.target.value ? parseInt(e.target.value) : 10 })}
+                    onBlur={e => patch({ max_trades_per_day: e.target.value ? parseInt(e.target.value) : 10 })}
+                    className="w-full mt-1 px-3 py-2 text-sm tabular-nums rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30" />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Daily Loss Limit (₹)</label>
+                <input type="number" min={0} step={500}
+                  value={cfg.max_daily_loss ?? ''}
+                  placeholder="No Limit"
+                  onChange={e => setCfg({ ...cfg, max_daily_loss: e.target.value ? parseFloat(e.target.value) : null })}
+                  onBlur={e => patch({ max_daily_loss: e.target.value ? parseFloat(e.target.value) : null })}
+                  className="w-full mt-1 px-3 py-2 text-sm tabular-nums rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30" />
+                <p className="text-[9px] text-gray-500 mt-1">Stops bot for the day once realized loss hits this cap.</p>
+              </div>
+
+              <div className="border-t border-gray-100 dark:border-gray-800/60 pt-3 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Trading Window</span>
+                  <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">{cfg.session_start} - {cfg.session_end} IST</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[9px] uppercase tracking-wide text-gray-400 font-semibold">Start Time</label>
+                    <input type="time"
+                      value={cfg.session_start}
+                      onChange={e => setCfg({ ...cfg, session_start: e.target.value })}
+                      onBlur={e => patch({ session_start: e.target.value })}
+                      className="w-full mt-1 px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30 cursor-pointer" />
+                  </div>
+                  <div>
+                    <label className="text-[9px] uppercase tracking-wide text-gray-400 font-semibold">End Time</label>
+                    <input type="time"
+                      value={cfg.session_end}
+                      onChange={e => setCfg({ ...cfg, session_end: e.target.value })}
+                      onBlur={e => patch({ session_end: e.target.value })}
+                      className="w-full mt-1 px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30 cursor-pointer" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-100 dark:border-gray-800/60 pt-3">
+                <div className="flex justify-between items-center gap-3">
+                  <div>
+                    <label className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold flex items-center gap-1">Auto Square-Off</label>
+                    <p className="text-[9px] text-gray-500">Closes open positions at market price.</p>
+                  </div>
+                  <input type="time"
+                    value={cfg.squareoff_time}
+                    onChange={e => setCfg({ ...cfg, squareoff_time: e.target.value })}
+                    onBlur={e => patch({ squareoff_time: e.target.value })}
+                    className="w-32 px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30 cursor-pointer" />
+                </div>
+              </div>
             </div>
           </Panel>
 

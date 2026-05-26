@@ -32,6 +32,7 @@ export interface SignalResult {
     ema21: number | null;
     supertrend: 1 | -1 | null;
     atrPct: number | null;
+    atr: number | null;
     vwap: number | null;
     volSurge: number | null;     // current vol ÷ avg vol
     nearBreakout: boolean;
@@ -55,7 +56,7 @@ export function analyzeSymbol(
 
   const snapshot: SignalResult['snapshot'] = {
     price, rsi: null, macdHist: null, ema9: null, ema21: null,
-    supertrend: null, atrPct: null, vwap: null, volSurge: null, nearBreakout: false,
+    supertrend: null, atrPct: null, atr: null, vwap: null, volSurge: null, nearBreakout: false,
   };
 
   // Need enough candles to be meaningful.
@@ -104,6 +105,7 @@ export function analyzeSymbol(
   const atr = last(calcATR(bars, 14)) ?? null;
   const atrPct = atr != null && price > 0 ? (atr / price) * 100 : null;
   snapshot.atrPct = atrPct;
+  snapshot.atr = atr;
   if (atrPct != null) {
     if (atrPct > 4) signals.push({ agent: 'Volatility', score: -8, detail: `ATR ${atrPct.toFixed(1)}% — choppy` });
     else if (atrPct >= 0.6) signals.push({ agent: 'Volatility', score: 6, detail: `ATR ${atrPct.toFixed(1)}% — tradable range` });

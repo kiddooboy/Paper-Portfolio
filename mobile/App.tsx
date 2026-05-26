@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import {
   BackHandler, StatusBar, StyleSheet, View, ActivityIndicator, Linking,
 } from 'react-native';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import WebView, { WebViewNavigation } from 'react-native-webview';
 
 const APP_URL = 'http://65.2.45.191:5000';
@@ -22,6 +22,15 @@ const INJECTED_JS = `
 `;
 
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <MainApp />
+    </SafeAreaProvider>
+  );
+}
+
+function MainApp() {
+  const insets = useSafeAreaInsets();
   const webViewRef = useRef<WebView>(null);
   const [canGoBack, setCanGoBack] = useState(false);
 
@@ -33,8 +42,8 @@ export default function App() {
       }
       return false;
     };
-    BackHandler.addEventListener('hardwareBackPress', onBack);
-    return () => BackHandler.removeEventListener('hardwareBackPress', onBack);
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBack);
+    return () => subscription.remove();
   }, [canGoBack]);
 
   const handleNavigation = (request: WebViewNavigation) => {
@@ -60,38 +69,36 @@ export default function App() {
   };
 
   return (
-    <SafeAreaProvider>
-      <StatusBar barStyle="light-content" backgroundColor="#0f0f1a" />
-      <SafeAreaView style={styles.container}>
-        <WebView
-          ref={webViewRef}
-          source={{ uri: APP_URL }}
-          style={{ flex: 1 }}
-          javaScriptEnabled
-          domStorageEnabled
-          thirdPartyCookiesEnabled
-          allowsInlineMediaPlayback
-          startInLoadingState
-          injectedJavaScript={INJECTED_JS}
-          injectedJavaScriptBeforeContentLoaded={INJECTED_JS}
-          renderLoading={() => (
-            <View style={styles.loader}>
-              <ActivityIndicator size="large" color="#00B386" />
-            </View>
-          )}
-          onNavigationStateChange={(state) => setCanGoBack(state.canGoBack)}
-          onShouldStartLoadWithRequest={handleNavigation}
-          // Prevent window.open() from opening external browser
-          onOpenWindow={(e) => {
-            const url = e.nativeEvent.targetUrl;
-            if (url && webViewRef.current) {
-              webViewRef.current.injectJavaScript(`window.location.href = '${url.replace(/'/g, "\\'")}';`);
-            }
-          }}
-          userAgent="PaperPortfolioApp/1.0 Android"
-        />
-      </SafeAreaView>
-    </SafeAreaProvider>
+    <View style={[styles.container, { paddingTop: Math.max(insets.top, StatusBar.currentHeight ?? 0) }]}>
+      <StatusBar barStyle="light-content" backgroundColor="#0f0f1a" translucent={true} />
+      <WebView
+        ref={webViewRef}
+        source={{ uri: APP_URL }}
+        style={{ flex: 1 }}
+        javaScriptEnabled
+        domStorageEnabled
+        thirdPartyCookiesEnabled
+        allowsInlineMediaPlayback
+        startInLoadingState
+        injectedJavaScript={INJECTED_JS}
+        injectedJavaScriptBeforeContentLoaded={INJECTED_JS}
+        renderLoading={() => (
+          <View style={styles.loader}>
+            <ActivityIndicator size="large" color="#00B386" />
+          </View>
+        )}
+        onNavigationStateChange={(state) => setCanGoBack(state.canGoBack)}
+        onShouldStartLoadWithRequest={handleNavigation}
+        // Prevent window.open() from opening external browser
+        onOpenWindow={(e) => {
+          const url = e.nativeEvent.targetUrl;
+          if (url && webViewRef.current) {
+            webViewRef.current.injectJavaScript(`window.location.href = '${url.replace(/'/g, "\\'")}';`);
+          }
+        }}
+        userAgent="PaperPortfolioApp/1.0 Android"
+      />
+    </View>
   );
 }
 

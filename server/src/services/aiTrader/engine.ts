@@ -14,7 +14,7 @@
 import { db } from '../../db/index.js';
 import { getQuote, getHistory, isMarketOpen, getISTDate, getAllCachedQuotes } from '../marketData.js';
 import { pushToUser } from '../push.js';
-import { getRiskProfile, type RiskProfile } from './riskProfiles.js';
+import { getRiskProfile, type RiskProfile, computeStops, sizePosition } from './riskProfiles.js';
 import { analyzeSymbol } from './signals.js';
 import { getBroker } from './broker/index.js';
 import { logConsole } from './console.js';
@@ -225,30 +225,58 @@ async function tickUser(cfg: Cfg) {
     return;
   }
 
-  const perTrade = (totalCapital / profile.maxPositions) * profile.sizingFactor;
+  // Calculate dynamic capital and risk bounds
+  const openPositions = db.prepare(`SELECT * FROM ai_positions WHERE user_id = ? AND status = 'open'`).all(cfg.user_id) as any[];
+  const initialOpenRisk = openPositions.reduce((sum, pos) => {
+    const riskPerShare = Math.max(0, pos.entry_price - pos.stop_loss);
+    return sum + (pos.quantity * riskPerShare);
+  }, 0);
+
+  let runningCash = balance;
+  let runningOpenRisk = initialOpenRisk;
 
   // 6) Execute the council-approved entries.
   for (const decision of approved) {
     const cand = candidates.find(c => c.sig.symbol === decision.symbol);
     if (!cand) continue;
     const price = cand.price;
-    if (perTrade < price) continue; // can't afford even 1 share
-    const qty = Math.max(1, Math.floor(perTrade / price));
+    const atrValue = cand.sig.snapshot.atr;
+
+    // Volatility-adaptive stops
+    const stops = computeStops(profile, price, atrValue);
+
+    // Dynamic position sizing from risk per trade and caps
+    const sizing = sizePosition({
+      profile,
+      allocatedCapital: totalCapital,
+      entry: price,
+      stopDistance: stops.stopDistance,
+      availableCash: runningCash,
+      openRiskRupees: runningOpenRisk,
+    });
+
+    if (sizing.qty <= 0) {
+      logConsole(cfg.user_id, 'info', `${decision.symbol}: sizing constrained — ${sizing.note}`, { agent: 'Risk' });
+      continue;
+    }
+
     const fill = broker.placeOrder({
-      userId: cfg.user_id, symbol: decision.symbol, side: 'BUY', quantity: qty, price, productType: 'MIS',
+      userId: cfg.user_id, symbol: decision.symbol, side: 'BUY', quantity: sizing.qty, price, productType: 'MIS',
     });
     if (!fill.ok) {
       logConsole(cfg.user_id, 'warn', `${decision.symbol}: entry skipped — ${fill.error}`, { agent: 'Execution' });
       continue;
     }
 
-    const stopLoss = price * (1 - profile.stopLossPct / 100);
-    const target = price * (1 + profile.targetPct / 100);
+    // Keep running cash and risk dynamically updated as we enter sequential trades
+    runningCash -= fill.quantity * fill.fillPrice;
+    runningOpenRisk += fill.quantity * stops.stopDistance;
+
     const reason = decision.reason || cand.sig.reasons.join('; ');
     db.prepare(
       `INSERT INTO ai_positions (user_id, symbol, quantity, entry_price, stop_loss, target, trail_anchor, trailing_pct, confidence, entry_reason)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(cfg.user_id, decision.symbol, fill.quantity, fill.fillPrice, stopLoss, target, price, profile.trailingPct, decision.confidence, reason);
+    ).run(cfg.user_id, decision.symbol, fill.quantity, fill.fillPrice, stops.stopLoss, stops.target, price, stops.trailingPct, decision.confidence, reason);
 
     db.prepare(
       `INSERT INTO algo_trades (user_id, symbol, action, quantity, price, source, reason)
@@ -256,9 +284,9 @@ async function tickUser(cfg: Cfg) {
     ).run(cfg.user_id, decision.symbol, fill.quantity, fill.fillPrice, reason);
 
     logConsole(cfg.user_id, 'trade',
-      `ENTRY ${decision.symbol} × ${fill.quantity} @ ₹${price.toFixed(2)} · SL ₹${stopLoss.toFixed(2)} · TGT ₹${target.toFixed(2)} · conf ${decision.confidence}%`,
+      `ENTRY ${decision.symbol} × ${fill.quantity} @ ₹${price.toFixed(2)} · SL ₹${stops.stopLoss.toFixed(2)} · TGT ₹${stops.target.toFixed(2)} · conf ${decision.confidence}%`,
       { agent: 'Execution', meta: { symbol: decision.symbol, confidence: decision.confidence } });
-    logConsole(cfg.user_id, 'agent', `${decision.symbol}: ${reason}`, { agent: 'Strategy' });
+    logConsole(cfg.user_id, 'agent', `${decision.symbol}: ${reason} (sizing: ${sizing.note})`, { agent: 'Strategy' });
     pushToUser(cfg.user_id, `AI bought ${decision.symbol}`, `${fill.quantity} @ ₹${price.toFixed(2)} · confidence ${decision.confidence}%`, { type: 'ai_trade' }).catch(() => {});
   }
 }

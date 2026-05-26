@@ -109,7 +109,7 @@ function buildPrompt(candidates: CouncilCandidate[], ctx: CouncilContext): strin
       `    signals: ${c.sig.reasons.join('; ')}`;
   }).join('\n');
 
-  return `Risk profile: ${ctx.profile.label} (target ${ctx.profile.targetPct}%, stop ${ctx.profile.stopLossPct}%, min conf ${ctx.profile.minConfidence}).
+  return `Risk profile: ${ctx.profile.label} (Risk/trade: ${ctx.profile.riskPerTradePct}%, Stop: ${ctx.profile.atrStopMult}×ATR, R:R: ${ctx.profile.rewardRisk}×, Min Conf: ${ctx.profile.minConfidence}%).
 Available capital: ₹${ctx.availableCapital.toFixed(0)}. Open slots: ${ctx.slots}. Already holding: ${ctx.openSymbols.join(', ') || 'none'}.
 
 Candidate stocks the screener surfaced right now:
