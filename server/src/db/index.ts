@@ -792,6 +792,51 @@ export async function initSchema() {
   )`, 'table: algo_trades');
   safeExec(`CREATE INDEX IF NOT EXISTS idx_algo_trades_user ON algo_trades(user_id)`, 'index: algo_trades');
 
+  // ── AI Trade autonomous engine: extended config ──
+  safeExec(`ALTER TABLE ai_trader_config ADD COLUMN capital_amount REAL`,                       'migration: ai_trader_config.capital_amount');
+  safeExec(`ALTER TABLE ai_trader_config ADD COLUMN watchlist TEXT NOT NULL DEFAULT '[]'`,       'migration: ai_trader_config.watchlist');
+  safeExec(`ALTER TABLE ai_trader_config ADD COLUMN max_daily_loss REAL`,                        'migration: ai_trader_config.max_daily_loss');
+  safeExec(`ALTER TABLE ai_trader_config ADD COLUMN max_trades_per_day INTEGER NOT NULL DEFAULT 10`, 'migration: ai_trader_config.max_trades_per_day');
+  safeExec(`ALTER TABLE ai_trader_config ADD COLUMN kill_switch INTEGER NOT NULL DEFAULT 0`,     'migration: ai_trader_config.kill_switch');
+  safeExec(`ALTER TABLE ai_trader_config ADD COLUMN squareoff_time TEXT NOT NULL DEFAULT '15:15'`, 'migration: ai_trader_config.squareoff_time');
+  safeExec(`ALTER TABLE ai_trader_config ADD COLUMN session_start TEXT NOT NULL DEFAULT '09:20'`, 'migration: ai_trader_config.session_start');
+  safeExec(`ALTER TABLE ai_trader_config ADD COLUMN session_end TEXT NOT NULL DEFAULT '15:00'`,  'migration: ai_trader_config.session_end');
+  safeExec(`ALTER TABLE ai_trader_config ADD COLUMN broker TEXT NOT NULL DEFAULT 'paper'`,       'migration: ai_trader_config.broker');
+  safeExec(`ALTER TABLE ai_trader_config ADD COLUMN min_confidence REAL NOT NULL DEFAULT 60`,    'migration: ai_trader_config.min_confidence');
+
+  // ── AI-managed open positions (intraday MIS, engine-supervised) ──
+  safeExec(`CREATE TABLE IF NOT EXISTS ai_positions (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    symbol          TEXT NOT NULL,
+    quantity        INTEGER NOT NULL,
+    entry_price     REAL NOT NULL,
+    stop_loss       REAL NOT NULL,
+    target          REAL NOT NULL,
+    trail_anchor    REAL NOT NULL,
+    trailing_pct    REAL NOT NULL DEFAULT 0,
+    confidence      REAL NOT NULL DEFAULT 0,
+    status          TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','closed')),
+    entry_reason    TEXT,
+    exit_reason     TEXT,
+    realized_pnl    REAL NOT NULL DEFAULT 0,
+    opened_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    closed_at       TEXT
+  )`, 'table: ai_positions');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_ai_positions_user ON ai_positions(user_id, status)`, 'index: ai_positions');
+
+  // ── AI console log: live terminal feed (one row per event) ──
+  safeExec(`CREATE TABLE IF NOT EXISTS ai_console_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    level       TEXT NOT NULL DEFAULT 'info' CHECK(level IN ('info','signal','trade','warn','error','agent')),
+    agent       TEXT,
+    message     TEXT NOT NULL,
+    meta        TEXT,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  )`, 'table: ai_console_log');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_ai_console_user ON ai_console_log(user_id, id)`, 'index: ai_console_log');
+
   // MIS intraday short positions (Sell Now, Buy Later)
   safeExec(`CREATE TABLE IF NOT EXISTS mis_shorts (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -147,3 +147,60 @@ export function evaluateAlert(input: AlertEvalInput): boolean {
   }
   return false;
 }
+
+// ─── Extra indicators for the AI Trade engine ─────────────────────────────
+// All take OHLC bars (oldest → newest) and return arrays aligned with input.
+
+/** Average True Range — volatility, used for SL/target context. */
+export function calcATR(bars: Bar[], period = 14): (number | null)[] {
+  const out: (number | null)[] = new Array(bars.length).fill(null);
+  if (bars.length <= period) return out;
+  const tr: number[] = bars.map((b, i) => {
+    if (i === 0) return b.high - b.low;
+    const pc = bars[i - 1].close;
+    return Math.max(b.high - b.low, Math.abs(b.high - pc), Math.abs(b.low - pc));
+  });
+  let atr = tr.slice(1, period + 1).reduce((s, v) => s + v, 0) / period;
+  out[period] = atr;
+  for (let i = period + 1; i < bars.length; i++) {
+    atr = (atr * (period - 1) + tr[i]) / period;
+    out[i] = atr;
+  }
+  return out;
+}
+
+/** Bollinger Bands (SMA ± k·σ). */
+export function calcBollinger(closes: number[], period = 20, k = 2) {
+  return closes.map((_, i) => {
+    if (i < period - 1) return { mid: null, upper: null, lower: null };
+    const window = closes.slice(i - period + 1, i + 1);
+    const mid = window.reduce((s, v) => s + v, 0) / period;
+    const variance = window.reduce((s, v) => s + (v - mid) ** 2, 0) / period;
+    const sd = Math.sqrt(variance);
+    return { mid, upper: mid + k * sd, lower: mid - k * sd };
+  });
+}
+
+/** Supertrend — ATR-based trend direction. Returns value + dir (1 up, -1 down). */
+export function calcSupertrend(bars: Bar[], period = 10, mult = 3) {
+  const atr = calcATR(bars, period);
+  const out: { value: number | null; dir: 1 | -1 | null }[] = bars.map(() => ({ value: null, dir: null }));
+  let prevUpper = Infinity, prevLower = -Infinity;
+  let prevDir: 1 | -1 = 1;
+  for (let i = 0; i < bars.length; i++) {
+    const a = atr[i];
+    if (a == null) continue;
+    const mid = (bars[i].high + bars[i].low) / 2;
+    let upper = mid + mult * a;
+    let lower = mid - mult * a;
+    const prevClose = i > 0 ? bars[i - 1].close : bars[i].close;
+    upper = upper < prevUpper || prevClose > prevUpper ? upper : prevUpper;
+    lower = lower > prevLower || prevClose < prevLower ? lower : prevLower;
+    let dir: 1 | -1 = prevDir;
+    if (prevDir === 1 && bars[i].close < lower) dir = -1;
+    else if (prevDir === -1 && bars[i].close > upper) dir = 1;
+    out[i] = { value: dir === 1 ? lower : upper, dir };
+    prevUpper = upper; prevLower = lower; prevDir = dir;
+  }
+  return out;
+}

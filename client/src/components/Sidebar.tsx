@@ -26,7 +26,7 @@ const sections = [
     items: [
       { path: '/watchlist', label: 'Watchlist',  icon: Bookmark        },
       { path: '/screener',  label: 'Screener',   icon: SlidersHorizontal },
-      { path: '/algo',      label: 'Algo Trade', icon: Bot             },
+      { path: '/algo',      label: 'AI Trade',   icon: Bot             },
     ],
   },
   {

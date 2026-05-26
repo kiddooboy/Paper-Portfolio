@@ -29,7 +29,7 @@ export interface Quote {
 const MARKET_OPEN_H = 9, MARKET_OPEN_M = 15;   // 9:15 AM IST
 const MARKET_CLOSE_H = 15, MARKET_CLOSE_M = 30; // 3:30 PM IST
 
-function getISTDate(): Date {
+export function getISTDate(): Date {
   const now = new Date();
   const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
   return new Date(utcMs + 5.5 * 3600000);

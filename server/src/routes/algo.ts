@@ -2,6 +2,11 @@ import { Router } from 'express';
 import { db } from '../db/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { getQuote } from '../services/marketData.js';
+import { getConsole } from '../services/aiTrader/console.js';
+import { killSwitch } from '../services/aiTrader/engine.js';
+import { RISK_PROFILES, getRiskProfile } from '../services/aiTrader/riskProfiles.js';
+import { analyzeSymbol } from '../services/aiTrader/signals.js';
+import { getHistory } from '../services/marketData.js';
 
 const router = Router();
 
@@ -87,21 +92,38 @@ router.get('/ai-config', authMiddleware, (req: AuthRequest, res) => {
     db.prepare(`INSERT OR IGNORE INTO ai_trader_config (user_id) VALUES (?)`).run(userId);
     cfg = db.prepare(`SELECT * FROM ai_trader_config WHERE user_id = ?`).get(userId) as any;
   }
-  res.json(cfg);
+  res.json({ ...cfg, watchlist: JSON.parse(cfg.watchlist || '[]') });
 });
 
 // ── PUT /api/algo/ai-config ───────────────────────────────────────────────────
 router.put('/ai-config', authMiddleware, (req: AuthRequest, res) => {
   const userId = req.user!.id;
-  const { is_enabled, allocation_pct, risk_level, max_positions } = req.body;
+  const {
+    is_enabled, allocation_pct, risk_level, max_positions,
+    capital_amount, watchlist, max_daily_loss, max_trades_per_day,
+    squareoff_time, session_start, session_end, min_confidence,
+  } = req.body;
 
   db.prepare(`INSERT OR IGNORE INTO ai_trader_config (user_id) VALUES (?)`).run(userId);
+
+  // Enabling clears any prior kill switch so the user can restart after a halt.
+  const clearKill = is_enabled ? 0 : null;
+
   db.prepare(`
     UPDATE ai_trader_config SET
       is_enabled = COALESCE(?, is_enabled),
       allocation_pct = COALESCE(?, allocation_pct),
       risk_level = COALESCE(?, risk_level),
       max_positions = COALESCE(?, max_positions),
+      capital_amount = COALESCE(?, capital_amount),
+      watchlist = COALESCE(?, watchlist),
+      max_daily_loss = COALESCE(?, max_daily_loss),
+      max_trades_per_day = COALESCE(?, max_trades_per_day),
+      squareoff_time = COALESCE(?, squareoff_time),
+      session_start = COALESCE(?, session_start),
+      session_end = COALESCE(?, session_end),
+      min_confidence = COALESCE(?, min_confidence),
+      kill_switch = COALESCE(?, kill_switch),
       updated_at = datetime('now')
     WHERE user_id = ?
   `).run(
@@ -109,11 +131,20 @@ router.put('/ai-config', authMiddleware, (req: AuthRequest, res) => {
     allocation_pct ?? null,
     risk_level ?? null,
     max_positions ?? null,
+    capital_amount ?? null,
+    watchlist !== undefined ? JSON.stringify(watchlist) : null,
+    max_daily_loss ?? null,
+    max_trades_per_day ?? null,
+    squareoff_time ?? null,
+    session_start ?? null,
+    session_end ?? null,
+    min_confidence ?? null,
+    clearKill,
     userId,
   );
 
   const cfg = db.prepare(`SELECT * FROM ai_trader_config WHERE user_id = ?`).get(userId) as any;
-  res.json(cfg);
+  res.json({ ...cfg, watchlist: JSON.parse(cfg.watchlist || '[]') });
 });
 
 // ── POST /api/algo/ai-scan ────────────────────────────────────────────────────
@@ -221,6 +252,116 @@ router.get('/trades', authMiddleware, (req: AuthRequest, res) => {
     LIMIT ? OFFSET ?
   `).all(userId, limit, (page - 1) * limit) as any[];
   res.json(rows);
+});
+
+// ── GET /api/algo/ai/risk-profiles ────────────────────────────────────────────
+// Static map so the UI can show what each risk category will actually do.
+router.get('/ai/risk-profiles', authMiddleware, (_req, res) => {
+  res.json(RISK_PROFILES);
+});
+
+// ── GET /api/algo/ai/state ────────────────────────────────────────────────────
+// Top-bar stats: wallet, active capital, daily P&L, open trades, agent status.
+router.get('/ai/state', authMiddleware, (req: AuthRequest, res) => {
+  const userId = req.user!.id;
+  db.prepare(`INSERT OR IGNORE INTO ai_trader_config (user_id) VALUES (?)`).run(userId);
+  const cfg = db.prepare(`SELECT * FROM ai_trader_config WHERE user_id = ?`).get(userId) as any;
+  const user = db.prepare(`SELECT balance FROM users WHERE id = ?`).get(userId) as any;
+
+  const openPositions = db.prepare(
+    `SELECT * FROM ai_positions WHERE user_id = ? AND status='open' ORDER BY opened_at DESC`,
+  ).all(userId) as any[];
+
+  const activeCapital = openPositions.reduce((s, p) => s + p.entry_price * p.quantity, 0);
+
+  const realizedToday = (db.prepare(
+    `SELECT COALESCE(SUM(realized_pnl),0) AS pnl FROM ai_positions
+     WHERE user_id = ? AND status='closed' AND date(closed_at)=date('now')`,
+  ).get(userId) as any).pnl;
+
+  const tradesToday = (db.prepare(
+    `SELECT COUNT(*) AS n FROM ai_positions WHERE user_id = ? AND date(opened_at)=date('now')`,
+  ).get(userId) as any).n;
+
+  let status = 'Idle';
+  if (cfg.kill_switch) status = 'Halted';
+  else if (cfg.is_enabled) status = 'Active';
+  else status = 'Off';
+
+  res.json({
+    status,
+    is_enabled: !!cfg.is_enabled,
+    kill_switch: !!cfg.kill_switch,
+    wallet_balance: user?.balance ?? 0,
+    active_capital: +activeCapital.toFixed(2),
+    daily_pnl: +realizedToday.toFixed(2),
+    open_trades: openPositions.length,
+    trades_today: tradesToday,
+    max_trades_per_day: cfg.max_trades_per_day,
+    risk_level: cfg.risk_level,
+  });
+});
+
+// ── GET /api/algo/ai/positions ────────────────────────────────────────────────
+router.get('/ai/positions', authMiddleware, async (req: AuthRequest, res) => {
+  const userId = req.user!.id;
+  const status = (req.query.status as string) === 'closed' ? 'closed' : 'open';
+  const rows = db.prepare(
+    `SELECT * FROM ai_positions WHERE user_id = ? AND status = ? ORDER BY ${status === 'open' ? 'opened_at' : 'closed_at'} DESC LIMIT 50`,
+  ).all(userId, status) as any[];
+
+  // For open positions, attach a live price + unrealized P&L.
+  if (status === 'open') {
+    const enriched = await Promise.all(rows.map(async (p) => {
+      const q = await getQuote(p.symbol, 'NSE').catch(() => null);
+      const price = q?.price ?? p.entry_price;
+      const unreal = (price - p.entry_price) * p.quantity;
+      return { ...p, current_price: price, unrealized_pnl: +unreal.toFixed(2) };
+    }));
+    return res.json(enriched);
+  }
+  res.json(rows);
+});
+
+// ── GET /api/algo/ai/console?since=ID ─────────────────────────────────────────
+router.get('/ai/console', authMiddleware, (req: AuthRequest, res) => {
+  const userId = req.user!.id;
+  const since = parseInt(req.query.since as string) || 0;
+  const rows = getConsole(userId, since, 200).map(r => ({ ...r, meta: r.meta ? JSON.parse(r.meta) : null }));
+  res.json(rows);
+});
+
+// ── POST /api/algo/ai/kill ────────────────────────────────────────────────────
+// Emergency kill switch — disable AI and force-close all open AI positions.
+router.post('/ai/kill', authMiddleware, async (req: AuthRequest, res) => {
+  await killSwitch(req.user!.id);
+  res.json({ ok: true });
+});
+
+// ── GET /api/algo/ai/signals?symbols=A,B ──────────────────────────────────────
+// On-demand signal snapshot for the "Active Signals" widget (no trading).
+router.get('/ai/signals', authMiddleware, async (req: AuthRequest, res) => {
+  const userId = req.user!.id;
+  const cfg = db.prepare(`SELECT watchlist, risk_level FROM ai_trader_config WHERE user_id = ?`).get(userId) as any;
+  let symbols: string[] = [];
+  if (req.query.symbols) symbols = String(req.query.symbols).split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+  else { try { symbols = JSON.parse(cfg?.watchlist || '[]'); } catch { symbols = []; } }
+  symbols = symbols.slice(0, 12);
+
+  const profile = getRiskProfile(cfg?.risk_level);
+  const out = await Promise.all(symbols.map(async (symbol) => {
+    const q = await getQuote(symbol, 'NSE').catch(() => null);
+    if (!q?.price) return null;
+    const bars = await getHistory(symbol, 'NSE', new Date(Date.now() - 5 * 24 * 3600 * 1000), '5m').catch(() => []);
+    const sig = analyzeSymbol(symbol, bars, q.price, q.change_percent ?? 0);
+    return {
+      symbol, price: q.price, change_percent: q.change_percent ?? 0,
+      confidence: sig.confidence, bias: sig.bias, action: sig.action,
+      meetsThreshold: sig.confidence >= profile.minConfidence,
+      reasons: sig.reasons,
+    };
+  }));
+  res.json(out.filter(Boolean).sort((a: any, b: any) => b.confidence - a.confidence));
 });
 
 export default router;
