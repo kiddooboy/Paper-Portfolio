@@ -30,7 +30,6 @@ import cron from 'node-cron';
 import { getQuote, getQuotes, getIndices, isMarketOpen, NIFTY50 } from './services/marketData.js';
 import { ingestSymbols } from './services/symbolIngest.js';
 import { startOrderExecutionScheduler } from './services/orderExecution.js';
-import { startAiTradeEngine } from './services/aiTrader/engine.js';
 import { recordIndexHistory, backfillIndexHistory } from './services/indexHistory.js';
 import { postDailyStrategy, seedCommunityIfEmpty } from './services/communityBot.js';
 import { logActivity } from './services/activityLogger.js';
@@ -79,9 +78,6 @@ async function main() {
 
   // Start order execution scheduler for end-of-day order processing
   startOrderExecutionScheduler();
-
-  // Start the autonomous AI Trade engine (ticks every 15s while market is open)
-  startAiTradeEngine();
 
   const app = express();
 

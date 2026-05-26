@@ -21,7 +21,6 @@ const STEPS: Step[] = [
   { sel: '[data-tour="/orders"]', title: 'Orders', body: 'Every order you place: MARKET, LIMIT, SL/SL-M, GTT, AMO and bracket-style target + stop-loss, with fee breakdowns.' },
   { sel: '[data-tour="/watchlist"]', title: 'Watchlist', body: 'Bookmark stocks you’re tracking and watch their live prices in one place.' },
   { sel: '[data-tour="/screener"]', title: 'Screener', body: 'Filter the market by market-cap, P/E, ROE, dividend yield, 52-week range and more — or use ready presets.' },
-  { sel: '[data-tour="/algo"]', title: 'AI Trade', body: 'Set your watchlist, capital and risk level, then flip the AI toggle — autonomous agents scan, enter, manage and exit intraday trades for you.' },
   { sel: '[data-tour="/community"]', title: 'Community', body: 'Share ideas, discuss trades, and learn from other paper traders.' },
   { sel: '[data-tour="/leaderboard"]', title: 'Leaderboard', body: 'See how your returns stack up against everyone else and climb the ranks.' },
   { sel: '[data-tour="/achievements"]', title: 'Achievements', body: 'Earn badges as you hit trading milestones.' },
