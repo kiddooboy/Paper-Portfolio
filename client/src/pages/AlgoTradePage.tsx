@@ -3,8 +3,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import {
   Bot, Power, ShieldAlert, Wallet, CircleDollarSign, Activity, Layers,
-  Plus, X, Gauge, Clock, TrendingUp, TrendingDown, Sparkles, Terminal,
-  ShieldCheck, Zap, AlertTriangle, Radar,
+  Terminal, ShieldCheck, AlertTriangle,
 } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 import StockLogo from '../components/StockLogo';
@@ -13,31 +12,23 @@ import StockLogo from '../components/StockLogo';
 type RiskLevel = 'conservative' | 'moderate' | 'aggressive';
 interface AiConfig {
   is_enabled: number; kill_switch: number; allocation_pct: number;
-  capital_amount: number | null; risk_level: RiskLevel; max_positions: number;
-  watchlist: string[]; max_daily_loss: number | null; max_trades_per_day: number;
-  squareoff_time: string; session_start: string; session_end: string; min_confidence: number;
+  capital_amount: number | null; risk_level: RiskLevel;
 }
 interface AiState {
-  status: string; is_enabled: boolean; kill_switch: boolean;
-  wallet_balance: number; active_capital: number; daily_pnl: number;
+  status: string; wallet_balance: number; active_capital: number; daily_pnl: number;
   open_trades: number; trades_today: number; max_trades_per_day: number; risk_level: string;
 }
 interface Position {
   id: number; symbol: string; quantity: number; entry_price: number; stop_loss: number;
-  target: number; confidence: number; entry_reason: string; current_price?: number; unrealized_pnl?: number;
+  target: number; confidence: number; current_price?: number; unrealized_pnl?: number;
 }
 interface LogRow { id: number; level: string; agent: string | null; message: string; created_at: string; }
-interface Signal {
-  symbol: string; price: number; change_percent: number; confidence: number;
-  bias: 'bullish' | 'bearish' | 'neutral'; action: string; meetsThreshold: boolean; reasons: string[];
-}
 interface RiskProfile {
   label: string; targetPct: number; stopLossPct: number; trailingPct: number;
   maxTradesPerDay: number; minConfidence: number; maxPositions: number;
 }
 
 const RISK_ORDER: RiskLevel[] = ['conservative', 'moderate', 'aggressive'];
-const NIFTY_SUGGESTIONS = ['RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'SBIN', 'BHARTIARTL', 'ITC', 'BAJFINANCE', 'LT'];
 
 // Console log colours — readable in both light and dark themes.
 const LEVEL_STYLE: Record<string, string> = {
@@ -49,19 +40,13 @@ const LEVEL_STYLE: Record<string, string> = {
   error:  'text-loss',
 };
 
-// Shared surface styles to match the rest of the app.
-const CARD = 'bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800';
-const INPUT = 'rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30';
-
 // ── Main ───────────────────────────────────────────────────────────────────────
 export default function AlgoTradePage() {
   const [cfg, setCfg] = useState<AiConfig | null>(null);
   const [state, setState] = useState<AiState | null>(null);
   const [positions, setPositions] = useState<Position[]>([]);
   const [logs, setLogs] = useState<LogRow[]>([]);
-  const [signals, setSignals] = useState<Signal[]>([]);
   const [profiles, setProfiles] = useState<Record<string, RiskProfile> | null>(null);
-  const [symbolInput, setSymbolInput] = useState('');
   const [loading, setLoading] = useState(true);
   const lastLogId = useRef(0);
   const consoleRef = useRef<HTMLDivElement>(null);
@@ -104,16 +89,6 @@ export default function AlgoTradePage() {
     return () => clearInterval(t);
   }, [refresh]);
 
-  // Signals widget — refresh less often (heavier)
-  const refreshSignals = useCallback(async () => {
-    try { const r = await axios.get('/api/algo/ai/signals'); setSignals(r.data); } catch {}
-  }, []);
-  useEffect(() => {
-    refreshSignals();
-    const t = setInterval(refreshSignals, 20000);
-    return () => clearInterval(t);
-  }, [refreshSignals]);
-
   // Auto-scroll console to bottom on new logs
   useEffect(() => {
     if (consoleRef.current) consoleRef.current.scrollTop = consoleRef.current.scrollHeight;
@@ -124,18 +99,13 @@ export default function AlgoTradePage() {
     try {
       const r = await axios.put('/api/algo/ai-config', p);
       setCfg(r.data);
-      return r.data as AiConfig;
     } catch { toast.error('Failed to save'); }
   };
 
   const toggleAi = async () => {
     if (!cfg) return;
-    if (!cfg.is_enabled) {
-      if (!cfg.watchlist.length) { toast.error('Add at least one stock to your watchlist first'); return; }
-      toast.success('AI Trade activated — agents are now live');
-    } else {
-      toast('AI Trade paused', { icon: '⏸️' });
-    }
+    if (!cfg.is_enabled) toast.success('AI Trade activated — the agent council is now live');
+    else toast('AI Trade paused', { icon: '⏸️' });
     await patch({ is_enabled: cfg.is_enabled ? 0 : 1 } as any);
   };
 
@@ -148,18 +118,6 @@ export default function AlgoTradePage() {
     } catch { toast.error('Kill switch failed'); }
   };
 
-  const addSymbol = async (sym: string) => {
-    if (!cfg) return;
-    const s = sym.trim().toUpperCase();
-    if (!s || cfg.watchlist.includes(s)) return;
-    await patch({ watchlist: [...cfg.watchlist, s] });
-    setSymbolInput('');
-  };
-  const removeSymbol = async (sym: string) => {
-    if (!cfg) return;
-    await patch({ watchlist: cfg.watchlist.filter(x => x !== sym) });
-  };
-
   if (loading || !cfg) return (
     <div className="flex items-center justify-center h-64">
       <div className="w-8 h-8 border-4 border-groww-primary border-t-transparent rounded-full animate-spin" />
@@ -168,7 +126,6 @@ export default function AlgoTradePage() {
 
   const enabled = !!cfg.is_enabled;
   const halted = !!cfg.kill_switch;
-  const activeProfile = profiles?.[cfg.risk_level];
 
   return (
     <div className="space-y-4 max-w-6xl mx-auto pb-8">
@@ -186,7 +143,7 @@ export default function AlgoTradePage() {
             <h1 className="text-2xl font-bold flex items-center gap-2">AI Trade
               <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-groww-primary/10 text-groww-primary border border-groww-primary/30">Autonomous</span>
             </h1>
-            <p className="text-sm text-gray-500 mt-0.5">Multi-agent intraday trading · paper engine</p>
+            <p className="text-sm text-gray-500 mt-0.5">Multi-agent council finds, trades & manages intraday positions on its own</p>
           </div>
         </div>
 
@@ -196,8 +153,8 @@ export default function AlgoTradePage() {
             <ShieldAlert className="w-4 h-4" /> Kill Switch
           </button>
           <button onClick={toggleAi}
-            className={cn('flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition',
-              enabled ? 'bg-gain text-white hover:brightness-110' : 'bg-groww-primary text-white hover:brightness-110')}>
+            className={cn('flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition text-white hover:brightness-110',
+              enabled ? 'bg-gain' : 'bg-groww-primary')}>
             <Power className="w-4 h-4" /> {enabled ? 'AI Active' : 'Activate AI'}
           </button>
         </div>
@@ -222,41 +179,9 @@ export default function AlgoTradePage() {
       </div>
 
       {/* ── Main split ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,340px)_1fr] gap-4">
-        {/* LEFT — Rules & Configuration */}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,320px)_1fr] gap-4">
+        {/* LEFT — Capital + Risk only */}
         <div className="space-y-4">
-          {/* Watchlist */}
-          <Panel title="Watchlist" icon={Radar}>
-            <div className="flex gap-2 mb-3">
-              <input value={symbolInput}
-                onChange={e => setSymbolInput(e.target.value.toUpperCase())}
-                onKeyDown={e => e.key === 'Enter' && addSymbol(symbolInput)}
-                placeholder="Add symbol e.g. RELIANCE"
-                className={cn('flex-1 px-3 py-2 text-sm', INPUT)} />
-              <button onClick={() => addSymbol(symbolInput)}
-                className="px-3 rounded-lg bg-groww-primary text-white hover:brightness-110"><Plus className="w-4 h-4" /></button>
-            </div>
-            {cfg.watchlist.length === 0 ? (
-              <div className="flex flex-wrap gap-1.5">
-                <span className="text-xs text-gray-500 w-full mb-1">Quick add:</span>
-                {NIFTY_SUGGESTIONS.map(s => (
-                  <button key={s} onClick={() => addSymbol(s)}
-                    className="text-[11px] px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-groww-primary/10 hover:text-groww-primary transition">+ {s}</button>
-                ))}
-              </div>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {cfg.watchlist.map(s => (
-                  <span key={s} className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200">
-                    <StockLogo symbol={s} size={14} /> {s}
-                    <button onClick={() => removeSymbol(s)} className="text-gray-400 hover:text-loss"><X className="w-3 h-3" /></button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </Panel>
-
-          {/* Capital */}
           <Panel title="Capital Allocation" icon={CircleDollarSign}>
             <label className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Capital to deploy (₹)</label>
             <input type="number" min={0} step={1000}
@@ -264,13 +189,12 @@ export default function AlgoTradePage() {
               placeholder={`${Math.round((state?.wallet_balance ?? 0) * cfg.allocation_pct / 100)}`}
               onChange={e => setCfg({ ...cfg, capital_amount: e.target.value ? parseFloat(e.target.value) : null })}
               onBlur={e => patch({ capital_amount: e.target.value ? parseFloat(e.target.value) : null })}
-              className={cn('w-full mt-1 px-3 py-2 text-sm tabular-nums', INPUT)} />
+              className="w-full mt-1 px-3 py-2 text-sm tabular-nums rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-groww-primary/30" />
             <p className="text-[11px] text-gray-500 mt-1.5">
               Leave blank to use {cfg.allocation_pct}% of wallet. Available: {formatCurrency(state?.wallet_balance ?? 0)}
             </p>
           </Panel>
 
-          {/* Risk category */}
           <Panel title="Risk Category" icon={ShieldCheck}>
             <div className="space-y-2">
               {RISK_ORDER.map(r => {
@@ -300,33 +224,19 @@ export default function AlgoTradePage() {
             </div>
           </Panel>
 
-          {/* Automation controls */}
-          <Panel title="Automation Controls" icon={Gauge}>
-            <div className="space-y-3">
-              <RangeRow label="Max positions" value={cfg.max_positions} min={1} max={activeProfile?.maxPositions ?? 8} suffix=" stocks"
-                onChange={v => setCfg({ ...cfg, max_positions: v })} onCommit={v => patch({ max_positions: v })} />
-              <RangeRow label="Min confidence" value={cfg.min_confidence} min={40} max={90} suffix="%"
-                onChange={v => setCfg({ ...cfg, min_confidence: v })} onCommit={v => patch({ min_confidence: v })} />
-              <NumRow label="Max trades / day" value={cfg.max_trades_per_day}
-                onCommit={v => patch({ max_trades_per_day: v })} />
-              <NumRow label="Max daily loss (₹)" value={cfg.max_daily_loss ?? 0} placeholder="0 = off"
-                onCommit={v => patch({ max_daily_loss: v || null })} />
-              <div className="grid grid-cols-3 gap-2">
-                <TimeRow label="Start" value={cfg.session_start} onCommit={v => patch({ session_start: v })} />
-                <TimeRow label="End" value={cfg.session_end} onCommit={v => patch({ session_end: v })} />
-                <TimeRow label="Sq-off" value={cfg.squareoff_time} onCommit={v => patch({ squareoff_time: v })} />
-              </div>
-            </div>
-          </Panel>
+          <div className="flex items-start gap-2 text-[11px] text-gray-500 bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 rounded-xl px-3 py-2.5">
+            <Bot className="w-3.5 h-3.5 shrink-0 mt-0.5 text-groww-primary" />
+            <span>Set capital & risk, then activate. The agent scans the whole market itself, the council deliberates, and it trades & manages exits autonomously.</span>
+          </div>
         </div>
 
-        {/* RIGHT — Console + Activity */}
+        {/* RIGHT — Council Console + Open Positions */}
         <div className="space-y-4">
           {/* Live console */}
-          <div className={cn(CARD, 'overflow-hidden')}>
+          <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-gray-800">
               <div className="flex items-center gap-2 text-sm font-bold text-gray-700 dark:text-gray-200">
-                <Terminal className="w-4 h-4 text-groww-primary" /> AI Console
+                <Terminal className="w-4 h-4 text-groww-primary" /> Agent Console
               </div>
               <span className={cn('flex items-center gap-1.5 text-[11px] font-medium',
                 enabled ? 'text-groww-primary' : 'text-gray-400')}>
@@ -334,9 +244,9 @@ export default function AlgoTradePage() {
                 {enabled ? 'LIVE' : 'IDLE'}
               </span>
             </div>
-            <div ref={consoleRef} className="h-[300px] overflow-y-auto px-4 py-3 font-mono text-xs space-y-1 bg-gray-50 dark:bg-groww-dark">
+            <div ref={consoleRef} className="h-[420px] overflow-y-auto px-4 py-3 font-mono text-xs space-y-1 bg-gray-50 dark:bg-groww-dark">
               {logs.length === 0 ? (
-                <p className="text-gray-400 dark:text-gray-600">{enabled ? 'Waiting for market activity…' : 'Activate AI to start the engine. Logs will stream here in real time.'}</p>
+                <p className="text-gray-400 dark:text-gray-600">{enabled ? 'Waiting for the next market scan…' : 'Activate AI to start the engine. The agent council\'s deliberation will stream here in real time.'}</p>
               ) : logs.map(l => (
                 <div key={l.id} className="flex gap-2 leading-relaxed">
                   <span className="text-gray-400 dark:text-gray-600 shrink-0">{new Date(l.created_at + 'Z').toLocaleTimeString('en-IN', { hour12: false })}</span>
@@ -382,53 +292,9 @@ export default function AlgoTradePage() {
         </div>
       </div>
 
-      {/* ── Bottom widgets ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Agent insights */}
-        <Panel title="AI Agent Insights" icon={Sparkles}>
-          <div className="space-y-2 text-sm">
-            <InsightRow label="Engine" value={enabled ? 'Running' : 'Stopped'} good={enabled} />
-            <InsightRow label="Risk profile" value={activeProfile?.label ?? cfg.risk_level} />
-            <InsightRow label="Confidence gate" value={`≥ ${Math.max(cfg.min_confidence, activeProfile?.minConfidence ?? 0)}%`} />
-            <InsightRow label="Daily loss guard" value={cfg.max_daily_loss ? formatCurrency(cfg.max_daily_loss) : 'Off'} />
-            <InsightRow label="Auto square-off" value={cfg.squareoff_time + ' IST'} />
-          </div>
-        </Panel>
-
-        {/* Market sentiment (derived from signals) */}
-        <Panel title="Market Sentiment" icon={Activity}>
-          <SentimentGauge signals={signals} />
-        </Panel>
-
-        {/* Active signals */}
-        <Panel title="Active Signals" icon={Zap}>
-          {signals.length === 0 ? (
-            <p className="text-sm text-gray-500 py-4 text-center">Add symbols to your watchlist to see live signals.</p>
-          ) : (
-            <div className="space-y-1.5 max-h-[220px] overflow-y-auto">
-              {signals.map(s => (
-                <div key={s.symbol} className="flex items-center gap-2 text-sm">
-                  <StockLogo symbol={s.symbol} size={22} />
-                  <span className="font-medium w-20 truncate">{s.symbol}</span>
-                  <div className="flex-1 h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
-                    <div className={cn('h-full rounded-full',
-                      s.confidence >= 65 ? 'bg-gain' : s.confidence >= 50 ? 'bg-amber-400' : 'bg-loss')}
-                      style={{ width: `${s.confidence}%` }} />
-                  </div>
-                  <span className="text-xs tabular-nums w-9 text-right text-gray-500">{s.confidence}%</span>
-                  {s.bias === 'bullish' ? <TrendingUp className="w-3.5 h-3.5 text-gain" />
-                    : s.bias === 'bearish' ? <TrendingDown className="w-3.5 h-3.5 text-loss" />
-                    : <span className="w-3.5 h-3.5 inline-block" />}
-                </div>
-              ))}
-            </div>
-          )}
-        </Panel>
-      </div>
-
       <div className="flex items-start gap-2 text-xs text-gray-500 bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 rounded-xl px-4 py-3">
         <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-500" />
-        <span>Paper-trading simulation. The AI uses technical signals + risk rules to trade virtual money — not financial advice. Trades route through the paper broker; real-broker integration is pluggable but not enabled.</span>
+        <span>Paper-trading simulation. A Claude multi-agent council makes the decisions using technical signals + risk rules on virtual money — not financial advice. Trades route through the paper broker; real-broker integration is pluggable but not enabled.</span>
       </div>
     </div>
   );
@@ -471,83 +337,6 @@ function Panel({ title, icon: Icon, children }: { title: string; icon: any; chil
     <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-4">
       <h3 className="flex items-center gap-2 text-sm font-bold text-gray-700 dark:text-gray-200 mb-3"><Icon className="w-4 h-4 text-groww-primary" />{title}</h3>
       {children}
-    </div>
-  );
-}
-
-function RangeRow({ label, value, min, max, suffix, onChange, onCommit }: {
-  label: string; value: number; min: number; max: number; suffix?: string;
-  onChange: (v: number) => void; onCommit: (v: number) => void;
-}) {
-  return (
-    <div>
-      <div className="flex justify-between text-xs mb-1">
-        <span className="text-gray-500">{label}</span>
-        <span className="font-bold text-groww-primary">{value}{suffix}</span>
-      </div>
-      <input type="range" min={min} max={max} value={value}
-        onChange={e => onChange(parseInt(e.target.value))}
-        onMouseUp={e => onCommit(parseInt((e.target as HTMLInputElement).value))}
-        onTouchEnd={e => onCommit(parseInt((e.target as HTMLInputElement).value))}
-        className="w-full accent-groww-primary" />
-    </div>
-  );
-}
-
-function NumRow({ label, value, placeholder, onCommit }: { label: string; value: number; placeholder?: string; onCommit: (v: number) => void }) {
-  const [v, setV] = useState(String(value || ''));
-  useEffect(() => { setV(String(value || '')); }, [value]);
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="text-xs text-gray-500">{label}</span>
-      <input type="number" value={v} placeholder={placeholder}
-        onChange={e => setV(e.target.value)}
-        onBlur={() => onCommit(parseFloat(v) || 0)}
-        className="w-24 px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-groww-primary/30" />
-    </div>
-  );
-}
-
-function TimeRow({ label, value, onCommit }: { label: string; value: string; onCommit: (v: string) => void }) {
-  return (
-    <div>
-      <label className="text-[10px] uppercase tracking-wide text-gray-400 flex items-center gap-1 mb-1"><Clock className="w-3 h-3" />{label}</label>
-      <input type="time" value={value} onChange={e => onCommit(e.target.value)}
-        className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-groww-primary/30" />
-    </div>
-  );
-}
-
-function InsightRow({ label, value, good }: { label: string; value: string; good?: boolean }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-gray-500">{label}</span>
-      <span className={cn('font-semibold', good === undefined ? 'text-gray-800 dark:text-gray-200' : good ? 'text-groww-primary' : 'text-gray-400')}>{value}</span>
-    </div>
-  );
-}
-
-function SentimentGauge({ signals }: { signals: Signal[] }) {
-  if (!signals.length) return <p className="text-sm text-gray-500 py-4 text-center">No data yet.</p>;
-  const bull = signals.filter(s => s.bias === 'bullish').length;
-  const bear = signals.filter(s => s.bias === 'bearish').length;
-  const avg = Math.round(signals.reduce((s, x) => s + x.confidence, 0) / signals.length);
-  const mood = avg >= 60 ? 'Bullish' : avg >= 45 ? 'Neutral' : 'Bearish';
-  const moodCls = avg >= 60 ? 'text-gain' : avg >= 45 ? 'text-amber-500' : 'text-loss';
-  return (
-    <div>
-      <div className="flex items-end justify-between mb-2">
-        <span className={cn('text-2xl font-bold', moodCls)}>{mood}</span>
-        <span className="text-sm text-gray-500 tabular-nums">avg {avg}%</span>
-      </div>
-      <div className="flex h-2.5 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800">
-        <div className="bg-gain h-full" style={{ width: `${(bull / signals.length) * 100}%` }} />
-        <div className="bg-loss h-full" style={{ width: `${(bear / signals.length) * 100}%` }} />
-      </div>
-      <div className="flex justify-between text-[11px] text-gray-500 mt-1.5">
-        <span className="text-gain">{bull} bullish</span>
-        <span className="text-loss">{bear} bearish</span>
-      </div>
     </div>
   );
 }

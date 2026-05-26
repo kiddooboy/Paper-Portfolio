@@ -12,13 +12,17 @@
 // Claude narrates entries for the console; the engine never waits on it to act.
 
 import { db } from '../../db/index.js';
-import { getQuote, getHistory, isMarketOpen, getISTDate } from '../marketData.js';
+import { getQuote, getHistory, isMarketOpen, getISTDate, getAllCachedQuotes } from '../marketData.js';
 import { pushToUser } from '../push.js';
-import { getRiskProfile } from './riskProfiles.js';
+import { getRiskProfile, type RiskProfile } from './riskProfiles.js';
 import { analyzeSymbol } from './signals.js';
-import { explainEntry } from './explain.js';
 import { getBroker } from './broker/index.js';
 import { logConsole } from './console.js';
+import { deliberate, type CouncilCandidate } from './council.js';
+
+// Per-user cooldown so the (expensive) council only convenes periodically.
+const lastDeliberation = new Map<number, number>();
+const DELIBERATION_COOLDOWN_MS = 60_000;
 
 const TICK_MS = 15_000;
 let timer: NodeJS.Timeout | null = null;
@@ -36,6 +40,34 @@ async function getIntradayBars(symbol: string) {
   const bars = await getHistory(symbol, 'NSE', from, '5m');
   candleCache.set(symbol, { at: Date.now(), bars });
   return bars;
+}
+
+// Autonomously screen the entire polled NSE universe down to a shortlist of
+// the strongest intraday long candidates. No user watchlist — the agent finds
+// its own opportunities. Deterministic + cheap; the council reasons over the result.
+async function discoverCandidates(openSymbols: Set<string>, profile: RiskProfile): Promise<CouncilCandidate[]> {
+  const all = Array.from(getAllCachedQuotes().values());
+
+  // Prelim screen: liquid NSE names with constructive (not blown-out) intraday moves.
+  const prelim = all
+    .filter(q => q.exchange === 'NSE' && q.price > 0 && q.volume > 50_000)
+    .filter(q => !openSymbols.has(q.symbol))
+    .filter(q => q.change_percent > -0.5 && q.change_percent < 7)
+    .map(q => ({ q, screen: q.change_percent + Math.min(2, q.volume / 5_000_000) }))
+    .sort((a, b) => b.screen - a.screen)
+    .slice(0, 18)
+    .map(x => x.q);
+
+  // Run the deterministic signal engine on the shortlist (uses intraday candles).
+  const scored: CouncilCandidate[] = [];
+  for (const q of prelim) {
+    const bars = await getIntradayBars(q.symbol).catch(() => []);
+    const sig = analyzeSymbol(q.symbol, bars, q.price, q.change_percent ?? 0);
+    if (sig.bias !== 'bearish' && sig.confidence >= profile.minConfidence - 8) {
+      scored.push({ sig, price: q.price, changePct: q.change_percent ?? 0 });
+    }
+  }
+  return scored.sort((a, b) => b.sig.confidence - a.sig.confidence).slice(0, 8);
 }
 
 function istMinutes(): number {
@@ -150,71 +182,84 @@ async function tickUser(cfg: Cfg) {
   if (entriesToday(cfg.user_id) >= cfg.max_trades_per_day) return;
 
   const profile = getRiskProfile(cfg.risk_level);
-  const maxPos = Math.min(cfg.max_positions, profile.maxPositions);
   const openCount = db.prepare(`SELECT COUNT(*) AS n FROM ai_positions WHERE user_id = ? AND status='open'`).get(cfg.user_id) as any;
-  const slots = maxPos - (openCount?.n ?? 0);
+  const slots = profile.maxPositions - (openCount?.n ?? 0);
   if (slots <= 0) return;
 
-  const watchlist: string[] = (() => { try { return JSON.parse(cfg.watchlist || '[]'); } catch { return []; } })();
-  if (!watchlist.length) return;
+  // Convene the council at most once per cooldown window (it uses the big model).
+  const lastDelib = lastDeliberation.get(cfg.user_id) ?? 0;
+  if (Date.now() - lastDelib < DELIBERATION_COOLDOWN_MS) return;
+  lastDeliberation.set(cfg.user_id, Date.now());
 
   const openSymbols = new Set(open.map(p => p.symbol));
-  const minConf = Math.max(cfg.min_confidence, profile.minConfidence);
 
-  // 3) Scan watchlist → score → rank candidates.
-  const candidates: { sig: ReturnType<typeof analyzeSymbol>; price: number }[] = [];
-  for (const symbol of watchlist) {
-    if (openSymbols.has(symbol)) continue;
-    const quote = await getQuote(symbol, 'NSE').catch(() => null);
-    if (!quote?.price) continue;
-    const bars = await getIntradayBars(symbol).catch(() => []);
-    const sig = analyzeSymbol(symbol, bars, quote.price, quote.change_percent ?? 0);
-    if (sig.action === 'enter' && sig.confidence >= minConf) {
-      candidates.push({ sig, price: quote.price });
-    }
+  // 3) Autonomously discover candidates across the whole market — no watchlist.
+  logConsole(cfg.user_id, 'info', 'Scanning market for intraday opportunities…', { agent: 'Market Analysis' });
+  const candidates = await discoverCandidates(openSymbols, profile);
+  if (!candidates.length) {
+    logConsole(cfg.user_id, 'info', 'No qualifying setups found this scan.', { agent: 'Market Analysis' });
+    return;
   }
-  candidates.sort((a, b) => b.sig.confidence - a.sig.confidence);
+  logConsole(cfg.user_id, 'signal',
+    `${candidates.length} candidate(s) surfaced: ${candidates.map(c => `${c.sig.symbol}(${c.sig.confidence}%)`).join(', ')}`,
+    { agent: 'Market Analysis' });
 
-  // 4) Enter the top candidates.
+  // 4) Sizing context.
   const broker = getBroker(cfg.broker);
   const balance = broker.getBalance(cfg.user_id);
   const totalCapital = cfg.capital_amount && cfg.capital_amount > 0
     ? Math.min(cfg.capital_amount, balance)
     : balance * (cfg.allocation_pct / 100);
-  const perTrade = (totalCapital / maxPos) * profile.sizingFactor;
 
-  for (const { sig, price } of candidates.slice(0, slots)) {
+  // 5) The Claude multi-agent council deliberates and decides.
+  logConsole(cfg.user_id, 'agent', 'Council convening to deliberate…', { agent: 'Council' });
+  const verdict = await deliberate(candidates, {
+    profile, availableCapital: totalCapital, openSymbols: [...openSymbols], slots,
+  });
+  if (verdict.marketView) logConsole(cfg.user_id, 'agent', verdict.marketView, { agent: 'Council' });
+  for (const d of verdict.discussion) logConsole(cfg.user_id, 'agent', `${d.agent}: ${d.view}`, { agent: d.agent });
+
+  const approved = verdict.decisions.filter(d => d.action === 'enter').slice(0, slots);
+  if (!approved.length) {
+    logConsole(cfg.user_id, 'info', `Council verdict: stand down (${verdict.source}). No entries.`, { agent: 'Strategy' });
+    return;
+  }
+
+  const perTrade = (totalCapital / profile.maxPositions) * profile.sizingFactor;
+
+  // 6) Execute the council-approved entries.
+  for (const decision of approved) {
+    const cand = candidates.find(c => c.sig.symbol === decision.symbol);
+    if (!cand) continue;
+    const price = cand.price;
     if (perTrade < price) continue; // can't afford even 1 share
     const qty = Math.max(1, Math.floor(perTrade / price));
     const fill = broker.placeOrder({
-      userId: cfg.user_id, symbol: sig.symbol, side: 'BUY', quantity: qty, price, productType: 'MIS',
+      userId: cfg.user_id, symbol: decision.symbol, side: 'BUY', quantity: qty, price, productType: 'MIS',
     });
     if (!fill.ok) {
-      logConsole(cfg.user_id, 'warn', `${sig.symbol}: entry skipped — ${fill.error}`, { agent: 'Execution' });
+      logConsole(cfg.user_id, 'warn', `${decision.symbol}: entry skipped — ${fill.error}`, { agent: 'Execution' });
       continue;
     }
 
     const stopLoss = price * (1 - profile.stopLossPct / 100);
     const target = price * (1 + profile.targetPct / 100);
+    const reason = decision.reason || cand.sig.reasons.join('; ');
     db.prepare(
       `INSERT INTO ai_positions (user_id, symbol, quantity, entry_price, stop_loss, target, trail_anchor, trailing_pct, confidence, entry_reason)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(cfg.user_id, sig.symbol, fill.quantity, fill.fillPrice, stopLoss, target, price, profile.trailingPct, sig.confidence, sig.reasons.join('; '));
+    ).run(cfg.user_id, decision.symbol, fill.quantity, fill.fillPrice, stopLoss, target, price, profile.trailingPct, decision.confidence, reason);
 
     db.prepare(
       `INSERT INTO algo_trades (user_id, symbol, action, quantity, price, source, reason)
        VALUES (?, ?, 'BUY', ?, ?, 'ai', ?)`,
-    ).run(cfg.user_id, sig.symbol, fill.quantity, fill.fillPrice, sig.reasons.join('; '));
+    ).run(cfg.user_id, decision.symbol, fill.quantity, fill.fillPrice, reason);
 
     logConsole(cfg.user_id, 'trade',
-      `ENTRY ${sig.symbol} × ${fill.quantity} @ ₹${price.toFixed(2)} · SL ₹${stopLoss.toFixed(2)} · TGT ₹${target.toFixed(2)} · conf ${sig.confidence}%`,
-      { agent: 'Execution', meta: { symbol: sig.symbol, confidence: sig.confidence } });
-    pushToUser(cfg.user_id, `AI bought ${sig.symbol}`, `${fill.quantity} @ ₹${price.toFixed(2)} · confidence ${sig.confidence}%`, { type: 'ai_trade' }).catch(() => {});
-
-    // Claude narration — fire-and-forget, appended when it returns.
-    explainEntry(sig, profile.label)
-      .then(text => logConsole(cfg.user_id, 'agent', `${sig.symbol}: ${text}`, { agent: 'Strategy' }))
-      .catch(() => {});
+      `ENTRY ${decision.symbol} × ${fill.quantity} @ ₹${price.toFixed(2)} · SL ₹${stopLoss.toFixed(2)} · TGT ₹${target.toFixed(2)} · conf ${decision.confidence}%`,
+      { agent: 'Execution', meta: { symbol: decision.symbol, confidence: decision.confidence } });
+    logConsole(cfg.user_id, 'agent', `${decision.symbol}: ${reason}`, { agent: 'Strategy' });
+    pushToUser(cfg.user_id, `AI bought ${decision.symbol}`, `${fill.quantity} @ ₹${price.toFixed(2)} · confidence ${decision.confidence}%`, { type: 'ai_trade' }).catch(() => {});
   }
 }
 
