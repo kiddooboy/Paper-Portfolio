@@ -1,7 +1,6 @@
 import { Routes, Route } from 'react-router-dom';
 import { useEffect, lazy, Suspense } from 'react';
 import Layout from './components/Layout';
-import BiometricLock from './components/BiometricLock';
 import { useAuthStore } from './store/authStore';
 import { bootstrap, teardown, installFocusRevalidation } from './store/bootstrap';
 import { useNativeShell } from './lib/nativeShell';
@@ -68,7 +67,6 @@ function App() {
 
   return (
     <Suspense fallback={<PageLoader />}>
-      <BiometricLock />
       <Routes>
         <Route path="/"             element={<LandingPage />} />
         <Route path="/login"        element={<Login />} />
