@@ -13,17 +13,23 @@ import { verifyBiometric } from '../lib/biometric';
 type Mode = 'idle' | 'checking' | 'locked' | 'unlocked';
 
 export default function BiometricLock() {
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isInitializing = useAuthStore((s) => s.isInitializing);
   const logout = useAuthStore((s) => s.logout);
 
   const native = Capacitor.isNativePlatform();
   const [mode, setMode] = useState<Mode>(native ? 'checking' : 'idle');
   const promptingRef = useRef(false);
+  const lastUnlockRef = useRef(0);
+  const didInitRef = useRef(false);
 
-  // Lock whenever an authenticated session is present (native only).
+  // Security first: lock on app open if there's a session OR a known account
+  // on this device (so a returning, logged-out user must pass the device lock
+  // BEFORE reaching the login/sign-in page). A brand-new device with no account
+  // has nothing to protect, so it falls through to the login flow. Native only.
   const evaluate = useCallback(() => {
-    if (!native || !useAuthStore.getState().isAuthenticated) { setMode('unlocked'); return; }
+    if (!native) { setMode('unlocked'); return; }
+    const knownAccount = (() => { try { return !!localStorage.getItem('last_email'); } catch { return false; } })();
+    if (!useAuthStore.getState().isAuthenticated && !knownAccount) { setMode('unlocked'); return; }
     setMode('locked');
   }, [native]);
 
@@ -33,17 +39,23 @@ export default function BiometricLock() {
     try {
       const res = await verifyBiometric('Unlock Paper Portfolio');
       // 'ok' = authenticated; 'unavailable' = phone has no lock → can't enforce.
-      if (res === 'ok' || res === 'unavailable') setMode('unlocked');
+      if (res === 'ok' || res === 'unavailable') {
+        lastUnlockRef.current = Date.now();
+        setMode('unlocked');
+      }
     } finally {
       promptingRef.current = false;
     }
   }, []);
 
-  // Re-evaluate once the initial /me session check settles.
+  // Decide the lock ONCE, on cold start, after the initial /me check settles.
+  // We deliberately do NOT re-run on auth-state changes, so an in-app login or
+  // sign-out doesn't re-lock (only cold start + resume do).
   useEffect(() => {
-    if (isInitializing) return;
+    if (isInitializing || didInitRef.current) return;
+    didInitRef.current = true;
     evaluate();
-  }, [isInitializing, isAuthenticated, evaluate]);
+  }, [isInitializing, evaluate]);
 
   // Auto-prompt the device lock as soon as we enter the locked state.
   useEffect(() => {
@@ -57,12 +69,21 @@ export default function BiometricLock() {
     (async () => {
       const { App: CapApp } = await import('@capacitor/app');
       const h = await CapApp.addListener('appStateChange', ({ isActive }) => {
-        if (isActive && useAuthStore.getState().isAuthenticated) evaluate();
+        if (!isActive) return;
+        // The biometric prompt runs in its own activity, so showing it bounces
+        // the app background→foreground. Ignore that bounce: skip while a prompt
+        // is in flight and for a short grace period after a successful unlock.
+        if (promptingRef.current) return;
+        if (Date.now() - lastUnlockRef.current < 2500) return;
+        evaluate(); // re-lock decision (handles session/known-account logic)
       });
       remove = () => h.remove();
     })();
     return () => remove?.();
   }, [native, evaluate]);
+
+  // Escape hatch: drop the lock and go to the login/sign-in page.
+  const signOut = () => { lastUnlockRef.current = Date.now(); logout(); setMode('unlocked'); };
 
   if (!native || mode === 'idle' || mode === 'unlocked') return null;
 
@@ -90,10 +111,10 @@ export default function BiometricLock() {
               <Fingerprint className="w-5 h-5" /> Unlock
             </button>
             <button
-              onClick={() => logout()}
+              onClick={signOut}
               className="w-full py-2.5 rounded-xl text-gray-500 font-medium flex items-center justify-center gap-2 hover:text-loss transition"
             >
-              <LogOut className="w-4 h-4" /> Sign out
+              <LogOut className="w-4 h-4" /> Use a different account
             </button>
           </>
         )}
