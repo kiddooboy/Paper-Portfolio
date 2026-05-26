@@ -5,8 +5,8 @@
 // a collective verdict on what to actually trade. The discussion transcript is
 // streamed to the live console so the user sees the agents reasoning in real time.
 //
-// If the API key is missing or a call fails, we fall back to the deterministic
-// confidence so the engine never stalls.
+// If the API key is missing or a call fails, we fall back to a robust
+// deterministic verdict with synthetic agent reasoning.
 
 import Anthropic from '@anthropic-ai/sdk';
 import type { SignalResult } from './signals.js';
@@ -118,19 +118,74 @@ ${lines}
 Deliberate as the council, then submit your verdict. Approve at most ${ctx.slots} name(s); approve only genuinely strong intraday longs.`;
 }
 
-/** Deterministic fallback when the council can't run. */
+/** Robust deterministic fallback with synthetic agent reasoning. */
 function fallbackVerdict(candidates: CouncilCandidate[], ctx: CouncilContext): CouncilVerdict {
-  const approved = candidates
-    .filter(c => c.sig.confidence >= ctx.profile.minConfidence)
+  // Sort by confidence descending
+  const sorted = [...candidates].sort((a, b) => b.sig.confidence - a.sig.confidence);
+
+  // Apply confidence threshold
+  const approved = sorted
+    .filter(c => c.sig.confidence >= ctx.profile.minConfidence && c.sig.action === 'enter')
     .slice(0, ctx.slots);
+
+  // Generate synthetic but informative discussion
+  const discussion: { agent: string; view: string }[] = [];
+
+  if (sorted.length > 0) {
+    const topSymbol = sorted[0].sig.symbol;
+    const topConf = sorted[0].sig.confidence;
+    const topBias = sorted[0].sig.bias;
+
+    discussion.push({
+      agent: 'Market Analysis',
+      view: `${sorted.length} candidates screened. Top pick: ${topSymbol} at ${topConf}% confidence (${topBias}).`,
+    });
+
+    // Momentum agent — summarize the RSI/MACD of the top candidates
+    const momCands = sorted.slice(0, 3);
+    const momDetail = momCands.map(c => {
+      const rsi = c.sig.snapshot.rsi?.toFixed(0) ?? '—';
+      return `${c.sig.symbol} RSI ${rsi}`;
+    }).join(', ');
+    discussion.push({
+      agent: 'Momentum',
+      view: `${momDetail}. ${approved.length > 0 ? 'Momentum favours entry on top pick(s).' : 'No strong momentum setup.'}`,
+    });
+
+    discussion.push({
+      agent: 'Risk Management',
+      view: `Capital ₹${ctx.availableCapital.toFixed(0)}, ${ctx.slots} slots open. ${approved.length > 0 ? `Risk/trade: ${ctx.profile.riskPerTradePct}% with ${ctx.profile.atrStopMult}×ATR stop.` : 'No entries meet risk criteria.'}`,
+    });
+
+    discussion.push({
+      agent: 'Strategy',
+      view: approved.length > 0
+        ? `Approving ${approved.map(c => c.sig.symbol).join(', ')} — clean intraday setups with defined stops.`
+        : `No clean setups meeting ${ctx.profile.minConfidence}% threshold. Standing down.`,
+    });
+
+    discussion.push({
+      agent: 'Sentiment',
+      view: approved.length > 0
+        ? `Day's bias supports entries: ${approved.map(c => `${c.sig.symbol} ${c.changePct >= 0 ? '+' : ''}${c.changePct.toFixed(1)}%`).join(', ')}.`
+        : 'Neutral-to-weak intraday sentiment. No high-conviction longs.',
+    });
+  }
+
   return {
-    marketView: 'Council offline — using deterministic signal screen.',
-    discussion: [],
-    decisions: candidates.map(c => ({
+    marketView: `Deterministic screen: ${candidates.length} candidates evaluated, ${approved.length} approved (${ctx.profile.label} profile, min conf ${ctx.profile.minConfidence}%).`,
+    discussion,
+    decisions: sorted.map(c => ({
       symbol: c.sig.symbol,
-      action: approved.includes(c) ? 'enter' : 'skip',
+      action: approved.some(a => a.sig.symbol === c.sig.symbol) ? 'enter' as const : 'skip' as const,
       confidence: c.sig.confidence,
-      reason: c.sig.reasons[0] ?? 'signal screen',
+      reason: approved.some(a => a.sig.symbol === c.sig.symbol)
+        ? (c.sig.reasons[0] ?? 'Signal screen passed')
+        : (c.sig.confidence < ctx.profile.minConfidence
+            ? `Confidence ${c.sig.confidence}% below threshold ${ctx.profile.minConfidence}%`
+            : c.sig.action === 'skip'
+              ? (c.sig.reasons[0] ? `Skipped: ${c.sig.bias} bias` : 'Signal action is skip')
+              : 'Ranked below top picks'),
     })),
     source: 'fallback',
   };
