@@ -37,24 +37,9 @@ async function gatherMarketContext(): Promise<string> {
     }
   } catch {}
 
-  // 2. FII/DII Institutional flows (Synthetic approximations matching NSE metrics)
-  try {
-    const now = new Date();
-    let fiiDiiCtx = '## INSTITUTIONAL ACTIVITY (FII/DII Net Flows in ₹ Cr)\n';
-    let validDays = 0;
-    for (let i = 0; i < 15 && validDays < 5; i++) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const dow = d.getDay();
-      if (dow === 0 || dow === 6) continue;
-      validDays++;
-      const seed = d.getDate() * (d.getMonth() + 1);
-      const fii = +(((seed % 7) - 3) * 800 + Math.sin(i) * 500).toFixed(0);
-      const dii = +((-(seed % 5) + 2) * 600 + Math.cos(i) * 400).toFixed(0);
-      fiiDiiCtx += `- ${d.toISOString().slice(0, 10)}: FII Net: ${fii >= 0 ? '+' : ''}${fii} Cr | DII Net: ${dii >= 0 ? '+' : ''}${dii} Cr | Net Flow: ${fii + dii >= 0 ? '+' : ''}${fii + dii} Cr\n`;
-    }
-    ctx += fiiDiiCtx + '\n';
-  } catch {}
+  // (FII/DII institutional-flow data intentionally omitted: we don't have a
+  // reliable real-time source, and feeding the model fabricated numbers would
+  // skew the recommendations. Re-add here only when wired to a real data feed.)
 
   // 3. Global indices context (S&P 500, NASDAQ, Dow, Hang Seng etc.)
   try {

@@ -469,65 +469,6 @@ router.get('/benchmark/history', authMiddleware, async (req: AuthRequest, res) =
 });
 
 // ---------------------------------------------------------------------------
-// GET /api/portfolio/capital-gains — STCG / LTCG breakdown
-// ---------------------------------------------------------------------------
-router.get('/capital-gains', authMiddleware, async (req: AuthRequest, res) => {
-  const userId = req.user!.id;
-  const trades = (await db.prepare(`
-    SELECT tp.*, t.created_at as buy_date
-    FROM trade_pnl tp
-    LEFT JOIN transactions t ON t.order_id = tp.buy_order_id
-    WHERE tp.user_id = ?
-    ORDER BY tp.closed_at DESC
-  `).all(userId)) as any[];
-
-  let stcg = 0, ltcg = 0, stcgTrades = 0, ltcgTrades = 0;
-  const breakdown: any[] = [];
-
-  for (const trade of trades) {
-    const closeDate = new Date(trade.closed_at);
-    const buyDate = trade.buy_date ? new Date(trade.buy_date) : closeDate;
-    const holdDays = Math.floor((closeDate.getTime() - buyDate.getTime()) / (24 * 3600 * 1000));
-    const isLTCG = holdDays > 365;
-    const pnl = Number(trade.realized_pnl);
-
-    if (isLTCG) { ltcg += pnl; ltcgTrades++; }
-    else { stcg += pnl; stcgTrades++; }
-
-    breakdown.push({
-      symbol: trade.symbol,
-      quantity: trade.quantity,
-      buy_price: trade.buy_price,
-      sell_price: trade.sell_price,
-      realized_pnl: +pnl.toFixed(2),
-      hold_days: holdDays,
-      type: isLTCG ? 'LTCG' : 'STCG',
-      closed_at: trade.closed_at,
-    });
-  }
-
-  // Tax estimates: STCG @ 15%, LTCG @ 10% above ₹1L exemption
-  const ltcgExemption = 100000;
-  const stcgTax = stcg > 0 ? stcg * 0.15 : 0;
-  const ltcgTaxable = Math.max(0, ltcg - ltcgExemption);
-  const ltcgTax = ltcgTaxable * 0.10;
-
-  res.json({
-    stcg: +stcg.toFixed(2),
-    ltcg: +ltcg.toFixed(2),
-    stcgTrades,
-    ltcgTrades,
-    tax: {
-      stcg_tax: +stcgTax.toFixed(2),
-      ltcg_tax: +ltcgTax.toFixed(2),
-      total_estimated_tax: +(stcgTax + ltcgTax).toFixed(2),
-      ltcg_exemption: ltcgExemption,
-    },
-    breakdown,
-  });
-});
-
-// ---------------------------------------------------------------------------
 // GET /api/portfolio/export — CSV export
 // ---------------------------------------------------------------------------
 router.get('/export', authMiddleware, async (req: AuthRequest, res) => {
@@ -541,19 +482,6 @@ router.get('/export', authMiddleware, async (req: AuthRequest, res) => {
     const csv = rows.map(r => r.join(',')).join('\n');
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename="holdings.csv"');
-    return res.send(csv);
-  }
-
-  if (type === 'capital-gains') {
-    const trades = (await db.prepare(`SELECT tp.*, t.created_at as buy_date FROM trade_pnl tp LEFT JOIN transactions t ON t.order_id = tp.buy_order_id WHERE tp.user_id = ? ORDER BY tp.closed_at DESC`).all(userId)) as any[];
-    const rows = [['Symbol', 'Quantity', 'Buy Price', 'Sell Price', 'Realized P&L', 'Type', 'Close Date']];
-    for (const t of trades) {
-      const holdDays = Math.floor((new Date(t.closed_at).getTime() - (t.buy_date ? new Date(t.buy_date).getTime() : new Date(t.closed_at).getTime())) / (24 * 3600 * 1000));
-      rows.push([t.symbol, t.quantity, Number(t.buy_price).toFixed(2), Number(t.sell_price).toFixed(2), Number(t.realized_pnl).toFixed(2), holdDays > 365 ? 'LTCG' : 'STCG', t.closed_at.slice(0, 10)]);
-    }
-    const csv = rows.map(r => r.join(',')).join('\n');
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename="capital_gains.csv"');
     return res.send(csv);
   }
 

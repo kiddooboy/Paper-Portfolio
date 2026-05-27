@@ -28,9 +28,8 @@ export default function PortfolioPage() {
   const fetchPortfolio = usePortfolioStore((s) => s.fetch);
   const [sortKey, setSortKey] = useState<SortKey>('value');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
-  const [tab, setTab] = useState<'holdings' | 'transactions' | 'pnl' | 'analytics' | 'capital-gains'>('holdings');
+  const [tab, setTab] = useState<'holdings' | 'transactions' | 'pnl' | 'analytics'>('holdings');
   const [tradePnl, setTradePnl] = useState<{ trades: any[]; totalRealized: number } | null>(null);
-  const [capitalGains, setCapitalGains] = useState<any>(null);
   const allQuotes = useMarketStore((s) => s.quotes);
   const loading = (portfolioLoading && !rawData);
 
@@ -46,15 +45,12 @@ export default function PortfolioPage() {
     if ((tab === 'pnl' || tab === 'analytics') && !tradePnl) {
       axios.get('/api/portfolio/trade-pnl').then(r => setTradePnl(r.data)).catch(() => {});
     }
-    if (tab === 'capital-gains' && !capitalGains) {
-      axios.get('/api/portfolio/capital-gains').then(r => setCapitalGains(r.data)).catch(() => {});
-    }
     if (tab === 'analytics') {
       if (!riskMetrics) axios.get('/api/portfolio/risk-metrics').then(r => setRiskMetrics(r.data)).catch(() => {});
       if (!drawdownData) axios.get('/api/portfolio/drawdown', { params: { days: 365 } }).then(r => setDrawdownData(r.data)).catch(() => {});
       if (!benchHistory) axios.get('/api/portfolio/benchmark/history', { params: { days: 365 } }).then(r => setBenchHistory(r.data)).catch(() => {});
     }
-  }, [tab, tradePnl, capitalGains, riskMetrics, drawdownData, benchHistory]);
+  }, [tab, tradePnl, riskMetrics, drawdownData, benchHistory]);
 
   // Quant KPIs computed from trade history
   const profitFactor = useMemo(() => {
@@ -278,9 +274,9 @@ export default function PortfolioPage() {
             <div className="w-px bg-gray-200 dark:bg-gray-700" />
             <div className="flex items-center">
               <div className="flex gap-1">
-                {(['transactions', 'holdings', 'capital-gains'] as const).map(t => (
-                  <a key={t} href={`/api/portfolio/export?type=${t === 'capital-gains' ? 'capital-gains' : t}`} download className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-groww-primary hover:text-groww-primary transition">
-                    <Download className="w-3 h-3" />{t === 'capital-gains' ? 'CG' : t.slice(0, 4).charAt(0).toUpperCase() + t.slice(1, 5)}
+                {(['transactions', 'holdings'] as const).map(t => (
+                  <a key={t} href={`/api/portfolio/export?type=${t}`} download className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-groww-primary hover:text-groww-primary transition">
+                    <Download className="w-3 h-3" />{t.slice(0, 4).charAt(0).toUpperCase() + t.slice(1, 5)}
                   </a>
                 ))}
               </div>
@@ -430,9 +426,6 @@ export default function PortfolioPage() {
               <button onClick={() => setTab('analytics')} className={cn('flex-1 py-3 px-3 text-xs sm:text-sm font-medium transition whitespace-nowrap', tab === 'analytics' ? 'text-groww-primary border-b-2 border-groww-primary' : 'text-gray-500')}>
                 Analytics &amp; Heatmap
               </button>
-              <button onClick={() => setTab('capital-gains')} className={cn('flex-1 py-3 px-3 text-xs sm:text-sm font-medium transition whitespace-nowrap', tab === 'capital-gains' ? 'text-groww-primary border-b-2 border-groww-primary' : 'text-gray-500')}>
-                Tax / CG
-              </button>
             </div>
 
             {tab === 'holdings' && (
@@ -445,7 +438,6 @@ export default function PortfolioPage() {
                       <th className="px-3 py-3 cursor-pointer select-none" onClick={() => toggleSort('pnl')}>P&L {sortKey === 'pnl' ? (sortDir === 'desc' ? '↓' : '↑') : ''}</th>
                       <th className="px-3 py-3 cursor-pointer select-none" onClick={() => toggleSort('qty')}>Quantity {sortKey === 'qty' ? (sortDir === 'desc' ? '↓' : '↑') : ''}</th>
                       <th className="px-3 py-3 cursor-pointer select-none" onClick={() => toggleSort('avg')}>Average Price {sortKey === 'avg' ? (sortDir === 'desc' ? '↓' : '↑') : ''}</th>
-                      <th className="px-3 py-3 cursor-pointer select-none" onClick={() => toggleSort('weight')}>Weight {sortKey === 'weight' ? (sortDir === 'desc' ? '↓' : '↑') : ''}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -466,14 +458,6 @@ export default function PortfolioPage() {
                         </td>
                         <td className="px-3 py-3 tabular-nums text-xs text-gray-500">{h.quantity} shares</td>
                         <td className="px-3 py-3 tabular-nums text-xs text-gray-500">Avg {formatCurrency(h.avg_buy_price)}</td>
-                        <td className="px-3 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                              <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${Math.min(h.weight, 100)}%` }} />
-                            </div>
-                            <span className="text-xs text-gray-500 tabular-nums w-10 text-right">{h.weight}%</span>
-                          </div>
-                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -567,67 +551,6 @@ export default function PortfolioPage() {
                   <div className="flex items-center justify-center py-10">
                     <div className="w-5 h-5 border-2 border-groww-primary border-t-transparent rounded-full animate-spin" />
                   </div>
-                )}
-              </div>
-            )}
-
-            {tab === 'capital-gains' && (
-              <div className="p-4 space-y-4">
-                {!capitalGains ? (
-                  <div className="flex items-center justify-center py-10"><div className="w-5 h-5 border-2 border-groww-primary border-t-transparent rounded-full animate-spin" /></div>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      {[
-                        { label: 'Short-Term P&L (STCG)', val: capitalGains.stcg, trades: capitalGains.stcgTrades, rate: '15%' },
-                        { label: 'Long-Term P&L (LTCG)', val: capitalGains.ltcg, trades: capitalGains.ltcgTrades, rate: '10%' },
-                        { label: 'STCG Tax (est.)', val: capitalGains.tax?.stcg_tax, isNeg: true },
-                        { label: 'LTCG Tax (est.)', val: capitalGains.tax?.ltcg_tax, isNeg: true },
-                      ].map(c => (
-                        <div key={c.label} className="bg-gray-50 dark:bg-gray-900/40 rounded-xl p-3">
-                          <div className="text-xs text-gray-500 mb-1">{c.label}</div>
-                          <div className={cn('font-bold text-base tabular-nums', c.isNeg ? 'text-loss' : (c.val >= 0 ? 'text-gain' : 'text-loss'))}>
-                            {c.isNeg ? '-' : c.val >= 0 ? '+' : ''}{formatCurrency(Math.abs(c.val || 0))}
-                          </div>
-                          {c.rate && <div className="text-[10px] text-gray-400">Tax rate: {c.rate}</div>}
-                          {c.trades !== undefined && <div className="text-[10px] text-gray-400">{c.trades} trades</div>}
-                        </div>
-                      ))}
-                    </div>
-                    <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-2.5 text-xs text-amber-700 dark:text-amber-400">
-                      Estimated tax: <strong>{formatCurrency(capitalGains.tax?.total_estimated_tax || 0)}</strong> · LTCG exempt up to ₹1,00,000 · For actual filings consult a tax professional.
-                    </div>
-                    {(capitalGains.breakdown || []).length > 0 && (
-                      <div className="overflow-x-auto max-h-96 overflow-y-auto">
-                        <table className="w-full text-sm">
-                          <thead className="sticky top-0 bg-white dark:bg-groww-card z-10">
-                            <tr className="text-left text-[11px] text-gray-500 uppercase tracking-wider border-b border-gray-100 dark:border-gray-800">
-                              <th className="px-4 py-2.5">Symbol</th>
-                              <th className="px-3 py-2.5">Type</th>
-                              <th className="px-3 py-2.5">Qty</th>
-                              <th className="px-3 py-2.5">Buy</th>
-                              <th className="px-3 py-2.5">Sell</th>
-                              <th className="px-3 py-2.5">P&L</th>
-                              <th className="px-3 py-2.5">Hold Days</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {capitalGains.breakdown.map((t: any, i: number) => (
-                              <tr key={i} className="border-t border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/40">
-                                <td className="px-4 py-2.5 font-medium">{t.symbol}</td>
-                                <td className="px-3 py-2.5"><span className={cn('text-xs font-bold px-2 py-0.5 rounded-full', t.type === 'LTCG' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400')}>{t.type}</span></td>
-                                <td className="px-3 py-2.5 tabular-nums">{t.quantity}</td>
-                                <td className="px-3 py-2.5 tabular-nums">{formatCurrency(t.buy_price)}</td>
-                                <td className="px-3 py-2.5 tabular-nums">{formatCurrency(t.sell_price)}</td>
-                                <td className={cn('px-3 py-2.5 tabular-nums font-semibold', t.realized_pnl >= 0 ? 'text-gain' : 'text-loss')}>{t.realized_pnl >= 0 ? '+' : ''}{formatCurrency(t.realized_pnl)}</td>
-                                <td className="px-3 py-2.5 tabular-nums text-gray-500">{t.hold_days}d</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </>
                 )}
               </div>
             )}
