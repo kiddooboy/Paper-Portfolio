@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { LayoutDashboard, Search, ListOrdered, Bookmark, Trophy, TrendingUp, BarChart3, PieChart, Compass, Newspaper, SlidersHorizontal, Medal, ChevronDown, ChevronRight, Users, GraduationCap, Sparkles, Bot, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, Search, ListOrdered, Bookmark, Trophy, TrendingUp, BarChart3, PieChart, Compass, Newspaper, SlidersHorizontal, Medal, ChevronDown, ChevronRight, Users, GraduationCap, Sparkles, MessageSquare } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useState } from 'react';
 
@@ -32,7 +32,6 @@ const sections = [
     label: 'AI & Insights',
     items: [
       { path: '/recommendations', label: 'Daily Picks', icon: Sparkles, badge: 'NEW' },
-      { path: '/paperbot',        label: 'Paper Bot',   icon: Bot },
       { path: '/ai-chat',         label: 'AI Chat',     icon: MessageSquare },
     ],
   },
