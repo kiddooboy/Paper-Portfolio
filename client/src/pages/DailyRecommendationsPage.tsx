@@ -553,6 +553,30 @@ export default function DailyRecommendationsPage() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const [todayRes, historyRes] = await Promise.all([
+        axios.get('/api/recommendations/today'),
+        axios.get('/api/recommendations/history', { params: { days: 14 } }),
+      ]);
+      setData(todayRes.data);
+      setHistory(historyRes.data || []);
+      
+      // Sync global user available cash balance
+      const userRes = await axios.get('/api/auth/me');
+      if (userRes.data?.user) {
+        useAuthStore.getState().login(userRes.data.user);
+      }
+      toast.success('Picks refreshed successfully!');
+    } catch {
+      toast.error('Failed to refresh picks');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   // Retrieve user available balance to render in header summary
   const balance = useAuthStore((s) => s.user?.balance || 0);
@@ -681,10 +705,20 @@ export default function DailyRecommendationsPage() {
         {/* ── Stock Picks ── */}
         {data && data.recommendations.length > 0 ? (
           <div className="mb-6 animate-slideUp">
-            <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-              <Target className="w-3.5 h-3.5 text-green-500" />
-              Breakout Recommendations ({data.recommendations.length})
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                <Target className="w-3.5 h-3.5 text-green-500" />
+                Breakout Recommendations ({data.recommendations.length})
+              </h2>
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-groww-card hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 font-bold rounded-xl text-[10px] uppercase border border-gray-100 dark:border-gray-800/80 transition-all shadow-sm active:scale-95 disabled:opacity-50"
+              >
+                <RefreshCw className={cn('w-3 h-3 text-green-500', refreshing && 'animate-spin')} />
+                {refreshing ? 'Refreshing…' : 'Refresh Picks'}
+              </button>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {data.recommendations.map((rec, i) => (
                 <StockPickCard key={rec.symbol} rec={rec} index={i} />
