@@ -168,7 +168,7 @@ export default function AIChatPage() {
   const onlyWelcome = messages.length === 1;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-60px)] bg-gray-50 dark:bg-groww-dark">
+    <div className="flex flex-col h-[calc(100dvh-107px)] bg-gray-50 dark:bg-groww-dark">
       {/* Header */}
       <div className="shrink-0 bg-white dark:bg-groww-card border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -305,7 +305,7 @@ export default function AIChatPage() {
 
       {/* Input / Exhausted state */}
       {exhausted ? (
-        <div className="shrink-0 bg-white dark:bg-groww-card border-t border-gray-200 dark:border-gray-800 px-4 py-5">
+        <div className="shrink-0 bg-white dark:bg-groww-card border-t border-gray-200 dark:border-gray-800 px-4 pt-5 pb-24 lg:pb-5">
           <div className="max-w-md mx-auto text-center space-y-2">
             <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto">
               <Sparkles className="w-5 h-5 text-red-500" />
@@ -322,7 +322,7 @@ export default function AIChatPage() {
           </div>
         </div>
       ) : (
-        <div className="shrink-0 bg-white dark:bg-groww-card border-t border-gray-200 dark:border-gray-800 px-4 py-3">
+        <div className="shrink-0 bg-white dark:bg-groww-card border-t border-gray-200 dark:border-gray-800 px-4 pt-3 pb-20 lg:pb-3">
           <div className="flex gap-2 items-end max-w-4xl mx-auto">
             <textarea
               ref={textareaRef}

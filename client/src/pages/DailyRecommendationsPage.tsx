@@ -632,8 +632,8 @@ export default function DailyRecommendationsPage() {
           <div className={cn('absolute inset-0 bg-gradient-to-br transition-all duration-300', data ? sentiment.gradient : 'from-gray-600 to-gray-700')} />
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_30%,rgba(255,255,255,0.08),transparent_60%)]" />
           
-          {/* Live pulse indicator */}
-          <div className="absolute top-4 right-4 flex items-center gap-2 bg-black/15 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
+          {/* Live pulse indicator — hidden on mobile to avoid overlapping the title */}
+          <div className="hidden sm:flex absolute top-4 right-4 items-center gap-2 bg-black/15 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
@@ -641,13 +641,13 @@ export default function DailyRecommendationsPage() {
             <span className="text-[9px] text-white font-bold uppercase tracking-wider">AI RECOMMENDATIONS ENGINE</span>
           </div>
 
-          <div className="relative px-6 py-8 sm:px-8 sm:py-10">
-            <div className="flex items-start gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-white/15 backdrop-blur-sm flex items-center justify-center shadow-lg ring-1 ring-white/20">
-                <Sparkles className="w-7 h-7 text-white" />
+          <div className="relative px-4 py-6 sm:px-8 sm:py-10">
+            <div className="flex items-start gap-3 sm:gap-4">
+              <div className="w-11 h-11 sm:w-14 sm:h-14 rounded-2xl bg-white/15 backdrop-blur-sm flex items-center justify-center shadow-lg ring-1 ring-white/20 shrink-0">
+                <Sparkles className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
               </div>
               <div className="flex-1 min-w-0">
-                <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
+                <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2 flex-wrap">
                   Daily Picks
                   <span className="px-2 py-0.5 rounded-full bg-green-500 text-[9px] font-black uppercase tracking-widest">Momentum Playbook</span>
                 </h1>
