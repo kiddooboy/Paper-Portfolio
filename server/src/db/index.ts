@@ -837,6 +837,19 @@ export async function initSchema() {
   )`, 'table: ai_console_log');
   safeExec(`CREATE INDEX IF NOT EXISTS idx_ai_console_user ON ai_console_log(user_id, id)`, 'index: ai_console_log');
 
+  // ── Daily AI Market Recommendations ──
+  safeExec(`CREATE TABLE IF NOT EXISTS daily_recommendations (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    date            TEXT NOT NULL UNIQUE,
+    market_sentiment TEXT NOT NULL DEFAULT 'neutral',
+    summary         TEXT NOT NULL,
+    recommendations TEXT NOT NULL DEFAULT '[]',
+    global_cues     TEXT,
+    generated_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    model_used      TEXT NOT NULL DEFAULT 'claude-haiku-4-5-20251001'
+  )`, 'table: daily_recommendations');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_daily_recs_date ON daily_recommendations(date)`, 'index: daily_recommendations');
+
   // MIS intraday short positions (Sell Now, Buy Later)
   safeExec(`CREATE TABLE IF NOT EXISTS mis_shorts (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -900,16 +900,6 @@ export default function CommunityPage() {
                 ))}
               </ol>
             </div>
-
-            <div className="bg-green-50 dark:bg-green-900/10 rounded-xl border border-green-100 dark:border-green-900/30 p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-base">🤖</span>
-                <span className="text-xs font-bold text-green-700 dark:text-green-400">PaperBot</span>
-              </div>
-              <p className="text-xs text-green-700 dark:text-green-400 leading-relaxed">
-                Posts daily trading strategies and market insights every morning at 8 AM IST.
-              </p>
-            </div>
           </aside>
         </div>
       </div>

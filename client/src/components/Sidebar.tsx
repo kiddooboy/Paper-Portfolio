@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { LayoutDashboard, Search, ListOrdered, Bookmark, Trophy, TrendingUp, BarChart3, PieChart, Compass, Newspaper, SlidersHorizontal, Medal, ChevronDown, ChevronRight, Users, GraduationCap } from 'lucide-react';
+import { LayoutDashboard, Search, ListOrdered, Bookmark, Trophy, TrendingUp, BarChart3, PieChart, Compass, Newspaper, SlidersHorizontal, Medal, ChevronDown, ChevronRight, Users, GraduationCap, Sparkles, Bot, MessageSquare } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useState } from 'react';
 
@@ -26,6 +26,14 @@ const sections = [
     items: [
       { path: '/watchlist', label: 'Watchlist',  icon: Bookmark        },
       { path: '/screener',  label: 'Screener',   icon: SlidersHorizontal },
+    ],
+  },
+  {
+    label: 'AI & Insights',
+    items: [
+      { path: '/recommendations', label: 'Daily Picks', icon: Sparkles, badge: 'NEW' },
+      { path: '/paperbot',        label: 'Paper Bot',   icon: Bot },
+      { path: '/ai-chat',         label: 'AI Chat',     icon: MessageSquare },
     ],
   },
   {
@@ -80,6 +88,11 @@ export default function Sidebar({ activePath }: { activePath: string }) {
                     >
                       <item.icon className="w-4 h-4 shrink-0" />
                       <span className="truncate">{item.label}</span>
+                      {'badge' in item && (item as any).badge && (
+                        <span className="ml-auto px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-groww-primary/15 text-groww-primary border border-groww-primary/20">
+                          {(item as any).badge}
+                        </span>
+                      )}
                     </Link>
                   );
                 })}

@@ -32,6 +32,7 @@ import { ingestSymbols } from './services/symbolIngest.js';
 import { startOrderExecutionScheduler } from './services/orderExecution.js';
 import { recordIndexHistory, backfillIndexHistory } from './services/indexHistory.js';
 import { postDailyStrategy, seedCommunityIfEmpty } from './services/communityBot.js';
+import { generateDailyRecommendations } from './services/dailyRecommendations.js';
 import { logActivity } from './services/activityLogger.js';
 
 import authRoutes from './routes/auth.js';
@@ -61,6 +62,8 @@ import communityRoutes from './routes/community.js';
 import foRoutes from './routes/fo.js';
 import algoRoutes from './routes/algo.js';
 import learnRoutes from './routes/learn.js';
+import paperbotRoutes from './routes/paperbot.js';
+import recommendationsRoutes from './routes/recommendations.js';
 
 const PORT = process.env.PORT || 5000;
 
@@ -121,6 +124,8 @@ async function main() {
   app.use('/api/fo', foRoutes);
   app.use('/api/algo', algoRoutes);
   app.use('/api/learn', learnRoutes);
+  app.use('/api/paperbot', paperbotRoutes);
+  app.use('/api/recommendations', recommendationsRoutes);
 
   // Serve static client build and SPA fallback in production (registered AFTER api routes)
   if (process.env.NODE_ENV === 'production') {
@@ -207,6 +212,11 @@ async function main() {
   // Daily 8:00 AM IST (2:30 AM UTC) — post AI-generated trading strategy to community
   cron.schedule('30 2 * * *', () => {
     postDailyStrategy().catch(err => console.error('[cron] communityBot error:', err));
+  });
+
+  // Daily 9:00 AM IST (3:30 AM UTC) on weekdays — generate AI market recommendations
+  cron.schedule('30 3 * * 1-5', () => {
+    generateDailyRecommendations().catch(err => console.error('[cron] dailyRecommendations error:', err));
   });
 
   // 15:35 IST (10:05 UTC) — persist today's Nifty / Sensex close for benchmarking
