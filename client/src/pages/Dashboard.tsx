@@ -75,14 +75,11 @@ export default function Dashboard() {
       }
       return h;
     });
-    let investedValue = 0, currentValue = 0;
-    for (const h of holdings) {
-      investedValue += h.avg_buy_price * h.quantity;
-      currentValue += (h.current_price || h.avg_buy_price) * h.quantity;
-    }
-    const totalPnl = currentValue - investedValue;
-    const totalPnlPercent = investedValue > 0 ? (totalPnl / investedValue) * 100 : 0;
-    return { ...portfolio, holdings, investedValue, currentValue, totalPnl, totalPnlPercent: +totalPnlPercent.toFixed(2) };
+    // Headline aggregates (invested / current value / P&L / day change) come
+    // straight from the server response so the Dashboard matches the Portfolio
+    // and Leaderboard pages exactly — a single source of truth. The per-holding
+    // live enrichment above is only for any per-row display.
+    return { ...portfolio, holdings };
   }, [portfolio, allQuotes]);
 
   useEffect(() => { fetchPortfolioStore(); }, [fetchPortfolioStore]);

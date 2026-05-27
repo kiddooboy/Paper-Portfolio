@@ -149,15 +149,6 @@ export default function PortfolioPage() {
                 </div>
               </>
             )}
-            {(data as any)?.returns?.cagr != null && (
-              <>
-                <div className="w-px bg-gray-200 dark:bg-gray-700" />
-                <div className="text-right">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">CAGR</p>
-                  <p className={cn('font-semibold', (data as any).returns.cagr >= 0 ? 'text-gain' : 'text-loss')}>{(data as any).returns.cagr >= 0 ? '+' : ''}{(data as any).returns.cagr}%</p>
-                </div>
-              </>
-            )}
             <div className="w-px bg-gray-200 dark:bg-gray-700" />
             <div className="flex items-center">
               <div className="flex gap-1">

@@ -354,7 +354,6 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
   `).all(userId)) as any[];
 
   let xirr_rate: number | null = null;
-  let cagr: number | null = null;
   try {
     const cashflows: { amount: number; date: Date }[] = [];
     // Wallet deposits are money in (negative from investor's perspective)
@@ -369,12 +368,6 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
       const hasInvestment = cashflows.some(c => c.amount < 0);
       if (hasInvestment) {
         xirr_rate = xirr(cashflows);
-        // CAGR from first investment date
-        const firstDate = cashflows[0].date;
-        const years = (Date.now() - firstDate.getTime()) / (365.25 * 24 * 3600 * 1000);
-        if (years > 0 && totalCapital > 0) {
-          cagr = Math.pow(terminalValue / totalCapital, 1 / years) - 1;
-        }
       }
     }
   } catch {}
@@ -437,7 +430,6 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
     },
     returns: {
       xirr: xirr_rate !== null ? +(xirr_rate * 100).toFixed(2) : null,
-      cagr: cagr !== null ? +(cagr * 100).toFixed(2) : null,
     },
     transactions,
   });

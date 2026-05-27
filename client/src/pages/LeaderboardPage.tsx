@@ -205,7 +205,7 @@ export default function LeaderboardPage() {
           </button>
           <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
             <Info className="w-3.5 h-3.5" />
-            Ranked by % return on ₹1,00,000 starting capital
+            Ranked by % return — capital doesn't matter, only how well you grow it
           </div>
         </div>
       </div>
@@ -235,6 +235,9 @@ export default function LeaderboardPage() {
           </div>
         </div>
       )}
+
+      {/* Podium — top 3 traders by % return */}
+      {liveData.length > 0 && <Podium entries={liveData} onPick={toggleUser} />}
 
       <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
         {liveData.length === 0 && (
@@ -351,8 +354,62 @@ export default function LeaderboardPage() {
 
       {/* Mobile-only legend */}
       <p className="sm:hidden text-[10px] text-gray-400 text-center px-4">
-        Ranked by overall % return on ₹1,00,000 starting capital
+        Ranked by overall % return — capital size doesn't matter
       </p>
+    </div>
+  );
+}
+
+// ── Olympic-style podium for the top 3 (visual order: 2nd · 1st · 3rd) ──
+function Podium({ entries, onPick }: { entries: LeaderEntry[]; onPick: (id: number) => void }) {
+  const top = entries.slice(0, 3);
+  if (!top.length) return null;
+  // Centre the winner, silver left, bronze right. Filter handles <3 traders.
+  const ordered = [top[1], top[0], top[2]].filter(Boolean) as LeaderEntry[];
+
+  const STYLE: Record<number, { medal: string; ring: string; pedestal: string; pad: string; height: string }> = {
+    1: { medal: '🥇', ring: 'from-yellow-300 to-amber-500', pedestal: 'from-yellow-300 to-amber-500', pad: 'pt-0', height: 'h-16 sm:h-20' },
+    2: { medal: '🥈', ring: 'from-gray-300 to-slate-400',  pedestal: 'from-gray-300 to-slate-400',  pad: 'pt-4 sm:pt-6', height: 'h-12 sm:h-14' },
+    3: { medal: '🥉', ring: 'from-orange-300 to-amber-700', pedestal: 'from-orange-300 to-amber-700', pad: 'pt-6 sm:pt-9', height: 'h-9 sm:h-10' },
+  };
+
+  return (
+    <div className="bg-gradient-to-b from-yellow-50/60 to-transparent dark:from-yellow-900/10 rounded-2xl border border-yellow-100/70 dark:border-yellow-900/20 p-4 sm:p-6">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4 items-end max-w-2xl mx-auto">
+        {ordered.map((e) => {
+          const s = STYLE[e.rank] || STYLE[3];
+          const positive = e.pnlPercent >= 0;
+          return (
+            <button
+              key={e.userId}
+              onClick={() => onPick(e.userId)}
+              className={cn('flex flex-col items-center text-center group', s.pad)}
+            >
+              {/* Avatar with gradient medal ring */}
+              <div className={cn('relative rounded-full p-[2.5px] bg-gradient-to-br shadow-lg transition group-hover:scale-105', s.ring)}>
+                <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-white dark:bg-groww-card flex items-center justify-center text-lg sm:text-2xl font-bold text-gray-700 dark:text-gray-200">
+                  {e.name?.charAt(0)?.toUpperCase() || '?'}
+                </div>
+                <span className="absolute -top-1.5 -right-1 text-lg sm:text-2xl drop-shadow">{s.medal}</span>
+              </div>
+
+              <p className="mt-1.5 font-semibold text-xs sm:text-sm truncate max-w-[90px] sm:max-w-[130px]">{e.name}</p>
+              <p className={cn('text-sm sm:text-lg font-extrabold tabular-nums', positive ? 'text-gain' : 'text-loss')}>
+                {positive ? '+' : ''}{e.pnlPercent.toFixed(2)}%
+              </p>
+              <p className={cn('text-[10px] sm:text-xs font-medium tabular-nums', positive ? 'text-gain' : 'text-loss')}>
+                {positive ? '+' : ''}{formatCurrency(e.totalPnl)}
+              </p>
+
+              {/* Pedestal */}
+              <div className={cn('mt-2 w-full rounded-t-lg bg-gradient-to-b flex items-start justify-center pt-1.5 text-white font-black text-lg sm:text-2xl shadow-inner', s.pedestal, s.height)}>
+                {e.rank}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-center text-[10px] text-gray-400 mt-2">Tap a trader to see their holdings below</p>
     </div>
   );
 }
