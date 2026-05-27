@@ -104,6 +104,93 @@ function calcVWAP(bars: Bar[]): (number | null)[] {
   });
 }
 
+function calcSupertrend(bars: Bar[], period = 10, mult = 3) {
+  const out: (number | null)[] = new Array(bars.length).fill(null);
+  const dirs: (number | null)[] = new Array(bars.length).fill(null);
+  if (bars.length < period) return { values: out, dirs };
+
+  const tr: number[] = [bars[0].high - bars[0].low];
+  for (let i = 1; i < bars.length; i++) {
+    const hl = bars[i].high - bars[i].low;
+    const hpc = Math.abs(bars[i].high - bars[i - 1].close);
+    const lpc = Math.abs(bars[i].low - bars[i - 1].close);
+    tr.push(Math.max(hl, hpc, lpc));
+  }
+
+  const atr: number[] = [];
+  let trSum = 0;
+  for (let i = 0; i < period; i++) {
+    trSum += tr[i];
+  }
+  let prevAtr = trSum / period;
+  atr.push(prevAtr);
+
+  for (let i = 1; i < bars.length; i++) {
+    if (i < period) {
+      atr.push(prevAtr);
+    } else {
+      const curAtr = (prevAtr * (period - 1) + tr[i]) / period;
+      atr.push(curAtr);
+      prevAtr = curAtr;
+    }
+  }
+
+  let finalUpper = 0;
+  let finalLower = 0;
+  let trend = 1;
+
+  for (let i = 0; i < bars.length; i++) {
+    if (i < period - 1) {
+      out[i] = null;
+      dirs[i] = null;
+      continue;
+    }
+
+    const hl2 = (bars[i].high + bars[i].low) / 2;
+    const basicUpper = hl2 + mult * atr[i];
+    const basicLower = hl2 - mult * atr[i];
+
+    if (i === period - 1) {
+      finalUpper = basicUpper;
+      finalLower = basicLower;
+      trend = bars[i].close > finalUpper ? 1 : -1;
+      out[i] = trend === 1 ? finalLower : finalUpper;
+      dirs[i] = trend;
+      continue;
+    }
+
+    const prevClose = bars[i - 1].close;
+    const prevFinalUpper = finalUpper;
+    const prevFinalLower = finalLower;
+
+    if (basicUpper < prevFinalUpper || prevClose > prevFinalUpper) {
+      finalUpper = basicUpper;
+    } else {
+      finalUpper = prevFinalUpper;
+    }
+
+    if (basicLower > prevFinalLower || prevClose < prevFinalLower) {
+      finalLower = basicLower;
+    } else {
+      finalLower = prevFinalLower;
+    }
+
+    const prevTrend = trend;
+    if (bars[i].close > prevFinalUpper) {
+      trend = 1;
+    } else if (bars[i].close < prevFinalLower) {
+      trend = -1;
+    } else {
+      trend = prevTrend;
+    }
+
+    dirs[i] = trend;
+    out[i] = trend === 1 ? finalLower : finalUpper;
+  }
+
+  return { values: out, dirs };
+}
+
 // ── Indicator definitions ─────────────────────────────────────────────────────
 const IND_DEFS = [
   { key: 'ma20',  label: 'MA 20',           color: '#f59e0b', sub: false },
@@ -113,6 +200,7 @@ const IND_DEFS = [
   { key: 'ema21', label: 'EMA 21',          color: '#06b6d4', sub: false },
   { key: 'bb',    label: 'Bollinger Bands', color: '#94a3b8', sub: false },
   { key: 'vwap',  label: 'VWAP',            color: '#10b981', sub: false },
+  { key: 'supertrend', label: 'Supertrend',  color: '#00c087', sub: false },
   { key: 'rsi',   label: 'RSI 14',          color: '#a855f7', sub: true  },
   { key: 'macd',  label: 'MACD',            color: '#f97316', sub: true  },
 ] as const;
@@ -184,7 +272,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
   const [chartReady,  setChartReady]  = useState(false);
   const [indicators,  setIndicators]  = useState<Indicators>({
     ma20: false, ma50: false, ma200: false, ema9: false, ema21: false,
-    bb: false, vwap: false, rsi: false, macd: false,
+    bb: false, vwap: false, supertrend: false, rsi: false, macd: false,
   });
   const [activeTool,     setActiveTool]     = useState<DrawTool>('cursor');
   const [indOpen,        setIndOpen]        = useState(false);
@@ -356,6 +444,17 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
     }
 
     if (indicators.vwap) addLine('vwap', toSer(calcVWAP(sorted)), '#10b981', { lineStyle: LineStyle.Dashed });
+
+    if (indicators.supertrend) {
+      const { values, dirs } = calcSupertrend(sorted);
+      const bullData = values.map((v, i) => dirs[i] === 1 && v !== null ? { time: times[i], value: v } : null).filter(Boolean) as any[];
+      const bearData = values.map((v, i) => dirs[i] === -1 && v !== null ? { time: times[i], value: v } : null).filter(Boolean) as any[];
+      const sbull = chart.addSeries(LineSeries, { color: '#00c087', lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+      const sbear = chart.addSeries(LineSeries, { color: '#ef4444', lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+      sbull.setData(bullData);
+      sbear.setData(bearData);
+      indSerRef.current.set('supertrend', [sbull, sbear]);
+    }
 
     if (indicators.rsi && margins.rsi) {
       const s = chart.addSeries(LineSeries, {
