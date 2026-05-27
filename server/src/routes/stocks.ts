@@ -580,7 +580,7 @@ router.get('/screener', async (req, res) => {
 router.get('/my-alerts', authMiddleware, (req: AuthRequest, res) => {
   const userId = req.user!.id;
   const alerts = db.prepare(
-    `SELECT id, symbol, target_price, condition, created_at
+    `SELECT id, symbol, target_price, condition, condition_type, condition_spec, created_at
      FROM price_alerts WHERE user_id = ? AND triggered = 0
      ORDER BY created_at DESC`
   ).all(userId) as any[];

@@ -20,6 +20,7 @@ export default function MobileNav({ activePath }: { activePath: string }) {
           <Link
             key={item.path}
             to={item.path}
+            data-tour={item.path === '/' ? '/dashboard' : item.path}
             className={cn(
               'flex flex-col items-center gap-0.5 text-[10px] font-medium',
               active ? 'text-groww-primary' : 'text-gray-500 dark:text-gray-400'

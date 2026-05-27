@@ -63,6 +63,11 @@ export default function TerminalPage() {
   const [showSellConfirm, setShowSellConfirm] = useState(false);
 
   const [alertOpen, setAlertOpen] = useState(false);
+  const [alertType, setAlertType] = useState<'price' | 'indicator'>('price');
+  const [alertIndicator, setAlertIndicator] = useState<'RSI' | 'EMA' | 'SMA'>('RSI');
+  const [alertPeriod, setAlertPeriod] = useState('14');
+  const [alertOp, setAlertOp] = useState<'above' | 'below' | 'cross_up' | 'cross_down'>('above');
+  const [alertValue, setAlertValue] = useState('');
   const [alertPrice, setAlertPrice] = useState('');
   const [alertCond, setAlertCond] = useState<'above' | 'below'>('above');
   const [myAlerts, setMyAlerts] = useState<any[]>([]);
@@ -234,17 +239,42 @@ export default function TerminalPage() {
   };
 
   const submitAlert = async () => {
-    if (!alertPrice) return;
-    try {
-      await axios.post(`/api/stocks/${symbol.toUpperCase()}/alert`, {
-        targetPrice: parseFloat(alertPrice),
-        condition: alertCond,
-      });
-      toast.success('Price alert set');
-      setAlertPrice('');
-      fetchAlerts();
-    } catch (e: any) {
-      toast.error(e?.response?.data?.error || 'Failed to set alert');
+    if (alertType === 'price') {
+      if (!alertPrice) return;
+      try {
+        await axios.post(`/api/stocks/${symbol.toUpperCase()}/alert`, {
+          targetPrice: parseFloat(alertPrice),
+          condition: alertCond,
+        });
+        toast.success('Price alert set');
+        setAlertPrice('');
+        fetchAlerts();
+      } catch (e: any) {
+        toast.error(e?.response?.data?.error || 'Failed to set alert');
+      }
+    } else {
+      const period = parseInt(alertPeriod);
+      if (!period || period < 2) { toast.error('Enter a valid period (>= 2)'); return; }
+      const val = parseFloat(alertValue);
+      if (alertIndicator === 'RSI' && (!alertValue || isNaN(val))) {
+        toast.error('Enter a target RSI value'); return;
+      }
+      try {
+        await axios.post(`/api/stocks/${symbol.toUpperCase()}/alert`, {
+          conditionType: 'indicator',
+          conditionSpec: {
+            indicator: alertIndicator,
+            period,
+            op: alertOp,
+            value: isNaN(val) ? undefined : val,
+          },
+        });
+        toast.success('Indicator alert set');
+        setAlertValue('');
+        fetchAlerts();
+      } catch (e: any) {
+        toast.error(e?.response?.data?.error || 'Failed to set alert');
+      }
     }
   };
 
@@ -812,8 +842,8 @@ export default function TerminalPage() {
 
       {/* Price Alert popover */}
       {alertOpen && (
-        <div className="fixed right-2 sm:right-4 top-20 z-50 bg-white dark:bg-groww-card border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-4 w-[calc(100vw-1rem)] max-w-[300px]">
-          <div className="flex items-center justify-between mb-3">
+        <div className="fixed right-2 sm:right-4 top-20 z-50 bg-white dark:bg-groww-card border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-4 w-[calc(100vw-1rem)] max-w-[300px] animate-[fadeIn_.2s_ease]">
+          <div className="flex items-center justify-between mb-3 border-b border-gray-100 dark:border-gray-800 pb-2">
             <h3 className="font-semibold text-sm">Price Alerts — {symbol}</h3>
             <button onClick={() => setAlertOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
               <X className="w-4 h-4" />
@@ -822,51 +852,148 @@ export default function TerminalPage() {
 
           {/* Existing active alerts */}
           {myAlerts.length > 0 && (
-            <div className="mb-3 space-y-1.5">
+            <div className="mb-3 space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
               <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Active Alerts</p>
-              {myAlerts.map((a) => (
-                <div key={a.id} className="flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 rounded-lg px-2.5 py-1.5">
-                  <span className="text-xs">
-                    <span className={cn('font-semibold mr-1', a.condition === 'above' ? 'text-gain' : 'text-loss')}>
-                      {a.condition === 'above' ? '▲ Above' : '▼ Below'}
+              {myAlerts.map((a) => {
+                let alertText = '';
+                if (a.condition_type === 'indicator') {
+                  try {
+                    const spec = JSON.parse(a.condition_spec);
+                    alertText = `${spec.indicator}(${spec.period}) ${spec.op.replace('_', ' ')} ${spec.value ?? ''}`;
+                  } catch {
+                    alertText = 'Technical alert';
+                  }
+                } else {
+                  alertText = `${a.condition === 'above' ? '▲ Above' : '▼ Below'} ${formatCurrency(a.target_price)}`;
+                }
+                return (
+                  <div key={a.id} className="flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 rounded-lg px-2.5 py-1.5 text-[11px] hover:bg-gray-100 dark:hover:bg-gray-800 transition">
+                    <span className="font-semibold text-gray-700 dark:text-gray-300 truncate max-w-[200px]" title={alertText}>
+                      {alertText}
                     </span>
-                    {formatCurrency(a.target_price)}
-                  </span>
-                  <button onClick={() => deleteAlert(a.id)} className="text-gray-400 hover:text-red-500 transition">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
+                    <button onClick={() => deleteAlert(a.id)} className="text-gray-400 hover:text-red-500 transition shrink-0 ml-1">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
 
           {/* New alert form */}
-          <div className="space-y-2">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">New Alert</p>
-            <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-3 pt-2 border-t border-gray-100 dark:border-gray-800">
+            {/* Tab switch */}
+            <div className="flex border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden text-[10px] font-bold uppercase">
               <button
-                onClick={() => setAlertCond('above')}
-                className={cn('py-1.5 text-xs rounded-lg border font-medium', alertCond === 'above' ? 'border-gain text-gain bg-green-50 dark:bg-green-900/20' : 'border-gray-200 dark:border-gray-700 text-gray-500')}
+                onClick={() => setAlertType('price')}
+                className={cn('flex-1 py-1 text-center transition', alertType === 'price' ? 'bg-groww-primary text-white' : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800')}
               >
-                ▲ Above
+                Price
               </button>
               <button
-                onClick={() => setAlertCond('below')}
-                className={cn('py-1.5 text-xs rounded-lg border font-medium', alertCond === 'below' ? 'border-loss text-loss bg-red-50 dark:bg-red-900/20' : 'border-gray-200 dark:border-gray-700 text-gray-500')}
+                onClick={() => setAlertType('indicator')}
+                className={cn('flex-1 py-1 text-center transition border-l border-gray-200 dark:border-gray-700', alertType === 'indicator' ? 'bg-groww-primary text-white' : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800')}
               >
-                ▼ Below
+                Technical
               </button>
             </div>
-            <input
-              type="number"
-              value={alertPrice}
-              placeholder={`Target price (LTP: ${price.toFixed(2)})`}
-              onChange={(e) => setAlertPrice(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm"
-            />
+
+            {alertType === 'price' ? (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setAlertCond('above')}
+                    className={cn('py-1.5 text-xs rounded-lg border font-medium transition-colors', alertCond === 'above' ? 'border-gain text-gain bg-green-50 dark:bg-green-900/20' : 'border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/40')}
+                  >
+                    ▲ Above
+                  </button>
+                  <button
+                    onClick={() => setAlertCond('below')}
+                    className={cn('py-1.5 text-xs rounded-lg border font-medium transition-colors', alertCond === 'below' ? 'border-loss text-loss bg-red-50 dark:bg-red-900/20' : 'border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/40')}
+                  >
+                    ▼ Below
+                  </button>
+                </div>
+                <input
+                  type="number"
+                  value={alertPrice}
+                  placeholder={`Target price (LTP: ${price.toFixed(2)})`}
+                  onChange={(e) => setAlertPrice(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-xs focus:ring-1 focus:ring-groww-primary focus:outline-none"
+                />
+              </div>
+            ) : (
+              <div className="space-y-2.5 text-[11px] animate-[fadeIn_.15s_ease]">
+                {/* Indicator pills */}
+                <div className="flex gap-1.5">
+                  {(['RSI', 'EMA', 'SMA'] as const).map((ind) => (
+                    <button
+                      key={ind}
+                      onClick={() => {
+                        setAlertIndicator(ind);
+                        setAlertPeriod(ind === 'RSI' ? '14' : '20');
+                      }}
+                      className={cn('flex-1 py-1 rounded-lg border text-center font-bold uppercase transition-colors', alertIndicator === ind ? 'border-groww-primary text-groww-primary bg-green-50 dark:bg-green-900/10' : 'border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/40')}
+                    >
+                      {ind}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[9px] uppercase tracking-wide text-gray-400 mb-0.5">Period</label>
+                    <input
+                      type="number"
+                      value={alertPeriod}
+                      onChange={(e) => setAlertPeriod(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-1 focus:ring-groww-primary focus:outline-none"
+                    />
+                  </div>
+                  {alertIndicator === 'RSI' ? (
+                    <div>
+                      <label className="block text-[9px] uppercase tracking-wide text-gray-400 mb-0.5">RSI Value</label>
+                      <input
+                        type="number"
+                        placeholder="70"
+                        value={alertValue}
+                        onChange={(e) => setAlertValue(e.target.value)}
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-1 focus:ring-groww-primary focus:outline-none"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex flex-col justify-end text-[9px] text-gray-400 pb-1.5 leading-tight">
+                      Compares price vs indicator level.
+                    </div>
+                  )}
+                </div>
+
+                {/* Operations */}
+                <div>
+                  <label className="block text-[9px] uppercase tracking-wide text-gray-400 mb-1">Trigger Condition</label>
+                  <div className="grid grid-cols-2 gap-1 text-[10px]">
+                    {[
+                      { op: 'above', label: '▲ Price Above' },
+                      { op: 'below', label: '▼ Price Below' },
+                      { op: 'cross_up', label: '↗ Crosses Up' },
+                      { op: 'cross_down', label: '↘ Crosses Down' },
+                    ].map((item) => (
+                      <button
+                        key={item.op}
+                        onClick={() => setAlertOp(item.op as any)}
+                        className={cn('py-1.5 border rounded-md transition-colors font-medium', alertOp === item.op ? 'border-groww-primary text-groww-primary bg-green-50 dark:bg-green-900/10' : 'border-gray-100 dark:border-gray-800 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/40')}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <button
               onClick={submitAlert}
-              className="w-full py-2 text-xs font-semibold rounded-lg bg-groww-primary text-white hover:brightness-110 transition"
+              className="w-full py-2 text-xs font-semibold rounded-lg bg-groww-primary text-white hover:brightness-110 transition-all shadow-md active:scale-[0.98]"
             >
               Set Alert
             </button>

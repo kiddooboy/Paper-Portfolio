@@ -27,12 +27,13 @@ import cookieParser from 'cookie-parser';
 import compression from 'compression';
 import { initSchema, db, shutdownPool } from './db/index.js';
 import cron from 'node-cron';
-import { getQuote, getQuotes, getIndices, isMarketOpen, NIFTY50 } from './services/marketData.js';
+import { getQuote, getQuotes, getHistory, getIndices, isMarketOpen, NIFTY50 } from './services/marketData.js';
 import { ingestSymbols } from './services/symbolIngest.js';
 import { startOrderExecutionScheduler } from './services/orderExecution.js';
 import { recordIndexHistory, backfillIndexHistory } from './services/indexHistory.js';
 import { generateDailyRecommendations } from './services/dailyRecommendations.js';
 import { logActivity } from './services/activityLogger.js';
+import { evaluateAlert } from './services/indicators.js';
 
 import authRoutes from './routes/auth.js';
 import stockRoutes from './routes/stocks.js';
@@ -157,26 +158,82 @@ async function main() {
       uniqueSymbols.map((s) => ({ symbol: s, exchange: 'NSE' as const }))
     );
     const priceMap = new Map(quotes.map((q) => [q.symbol, q.price]));
+    const prevCloseMap = new Map(quotes.map((q) => [q.symbol, q.previous_close]));
 
     for (const alert of alerts) {
       const price = priceMap.get(alert.symbol);
       if (price == null) continue;
-      const triggered =
-        (alert.condition === 'above' && price >= alert.target_price) ||
-        (alert.condition === 'below' && price <= alert.target_price);
+
+      let triggered = false;
+
+      if (alert.condition_type === 'price' || !alert.condition_type) {
+        triggered =
+          (alert.condition === 'above' && price >= alert.target_price) ||
+          (alert.condition === 'below' && price <= alert.target_price);
+      } else {
+        try {
+          const spec = JSON.parse(alert.condition_spec);
+          if (!spec.type) {
+            spec.type = alert.condition_type;
+          }
+
+          if (alert.condition_type === 'pct_move') {
+            const previousClose = prevCloseMap.get(alert.symbol);
+            triggered = evaluateAlert({
+              bars: [],
+              currentPrice: price,
+              previousClose,
+              spec,
+            });
+          } else if (alert.condition_type === 'indicator') {
+            const historicalBars = await getHistory(
+              alert.symbol,
+              'NSE',
+              new Date(Date.now() - 90 * 24 * 3600 * 1000),
+              '1d'
+            );
+            const closes = historicalBars.map((b: any) => b.close).filter((c: any) => c != null);
+
+            triggered = evaluateAlert({
+              bars: closes,
+              currentPrice: price,
+              previousClose: prevCloseMap.get(alert.symbol),
+              spec,
+            });
+          }
+        } catch (err: any) {
+          console.warn('[alerts] advanced eval failed for alert ID:', alert.id, err?.message);
+        }
+      }
+
       if (triggered) {
         await db.prepare('UPDATE price_alerts SET triggered = TRUE WHERE id = ?').run(alert.id);
+
+        let message = `${alert.symbol} is now ${alert.condition === 'above' ? 'above' : 'below'} ₹${alert.target_price}`;
+        if (alert.condition_type === 'indicator') {
+          try {
+            const spec = JSON.parse(alert.condition_spec);
+            message = `${alert.symbol} ${spec.indicator}(${spec.period}) is now ${spec.op.replace('_', ' ')} ${spec.value ?? ''}`;
+          } catch {}
+        } else if (alert.condition_type === 'pct_move') {
+          try {
+            const spec = JSON.parse(alert.condition_spec);
+            message = `${alert.symbol} moved ${spec.direction} by ${spec.threshold}%`;
+          } catch {}
+        }
+
         await db.prepare(
           `INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, 'price_alert')`
         ).run(
           alert.user_id,
-          `Price Alert: ${alert.symbol}`,
-          `${alert.symbol} is now ${alert.condition === 'above' ? 'above' : 'below'} ₹${alert.target_price}`
+          `Alert Triggered: ${alert.symbol}`,
+          message
         );
         logActivity(alert.user_id, 'PRICE_ALERT_TRIGGERED', {
           symbol: alert.symbol,
           targetPrice: alert.target_price,
           condition: alert.condition,
+          condition_type: alert.condition_type,
           currentPrice: price,
         });
       }

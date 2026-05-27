@@ -44,7 +44,11 @@ export default function ProductTour({ onClose }: { onClose: () => void }) {
   useLayoutEffect(() => {
     function measure() {
       if (!step.sel) { setRect(null); return; }
-      const el = document.querySelector(step.sel) as HTMLElement | null;
+      let el = document.querySelector(step.sel) as HTMLElement | null;
+      // Mobile/tablet fallback: if element is hidden, spotlight the hamburger button to show menu access
+      if (!el && window.innerWidth < 1024) {
+        el = document.querySelector('[data-tour="hamburger"]') as HTMLElement | null;
+      }
       if (!el) { setRect(null); return; }
       el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       setRect(el.getBoundingClientRect());
@@ -73,9 +77,23 @@ export default function ProductTour({ onClose }: { onClose: () => void }) {
   // Card position — beside the target if possible, else centered
   const card = (() => {
     const vw = window.innerWidth, vh = window.innerHeight;
+    const isMobile = vw < 768;
+
     if (!rect) {
-      return { left: vw / 2 - CARD_W / 2, top: vh / 2 - 110, centered: true };
+      const left = isMobile ? (vw - Math.min(CARD_W, vw - 24)) / 2 : vw / 2 - CARD_W / 2;
+      const top = isMobile ? vh / 2 - 110 : vh / 2 - 110;
+      return { left, top, centered: true };
     }
+
+    if (isMobile) {
+      const left = (vw - Math.min(CARD_W, vw - 24)) / 2;
+      // If spotlight is in lower half of viewport, place card in upper half (top: 80).
+      // Otherwise place card in lower half (top: vh - 245).
+      const spotlightCenterY = rect.top + rect.height / 2;
+      const top = spotlightCenterY > vh / 2 ? 80 : vh - 245;
+      return { left, top, centered: false };
+    }
+
     // Prefer placing to the RIGHT of the target (sidebar items live on the left)
     let left = rect.right + GAP;
     let top = rect.top;
@@ -104,14 +122,14 @@ export default function ProductTour({ onClose }: { onClose: () => void }) {
             width: rect.width + 12,
             height: rect.height + 12,
             borderRadius: 12,
-            boxShadow: '0 0 0 9999px rgba(2,6,16,0.72)',
+            boxShadow: '0 0 0 9999px rgba(15,23,42,0.42)',
             border: '2px solid #00d68f',
             transition: 'all .25s ease',
             pointerEvents: 'none',
           }}
         />
       ) : (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(2,6,16,0.72)' }} onClick={onClose} />
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.42)', backdropFilter: 'blur(1.5px)' }} onClick={onClose} />
       )}
 
       {/* Popup card */}
