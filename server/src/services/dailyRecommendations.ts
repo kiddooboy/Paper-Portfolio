@@ -86,7 +86,7 @@ async function gatherMarketContext(): Promise<string> {
   // 4. Top positive momentum NSE stocks with technical analysis
   try {
     const dbStocks = db.prepare(
-      `SELECT symbol FROM stocks WHERE exchange = 'NSE' LIMIT 100`
+      `SELECT symbol FROM stocks WHERE exchange = 'NSE'`
     ).all() as { symbol: string }[];
 
     const stockSymbols = dbStocks.map(s => s.symbol);
