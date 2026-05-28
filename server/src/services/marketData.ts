@@ -1,4 +1,5 @@
 import YahooFinance from 'yahoo-finance2';
+import { isHolidayToday, holidayDescription } from './nseHolidays.js';
 
 const yahooFinance = new YahooFinance();
 
@@ -42,6 +43,7 @@ export function isMarketOpen(): boolean {
   const ist = getISTDate();
   const day = ist.getDay(); // 0=Sun, 6=Sat
   if (day === 0 || day === 6) return false;
+  if (isHolidayToday()) return false;
   const minutes = ist.getHours() * 60 + ist.getMinutes();
   const openMin = MARKET_OPEN_H * 60 + MARKET_OPEN_M;
   const closeMin = MARKET_CLOSE_H * 60 + MARKET_CLOSE_M;
@@ -56,8 +58,16 @@ export function getMarketStatus() {
   const openMin = MARKET_OPEN_H * 60 + MARKET_OPEN_M;
   const closeMin = MARKET_CLOSE_H * 60 + MARKET_CLOSE_M;
 
+  // Detect holiday so the UI can show a richer "Closed — Holiday" label.
+  let holiday: { date: string; description: string } | null = null;
+  if (isHolidayToday()) {
+    const isoDate = ist.toISOString().slice(0, 10);
+    holiday = { date: isoDate, description: holidayDescription(isoDate) || 'NSE Trading Holiday' };
+  }
+
   let label = 'Closed';
   if (open) label = 'Open';
+  else if (holiday) label = 'Holiday';
   else if (day >= 1 && day <= 5 && minutes < openMin) label = 'Pre-market';
   else if (day >= 1 && day <= 5 && minutes > closeMin) label = 'After hours';
 
@@ -65,6 +75,7 @@ export function getMarketStatus() {
     isOpen: open,
     label,
     ist: ist.toISOString(),
+    holiday,
     nextOpen: open ? null : getNextOpenIST(ist),
     pollIntervalMs: open ? 10_000 : 300_000, // 10s live, 5min closed
   };
@@ -75,13 +86,19 @@ function getNextOpenIST(ist: Date): string {
   // We work in that fake space, then convert back to real UTC before returning.
   const IST_OFFSET_MS = 5.5 * 3600000;
   const d = new Date(ist);
-  do {
-    if (d.getHours() * 60 + d.getMinutes() < MARKET_OPEN_H * 60 + MARKET_OPEN_M && d.getDay() >= 1 && d.getDay() <= 5) break;
+  const isHoliday = (x: Date) => holidayDescription(x.toISOString().slice(0, 10)) != null;
+  // If today is pre-market on a normal trading day, use today's open.
+  if (d.getHours() * 60 + d.getMinutes() < MARKET_OPEN_H * 60 + MARKET_OPEN_M
+      && d.getDay() >= 1 && d.getDay() <= 5 && !isHoliday(d)) {
+    d.setHours(MARKET_OPEN_H, MARKET_OPEN_M, 0, 0);
+    return new Date(d.getTime() - IST_OFFSET_MS).toISOString();
+  }
+  // Otherwise advance day by day, skipping weekends AND NSE holidays.
+  for (let i = 0; i < 60; i++) {
     d.setDate(d.getDate() + 1);
     d.setHours(MARKET_OPEN_H, MARKET_OPEN_M, 0, 0);
-  } while (d.getDay() === 0 || d.getDay() === 6);
-  d.setHours(MARKET_OPEN_H, MARKET_OPEN_M, 0, 0);
-  // d is fake-UTC (IST wall time); subtract IST offset to get real UTC
+    if (d.getDay() !== 0 && d.getDay() !== 6 && !isHoliday(d)) break;
+  }
   return new Date(d.getTime() - IST_OFFSET_MS).toISOString();
 }
 

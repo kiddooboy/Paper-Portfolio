@@ -438,6 +438,17 @@ export async function initSchema() {
   `, 'table: index_history');
   safeExec(`CREATE INDEX IF NOT EXISTS idx_index_history_date ON index_history(date)`, 'index: index_history_date');
 
+  // NSE trading-holiday calendar — fetched daily from NSE (with fallback list).
+  // `date` stored as ISO `YYYY-MM-DD` in IST; matched against the engine's IST date.
+  safeExec(`
+    CREATE TABLE IF NOT EXISTS nse_holidays (
+      date        TEXT PRIMARY KEY,
+      description TEXT NOT NULL DEFAULT '',
+      source      TEXT NOT NULL DEFAULT 'fallback',
+      updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `, 'table: nse_holidays');
+
   // Phase 3 — Smart alerts: multi-condition support
   safeExec(`ALTER TABLE price_alerts ADD COLUMN condition_type TEXT NOT NULL DEFAULT 'price'`, 'migration: price_alerts.condition_type');
   safeExec(`ALTER TABLE price_alerts ADD COLUMN condition_spec TEXT`, 'migration: price_alerts.condition_spec');
