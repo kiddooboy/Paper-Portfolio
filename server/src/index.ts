@@ -27,7 +27,7 @@ import cookieParser from 'cookie-parser';
 import compression from 'compression';
 import { initSchema, db, shutdownPool } from './db/index.js';
 import cron from 'node-cron';
-import { getQuote, getQuotes, getHistory, getIndices, isMarketOpen, NIFTY50, markPollSuccess, markPollFailure, isCircuitOpen } from './services/marketData.js';
+import { getQuote, getQuotes, getHistory, getIndices, isMarketOpen, NIFTY50, markPollSuccess, markPollFailure, isCircuitOpen, getAllCachedQuotes } from './services/marketData.js';
 import { broadcast as broadcastTick, subscriberCount, getDynamicSymbols } from './services/tickBroadcast.js';
 
 // Race a promise against a deadline so a stuck Yahoo connection can never
@@ -350,15 +350,19 @@ async function main() {
         `SELECT DISTINCT symbol FROM holdings UNION SELECT DISTINCT symbol FROM watchlist_items`
       ).all()) as any[]).map((r) => r.symbol).filter(Boolean);
 
-      // Top-100 by market cap fills out the universe beyond NIFTY50 so Market
-      // Explorer/Sector pages tick at the tier1 cadence too — auto-adapts to
-      // the actual market-cap rankings without hardcoded constants.
-      const top100 = ((await db.prepare(
-        `SELECT symbol FROM stocks WHERE exchange = 'NSE' AND market_cap > 0 ORDER BY market_cap DESC LIMIT 100`,
-      ).all()) as any[]).map((r) => r.symbol).filter(Boolean);
+      // Top-150 by today's turnover (volume × price) from the warm tier2 cache.
+      // Auto-adapts to actual daily activity — much better than relying on a
+      // sparsely-populated market_cap column. Cold-start returns [] until
+      // tier2 has populated the cache once (~30-60s after boot); NIFTY50 +
+      // held + watched cover us in the meantime.
+      const top150 = Array.from(getAllCachedQuotes().values())
+        .filter((q) => q && q.exchange === 'NSE' && q.price > 0 && q.volume > 0)
+        .sort((a, b) => (b.volume * b.price) - (a.volume * a.price))
+        .slice(0, 150)
+        .map((q) => q.symbol);
 
       const dynamic = getDynamicSymbols();
-      const symbols = Array.from(new Set([...NIFTY50, ...top100, ...heldOrWatched, ...dynamic]));
+      const symbols = Array.from(new Set([...NIFTY50, ...top150, ...heldOrWatched, ...dynamic]));
       // Hard deadline so a stuck Yahoo connection can never wedge the loop.
       const quotes = await withTimeout(
         getQuotes(symbols.map((s) => ({ symbol: s, exchange: 'NSE' as const })), true),
