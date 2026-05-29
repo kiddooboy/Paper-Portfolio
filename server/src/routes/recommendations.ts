@@ -86,9 +86,11 @@ router.post('/generate', authMiddleware, async (req: AuthRequest, res) => {
 
   try {
     await generateDailyRecommendations();
-    const today = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
+    // Surface whichever row generateDailyRecommendations just produced. The
+    // earlier `WHERE date = ? OR 1=1` was a no-op condition with an unbound
+    // placeholder; node:sqlite rejects the unbound `?` and throws.
     const row = db.prepare(
-      'SELECT * FROM daily_recommendations WHERE date = ? OR 1=1 ORDER BY date DESC LIMIT 1'
+      'SELECT * FROM daily_recommendations ORDER BY date DESC LIMIT 1'
     ).get() as any;
 
     if (row) {

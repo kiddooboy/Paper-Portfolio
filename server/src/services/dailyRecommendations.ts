@@ -289,9 +289,18 @@ Based on this data, identify the strongest breakout candidates and provide your 
     const summary = parsed.summary || 'Market analysis unavailable.';
     const recommendations = parsed.recommendations || [];
 
+    // UPSERT — re-running on the same day (manual admin trigger) replaces the
+    // existing row instead of throwing on the date UNIQUE constraint.
     db.prepare(`
-      INSERT INTO daily_recommendations (date, market_sentiment, summary, recommendations, global_cues, model_used)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO daily_recommendations (date, market_sentiment, summary, recommendations, global_cues, model_used, generated_at)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+      ON CONFLICT(date) DO UPDATE SET
+        market_sentiment = excluded.market_sentiment,
+        summary          = excluded.summary,
+        recommendations  = excluded.recommendations,
+        global_cues      = excluded.global_cues,
+        model_used       = excluded.model_used,
+        generated_at     = excluded.generated_at
     `).run(
       today,
       sentiment,
@@ -304,5 +313,8 @@ Based on this data, identify the strongest breakout candidates and provide your 
     console.log(`[recommendations] Generated ${recommendations.length} picks for ${today} (sentiment: ${sentiment})`);
   } catch (err: any) {
     console.error('[recommendations] Generation failed:', err?.message || err);
+    // Re-throw so the /generate route surfaces real failures instead of
+    // returning the stale previous row as "success".
+    throw err;
   }
 }
