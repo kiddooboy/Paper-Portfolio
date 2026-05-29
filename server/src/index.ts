@@ -31,7 +31,7 @@ import { getQuote, getQuotes, getHistory, getIndices, isMarketOpen, NIFTY50 } fr
 import { ingestSymbols } from './services/symbolIngest.js';
 import { startOrderExecutionScheduler } from './services/orderExecution.js';
 import { recordIndexHistory, backfillIndexHistory } from './services/indexHistory.js';
-import { refreshNseHolidays } from './services/nseHolidays.js';
+import { refreshNseHolidays, isHolidayToday } from './services/nseHolidays.js';
 import { generateDailyRecommendations } from './services/dailyRecommendations.js';
 import { logActivity } from './services/activityLogger.js';
 import { evaluateAlert } from './services/indicators.js';
@@ -77,8 +77,30 @@ async function main() {
   // Phase 2: ensure ~1y of Nifty/Sensex closes are available for benchmarking
   backfillIndexHistory(400).catch((e) => console.warn('[indexHistory] backfill failed:', e?.message || e));
 
-  // Seed + live-fetch NSE trading-holiday calendar so isMarketOpen() honors holidays.
-  refreshNseHolidays().catch((e) => console.warn('[nseHolidays] initial refresh failed:', e?.message || e));
+  // Seed + live-fetch NSE trading-holiday calendar so isMarketOpen() honors
+  // holidays. Then run a catch-up check so that if the server restarts after
+  // the 8:45 IST cron, today's Daily Picks still get generated.
+  refreshNseHolidays()
+    .catch((e) => console.warn('[nseHolidays] initial refresh failed:', e?.message || e))
+    .finally(() => {
+      try {
+        const ist = new Date(Date.now() + 5.5 * 3600_000);
+        const todayIso = ist.toISOString().slice(0, 10);
+        const minutes = ist.getUTCHours() * 60 + ist.getUTCMinutes();
+        const cronMin = 8 * 60 + 45; // 8:45 AM IST — the daily cron time
+        const dow = ist.getUTCDay();
+        const isWeekday = dow >= 1 && dow <= 5;
+        const isHoliday = (() => { try { return isHolidayToday(); } catch { return false; } })();
+        if (isWeekday && !isHoliday && minutes >= cronMin) {
+          const existing = db.prepare('SELECT 1 FROM daily_recommendations WHERE date = ?').get(todayIso);
+          if (!existing) {
+            console.log(`[recommendations] catch-up generation for ${todayIso}`);
+            generateDailyRecommendations()
+              .catch((err) => console.error('[recommendations] catch-up failed:', err?.message || err));
+          }
+        }
+      } catch (err) { console.warn('[recommendations] catch-up check failed:', (err as Error)?.message || err); }
+    });
 
 
 
@@ -275,7 +297,9 @@ async function main() {
   });
 
   // Daily 8:45 AM IST (3:15 AM UTC) on weekdays — generate AI market recommendations
+  // (skip on NSE trading holidays to avoid wasting an Anthropic call on a closed day).
   cron.schedule('15 3 * * 1-5', () => {
+    if (isHolidayToday()) { console.log('[recommendations] skipping cron — NSE holiday'); return; }
     generateDailyRecommendations().catch(err => console.error('[cron] dailyRecommendations error:', err));
   });
 
