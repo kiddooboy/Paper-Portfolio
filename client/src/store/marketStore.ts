@@ -133,6 +133,26 @@ async function poll() {
 // applicable). On any error we just let it retry; the poller above stays as
 // a safety net so quotes never go fully stale.
 let es: EventSource | null = null;
+let subscribeTimer: ReturnType<typeof setInterval> | null = null;
+
+// Stable session id (one per tab) — lets the server fold this tab's currently
+// visible symbols into tier1's polling universe so they push back at 4s.
+const SESSION_ID = (() => {
+  try {
+    const c = (globalThis as any).crypto;
+    if (c?.randomUUID) return c.randomUUID();
+  } catch {}
+  return `s_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+})();
+
+async function pushSessionSymbols() {
+  const symbols = useMarketStore.getState().extraSymbols;
+  // Always push — even an empty list — so the server can clean up when the
+  // user navigates away from a stock-detail page.
+  try {
+    await axios.post('/api/stocks/subscribe', { sid: SESSION_ID, symbols });
+  } catch { /* server may be temporarily unreachable; next tick will retry */ }
+}
 
 function mergeQuotesArray(arr: any[]) {
   if (!Array.isArray(arr) || !arr.length) return;
@@ -152,10 +172,16 @@ export function startMarketStream() {
   // and the website (relative /api on same origin) both work without changes.
   const base = (import.meta as any).env?.VITE_API_URL || '';
   try {
-    es = new EventSource(`${base}/api/stocks/stream`, { withCredentials: true });
+    es = new EventSource(`${base}/api/stocks/stream?sid=${encodeURIComponent(SESSION_ID)}`, { withCredentials: true });
   } catch {
     es = null;
     return;
+  }
+  // Push current visible symbols every 15s so the server's tier1 poll picks
+  // them up. First push happens immediately on connect.
+  if (!subscribeTimer) {
+    pushSessionSymbols();
+    subscribeTimer = setInterval(pushSessionSymbols, 15_000);
   }
   es.addEventListener('open', () => useMarketStore.setState({ streamConnected: true }));
   es.addEventListener('snapshot', (e) => {
@@ -172,6 +198,7 @@ export function startMarketStream() {
 
 export function stopMarketStream() {
   if (es) { try { es.close(); } catch {} es = null; }
+  if (subscribeTimer) { clearInterval(subscribeTimer); subscribeTimer = null; }
   useMarketStore.setState({ streamConnected: false });
 }
 

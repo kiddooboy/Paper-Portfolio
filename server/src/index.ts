@@ -28,7 +28,7 @@ import compression from 'compression';
 import { initSchema, db, shutdownPool } from './db/index.js';
 import cron from 'node-cron';
 import { getQuote, getQuotes, getHistory, getIndices, isMarketOpen, NIFTY50, markPollSuccess, markPollFailure, isCircuitOpen } from './services/marketData.js';
-import { broadcast as broadcastTick, subscriberCount } from './services/tickBroadcast.js';
+import { broadcast as broadcastTick, subscriberCount, getDynamicSymbols } from './services/tickBroadcast.js';
 
 // Race a promise against a deadline so a stuck Yahoo connection can never
 // block the poll loop. The cache's stale-while-revalidate keeps serving the
@@ -350,7 +350,15 @@ async function main() {
         `SELECT DISTINCT symbol FROM holdings UNION SELECT DISTINCT symbol FROM watchlist_items`
       ).all()) as any[]).map((r) => r.symbol).filter(Boolean);
 
-      const symbols = Array.from(new Set([...NIFTY50, ...heldOrWatched]));
+      // Top-100 by market cap fills out the universe beyond NIFTY50 so Market
+      // Explorer/Sector pages tick at the tier1 cadence too — auto-adapts to
+      // the actual market-cap rankings without hardcoded constants.
+      const top100 = ((await db.prepare(
+        `SELECT symbol FROM stocks WHERE exchange = 'NSE' AND market_cap > 0 ORDER BY market_cap DESC LIMIT 100`,
+      ).all()) as any[]).map((r) => r.symbol).filter(Boolean);
+
+      const dynamic = getDynamicSymbols();
+      const symbols = Array.from(new Set([...NIFTY50, ...top100, ...heldOrWatched, ...dynamic]));
       // Hard deadline so a stuck Yahoo connection can never wedge the loop.
       const quotes = await withTimeout(
         getQuotes(symbols.map((s) => ({ symbol: s, exchange: 'NSE' as const })), true),
@@ -397,7 +405,9 @@ async function main() {
   }
 
   function scheduleTier2() {
-    const delay = isMarketOpen() ? 300_000 : 1_800_000; // 5min live, 30min closed
+    // 60s live (down from 5min) so Market Explorer / Sectors / Screener never
+    // see data older than a minute; 30min when closed (unchanged).
+    const delay = isMarketOpen() ? 60_000 : 1_800_000;
     setTimeout(async () => {
       await pollTier2();
       scheduleTier2();

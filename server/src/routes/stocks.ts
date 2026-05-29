@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { db } from '../db/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { getQuote, getCachedQuote, getCachedQuotes, getCachedIndices, getHistory, isMarketOpen, getMarketStatus, getSectors, getAllCachedQuotes } from '../services/marketData.js';
-import { subscribe as subscribeTick } from '../services/tickBroadcast.js';
+import { subscribe as subscribeTick, subscribeWithSession, setSessionSymbols } from '../services/tickBroadcast.js';
 import { logActivity, getClientIp } from '../services/activityLogger.js';
 
 const router = Router();
@@ -32,8 +32,24 @@ router.get('/stream', (req, res) => {
   const snap = Array.from(getAllCachedQuotes().values()).filter(q => q && q.price > 0);
   if (snap.length) res.write(`event: snapshot\ndata: ${JSON.stringify(snap)}\n\n`);
 
-  const unsubscribe = subscribeTick(res);
+  // Optional session id lets a client also subscribe to extra symbols via
+  // POST /api/stocks/subscribe so they get folded into tier1's universe.
+  const sid = typeof req.query.sid === 'string' && /^[A-Za-z0-9_-]{6,64}$/.test(req.query.sid) ? req.query.sid : '';
+  const unsubscribe = sid ? subscribeWithSession(sid, res) : subscribeTick(res);
   req.on('close', () => { unsubscribe(); try { res.end(); } catch {} });
+});
+
+// POST /api/stocks/subscribe — register the symbols a client is currently
+// viewing so they're added to the tier1 polling universe and pushed via SSE.
+// Body: { sid: string, symbols: string[] }.
+router.post('/subscribe', (req, res) => {
+  const sid = String((req.body && req.body.sid) || '');
+  const symbols = Array.isArray(req.body?.symbols) ? req.body.symbols : null;
+  if (!/^[A-Za-z0-9_-]{6,64}$/.test(sid) || !symbols) {
+    return res.status(400).json({ error: 'Invalid sid or symbols' });
+  }
+  const n = setSessionSymbols(sid, symbols);
+  res.json({ ok: true, count: n });
 });
 
 // GET /api/stocks/sectors — sector stats computed from DB stocks + live quote cache
