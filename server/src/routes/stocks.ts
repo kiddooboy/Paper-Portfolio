@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { db } from '../db/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { getQuote, getCachedQuote, getCachedQuotes, getCachedIndices, getHistory, isMarketOpen, getMarketStatus, getSectors, getAllCachedQuotes } from '../services/marketData.js';
+import { subscribe as subscribeTick } from '../services/tickBroadcast.js';
 import { logActivity, getClientIp } from '../services/activityLogger.js';
 
 const router = Router();
@@ -14,6 +15,25 @@ function parseExchange(v: any): Exchange {
 // GET /api/stocks/market-status — market open/closed status + recommended poll interval
 router.get('/market-status', (_req, res) => {
   res.json(getMarketStatus());
+});
+
+// GET /api/stocks/stream — Server-Sent Events feed of live tier1 quotes.
+// Augments the existing /live polling: when SSE is connected, clients get
+// pushes the moment a tier1 poll finishes (~0 lag vs the 5–10s client poll).
+// Quote data is public market info (matches /market-status), so no auth.
+router.get('/stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // hint to nginx not to buffer
+  if (typeof (res as any).flushHeaders === 'function') (res as any).flushHeaders();
+
+  // Initial snapshot so a fresh subscriber doesn't wait up to 4s for data.
+  const snap = Array.from(getAllCachedQuotes().values()).filter(q => q && q.price > 0);
+  if (snap.length) res.write(`event: snapshot\ndata: ${JSON.stringify(snap)}\n\n`);
+
+  const unsubscribe = subscribeTick(res);
+  req.on('close', () => { unsubscribe(); try { res.end(); } catch {} });
 });
 
 // GET /api/stocks/sectors — sector stats computed from DB stocks + live quote cache

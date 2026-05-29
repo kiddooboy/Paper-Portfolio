@@ -4,7 +4,7 @@ import { usePortfolioStore } from './portfolioStore';
 import { useWatchlistStore } from './watchlistStore';
 import { useOrdersStore } from './ordersStore';
 import { useNotificationsStore } from './notificationsStore';
-import { startMarketPolling, stopMarketPolling, useMarketStore } from './marketStore';
+import { startMarketPolling, stopMarketPolling, startMarketStream, stopMarketStream, useMarketStore } from './marketStore';
 
 /**
  * One-stop bootstrap:
@@ -44,8 +44,11 @@ export async function bootstrap(): Promise<boolean> {
       useNotificationsStore.getState().fetch(true),
     ]);
 
-    // 3) Start adaptive live-quote polling
+    // 3) Start adaptive live-quote polling AND the SSE live-tick stream.
+    // SSE pushes the tier1 universe in ~4s; polling stays as a safety net
+    // (and supplies quotes for symbols outside the tier1 universe).
     startMarketPolling();
+    startMarketStream();
     // Also kick an immediate first fetch so quotes are available straight away
     useMarketStore.getState().fetchLive();
 
@@ -62,6 +65,7 @@ export async function bootstrap(): Promise<boolean> {
  */
 export function teardown() {
   stopMarketPolling();
+  stopMarketStream();
 }
 
 /**

@@ -28,6 +28,7 @@ import compression from 'compression';
 import { initSchema, db, shutdownPool } from './db/index.js';
 import cron from 'node-cron';
 import { getQuote, getQuotes, getHistory, getIndices, isMarketOpen, NIFTY50, markPollSuccess, markPollFailure, isCircuitOpen } from './services/marketData.js';
+import { broadcast as broadcastTick, subscriberCount } from './services/tickBroadcast.js';
 
 // Race a promise against a deadline so a stuck Yahoo connection can never
 // block the poll loop. The cache's stale-while-revalidate keeps serving the
@@ -357,7 +358,10 @@ async function main() {
       );
       await withTimeout(getIndices(true), 8_000, 'tier1.getIndices');
       markPollSuccess();
-      console.log(`[market] tier1 poll — ${quotes.length}/${symbols.length} symbols (open=${isMarketOpen()})`);
+      // Push to any SSE subscribers immediately. No-op when no one is connected.
+      broadcastTick(quotes);
+      const subs = subscriberCount();
+      console.log(`[market] tier1 poll — ${quotes.length}/${symbols.length} symbols (open=${isMarketOpen()})${subs ? ` · ${subs} sse` : ''}`);
     } catch (err: any) {
       const msg = err?.message ?? String(err);
       markPollFailure(msg);
