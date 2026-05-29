@@ -27,7 +27,20 @@ import cookieParser from 'cookie-parser';
 import compression from 'compression';
 import { initSchema, db, shutdownPool } from './db/index.js';
 import cron from 'node-cron';
-import { getQuote, getQuotes, getHistory, getIndices, isMarketOpen, NIFTY50 } from './services/marketData.js';
+import { getQuote, getQuotes, getHistory, getIndices, isMarketOpen, NIFTY50, markPollSuccess, markPollFailure, isCircuitOpen } from './services/marketData.js';
+
+// Race a promise against a deadline so a stuck Yahoo connection can never
+// block the poll loop. The cache's stale-while-revalidate keeps serving the
+// last good values while we recover.
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (err) => { clearTimeout(timer); reject(err); },
+    );
+  });
+}
 import { ingestSymbols } from './services/symbolIngest.js';
 import { startOrderExecutionScheduler } from './services/orderExecution.js';
 import { recordIndexHistory, backfillIndexHistory } from './services/indexHistory.js';
@@ -337,11 +350,18 @@ async function main() {
       ).all()) as any[]).map((r) => r.symbol).filter(Boolean);
 
       const symbols = Array.from(new Set([...NIFTY50, ...heldOrWatched]));
-      const quotes = await getQuotes(symbols.map((s) => ({ symbol: s, exchange: 'NSE' as const })), true);
-      await getIndices(true);
+      // Hard deadline so a stuck Yahoo connection can never wedge the loop.
+      const quotes = await withTimeout(
+        getQuotes(symbols.map((s) => ({ symbol: s, exchange: 'NSE' as const })), true),
+        12_000, 'tier1.getQuotes',
+      );
+      await withTimeout(getIndices(true), 8_000, 'tier1.getIndices');
+      markPollSuccess();
       console.log(`[market] tier1 poll — ${quotes.length}/${symbols.length} symbols (open=${isMarketOpen()})`);
     } catch (err: any) {
-      console.warn('[market] tier1 poll error:', err?.message ?? err);
+      const msg = err?.message ?? String(err);
+      markPollFailure(msg);
+      console.warn('[market] tier1 poll error:', msg);
     }
   }
 
@@ -349,7 +369,10 @@ async function main() {
     try {
       const nifty500 = ((await db.prepare(`SELECT symbol FROM stocks WHERE exchange = 'NSE'`).all()) as any[]).map((r) => r.symbol);
       if (!nifty500.length) return;
-      const quotes = await getQuotes(nifty500.map((s) => ({ symbol: s, exchange: 'NSE' as const })), true);
+      const quotes = await withTimeout(
+        getQuotes(nifty500.map((s) => ({ symbol: s, exchange: 'NSE' as const })), true),
+        60_000, 'tier2.getQuotes',
+      );
       console.log(`[market] tier2 sweep — ${quotes.length}/${nifty500.length} NSE stocks cached`);
     } catch (err: any) {
       console.warn('[market] tier2 poll error:', err?.message ?? err);
@@ -357,7 +380,12 @@ async function main() {
   }
 
   function scheduleTier1() {
-    const delay = isMarketOpen() ? 5_000 : 120_000; // 5s live, 2min closed
+    // Circuit-aware cadence: 4s live, 2min closed, 30s while the circuit is
+    // open (i.e. several consecutive Yahoo failures) — back off so we stop
+    // hammering an unhealthy upstream.
+    const delay = isCircuitOpen()
+      ? 30_000
+      : isMarketOpen() ? 4_000 : 120_000;
     setTimeout(async () => {
       await pollTier1();
       scheduleTier1();

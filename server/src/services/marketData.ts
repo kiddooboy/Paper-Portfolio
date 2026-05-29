@@ -77,7 +77,11 @@ export function getMarketStatus() {
     ist: ist.toISOString(),
     holiday,
     nextOpen: open ? null : getNextOpenIST(ist),
-    pollIntervalMs: open ? 10_000 : 300_000, // 10s live, 5min closed
+    // Suggest a poll cadence to the client; tighter to match server tier1 (4s).
+    pollIntervalMs: open ? 4_000 : 300_000,
+    // Poller health so the UI can show a "stale / reconnecting" badge when
+    // Yahoo is failing and we're serving cached prices.
+    poller: getPollerHealth(),
   };
 }
 
@@ -103,8 +107,41 @@ function getNextOpenIST(ist: Date): string {
 }
 
 // ── Adaptive TTL ──
-const TTL_LIVE_MS   = 5_000;   // 5 seconds — matches server poll interval
+const TTL_LIVE_MS   = 4_000;   // 4 seconds — matches server poll interval
 const TTL_CLOSED_MS = 300_000; // 5 minutes outside market hours
+
+// ── Poller health (consumed by /api/stocks/market-status so the UI can
+//     surface "stale / reconnecting" badges when Yahoo is misbehaving) ──
+let lastPollOkAt = 0;
+let lastPollErrorAt = 0;
+let lastPollErrorMessage: string | null = null;
+let consecutiveFailures = 0;
+const CIRCUIT_FAIL_THRESHOLD = 5;
+
+export function markPollSuccess(): void {
+  lastPollOkAt = Date.now();
+  consecutiveFailures = 0;
+  lastPollErrorMessage = null;
+}
+export function markPollFailure(message?: string): void {
+  lastPollErrorAt = Date.now();
+  consecutiveFailures++;
+  if (message) lastPollErrorMessage = message.slice(0, 200);
+}
+export function isCircuitOpen(): boolean {
+  return consecutiveFailures >= CIRCUIT_FAIL_THRESHOLD;
+}
+export function getPollerHealth() {
+  const now = Date.now();
+  return {
+    lastPollOkAt: lastPollOkAt || null,
+    lastPollErrorAt: lastPollErrorAt || null,
+    secondsSinceOk: lastPollOkAt ? Math.round((now - lastPollOkAt) / 1000) : null,
+    consecutiveFailures,
+    circuitOpen: isCircuitOpen(),
+    lastError: lastPollErrorMessage,
+  };
+}
 // Stale-while-revalidate: serve stale data up to this age before refusing
 const STALE_GRACE_MS = 3_600_000; // 1 hour — always serve *something*
 
