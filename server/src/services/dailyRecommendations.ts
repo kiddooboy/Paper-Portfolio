@@ -275,13 +275,21 @@ Based on this data, identify the strongest breakout candidates and provide your 
 
     const rawText = (response.content[0] as any).text as string;
 
-    // Parse the JSON response — handle potential markdown fences
+    // Parse Claude's response defensively. The Haiku model sometimes wraps the
+    // JSON in markdown fences (```json … ```), sometimes adds a one-line
+    // preamble/postamble. Strip the fences AND slice out the first balanced
+    // {…} block so leftover prose can't break JSON.parse.
     let parsed: any;
     try {
-      const cleaned = rawText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      let cleaned = rawText.replace(/```(?:json|JSON)?\s*/g, '').replace(/```/g, '').trim();
+      const firstBrace = cleaned.indexOf('{');
+      const lastBrace = cleaned.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace > firstBrace) {
+        cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+      }
       parsed = JSON.parse(cleaned);
     } catch (parseErr) {
-      console.error('[recommendations] Failed to parse AI response:', rawText.slice(0, 500));
+      console.error('[recommendations] Failed to parse AI response:', rawText.slice(0, 800));
       throw new Error('Failed to parse AI recommendation response');
     }
 
