@@ -7,6 +7,7 @@ import { useMarketStore } from '../store/marketStore';
 import { usePortfolioStore } from '../store/portfolioStore';
 import StockLogo from '../components/StockLogo';
 import HomeWatchlist from '../components/HomeWatchlist';
+import Sparkline from '../components/Sparkline';
 import axios from 'axios';
 
 interface SectorQuote {
@@ -19,14 +20,31 @@ interface SectorQuote {
   change_percent: number;
 }
 
-function heatColor(pct: number) {
-  if (pct >= 2) return 'bg-green-700';
-  if (pct >= 1) return 'bg-green-600';
-  if (pct >= 0) return 'bg-green-500/80 dark:bg-green-700/60';
-  if (pct >= -1) return 'bg-red-500/80 dark:bg-red-700/60';
-  if (pct >= -2) return 'bg-red-600';
-  return 'bg-red-700';
-}
+// Sector name → its NSE sector-index symbol on Yahoo. Used to fetch a fresh
+// intraday curve per sector so each card carries a real day-shape sparkline,
+// not a fabricated one.
+const SECTOR_INDEX_SYMBOL: Record<string, string> = {
+  IT: '^CNXIT',
+  FMCG: '^CNXFMCG',
+  Pharma: '^CNXPHARMA',
+  Auto: '^CNXAUTO',
+  Metal: '^CNXMETAL',
+  Realty: '^CNXREALTY',
+  'PSU Bank': '^CNXPSUBANK',
+  Energy: '^CNXENERGY',
+  Finance: '^CNXFINANCE',
+  Infra: '^CNXINFRA',
+  Banking: '^NSEBANK',
+  Healthcare: '^CNXHEALTHCARE',
+  Media: '^CNXMEDIA',
+  Midcap: '^CNXMIDCAP',
+  MNC: '^CNXMNC',
+  PSE: '^CNXPSE',
+  Services: '^CNXSERVICE',
+  Consumption: '^CNXCONSUMPTION',
+  Commodities: '^CNXCOMMODITY',
+  Smallcap: '^CNXSMALLCAP',
+};
 
 export default function Dashboard() {
   const portfolio = usePortfolioStore((s) => s.data);
@@ -37,6 +55,9 @@ export default function Dashboard() {
   const loading = portfolioLoading && !portfolio;
 
   const [sectors, setSectors] = useState<SectorQuote[]>([]);
+  // Per-sector intraday sparkline data (key = sector name → closes array).
+  const [sectorSpark, setSectorSpark] = useState<Record<string, number[]>>({});
+  const marketIsOpen = useMarketStore((s) => s.status?.isOpen ?? true);
 
   useEffect(() => {
     let cancelled = false;
@@ -47,9 +68,47 @@ export default function Dashboard() {
       } catch {}
     };
     fetch();
+    // Freeze refresh when NSE is closed — values aren't changing anyway.
+    if (!marketIsOpen) return () => { cancelled = true; };
     const id = setInterval(fetch, 60_000);
     return () => { cancelled = true; clearInterval(id); };
-  }, []);
+  }, [marketIsOpen]);
+
+  // Fetch per-sector intraday sparkline curves — one network round per sector,
+  // throttled so we don't slam Yahoo through our server. Refreshes every 5 min
+  // while NSE is open; otherwise fetched once on mount and frozen.
+  useEffect(() => {
+    let alive = true;
+    if (!sectors.length) return;
+    const targets = sectors.slice(0, 12).filter((s) => SECTOR_INDEX_SYMBOL[s.name]);
+    async function loadSparks() {
+      const out: Record<string, number[]> = {};
+      // Run in chunks of 4 to keep the server's Yahoo bandwidth happy.
+      for (let i = 0; i < targets.length; i += 4) {
+        const chunk = targets.slice(i, i + 4);
+        const results = await Promise.allSettled(
+          chunk.map((s) =>
+            axios.get(`/api/stocks/${SECTOR_INDEX_SYMBOL[s.name]}/history`, {
+              params: { exchange: 'NSE', range: 'today', interval: '15m' },
+            }).then((r) => r.data as { close: number }[])
+          )
+        );
+        if (!alive) return;
+        chunk.forEach((s, idx) => {
+          const r = results[idx];
+          if (r.status === 'fulfilled' && Array.isArray(r.value) && r.value.length > 1) {
+            const closes = r.value.map((p) => Number(p.close)).filter(Number.isFinite).slice(-30);
+            if (closes.length > 1) out[s.name] = closes;
+          }
+        });
+        setSectorSpark((prev) => ({ ...prev, ...out }));
+      }
+    }
+    loadSparks();
+    if (!marketIsOpen) return () => { alive = false; };
+    const id = setInterval(loadSparks, 5 * 60_000);
+    return () => { alive = false; clearInterval(id); };
+  }, [sectors, marketIsOpen]);
 
   // Derive gainers/losers, most bought from the global live quote store
   const { gainers, losers, mostBought } = useMemo(() => {
@@ -183,19 +242,30 @@ export default function Dashboard() {
               <p className="text-sm text-gray-400 py-4 text-center">Loading sector data…</p>
             ) : (
               <>
-                <div className="grid grid-cols-4 gap-1.5 mb-2">
-                  {sectors.slice(0, 12).map((s) => (
-                    <Link
-                      key={s.name}
-                      to="/sectors"
-                      className={cn('rounded-lg p-2 flex flex-col hover:opacity-90 transition', heatColor(s.change_percent))}
-                    >
-                      <p className="text-[11px] font-semibold text-white/90 leading-tight truncate">{s.name}</p>
-                      <p className={cn('text-xs font-bold mt-0.5', s.change_percent >= 0 ? 'text-green-200' : 'text-red-200')}>
-                        {s.change_percent >= 0 ? '+' : ''}{s.change_percent.toFixed(2)}%
-                      </p>
-                    </Link>
-                  ))}
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 mb-2">
+                  {sectors.slice(0, 12).map((s) => {
+                    const up = s.change_percent >= 0;
+                    const points = sectorSpark[s.name];
+                    return (
+                      <Link
+                        key={s.name}
+                        to="/sectors"
+                        className="rounded-lg p-2 flex flex-col bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 hover:border-groww-primary/40 hover:shadow-sm transition"
+                      >
+                        <p className="text-[11px] font-semibold text-gray-700 dark:text-gray-200 leading-tight truncate">{s.name}</p>
+                        <div className="mt-1 -mx-0.5 h-[18px]">
+                          {points && points.length > 1 ? (
+                            <Sparkline data={points} positive={up} width={68} height={18} strokeWidth={1.5} />
+                          ) : (
+                            <div className="h-full rounded bg-gray-100 dark:bg-gray-800/60 animate-pulse" />
+                          )}
+                        </div>
+                        <p className={cn('text-xs font-bold mt-0.5 tabular-nums', up ? 'text-gain' : 'text-loss')}>
+                          {up ? '+' : ''}{s.change_percent.toFixed(2)}%
+                        </p>
+                      </Link>
+                    );
+                  })}
                 </div>
                 <p className="text-[10px] text-gray-400">
                   Nifty 50 · {sectors.length} sectors · <Link to="/sectors" className="text-groww-primary hover:underline">Tap to explore</Link>
