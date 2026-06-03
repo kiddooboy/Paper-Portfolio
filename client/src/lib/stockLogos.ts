@@ -151,6 +151,89 @@ export const STOCK_DOMAINS: Record<string, string> = {
   PETRONET: 'petronetlng.com',
 };
 
+// US equity logos. Same DuckDuckGo favicon trick — every domain returns the
+// corresponding company's favicon, which is the cleanest free logo source.
+export const US_STOCK_DOMAINS: Record<string, string> = {
+  // Mag 7 + megacap tech
+  AAPL: 'apple.com',
+  MSFT: 'microsoft.com',
+  GOOGL: 'abc.xyz',
+  GOOG: 'abc.xyz',
+  AMZN: 'amazon.com',
+  META: 'meta.com',
+  NVDA: 'nvidia.com',
+  TSLA: 'tesla.com',
+  // Semis
+  AMD: 'amd.com',
+  INTC: 'intel.com',
+  AVGO: 'broadcom.com',
+  QCOM: 'qualcomm.com',
+  TXN: 'ti.com',
+  MU: 'micron.com',
+  AMAT: 'appliedmaterials.com',
+  KLAC: 'kla.com',
+  LRCX: 'lamresearch.com',
+  // Software / Internet
+  ORCL: 'oracle.com',
+  CRM: 'salesforce.com',
+  ADBE: 'adobe.com',
+  NFLX: 'netflix.com',
+  IBM: 'ibm.com',
+  CSCO: 'cisco.com',
+  SHOP: 'shopify.com',
+  PLTR: 'palantir.com',
+  SMCI: 'supermicro.com',
+  // Financials
+  JPM: 'jpmorganchase.com',
+  BAC: 'bankofamerica.com',
+  WFC: 'wellsfargo.com',
+  C: 'citigroup.com',
+  GS: 'goldmansachs.com',
+  MS: 'morganstanley.com',
+  V: 'visa.com',
+  MA: 'mastercard.com',
+  PYPL: 'paypal.com',
+  SQ: 'block.xyz',
+  COIN: 'coinbase.com',
+  'BRK-B': 'berkshirehathaway.com',
+  // Healthcare
+  JNJ: 'jnj.com',
+  PFE: 'pfizer.com',
+  UNH: 'unitedhealthgroup.com',
+  LLY: 'lilly.com',
+  ABBV: 'abbvie.com',
+  MRK: 'merck.com',
+  // Energy
+  XOM: 'exxonmobil.com',
+  CVX: 'chevron.com',
+  COP: 'conocophillips.com',
+  // Consumer
+  WMT: 'walmart.com',
+  COST: 'costco.com',
+  KO: 'coca-cola.com',
+  PEP: 'pepsico.com',
+  PG: 'pg.com',
+  HD: 'homedepot.com',
+  NKE: 'nike.com',
+  MCD: 'mcdonalds.com',
+  SBUX: 'starbucks.com',
+  DIS: 'thewaltdisneycompany.com',
+  // Industrials
+  BA: 'boeing.com',
+  CAT: 'caterpillar.com',
+  GE: 'ge.com',
+  UPS: 'ups.com',
+  // Telecom
+  T: 'att.com',
+  VZ: 'verizon.com',
+  // Travel
+  UBER: 'uber.com',
+  ABNB: 'airbnb.com',
+  // Autos
+  F: 'ford.com',
+  GM: 'gm.com',
+};
+
 // Consistent fallback background colors (by first letter).
 const PALETTE = [
   '#6366F1', '#EC4899', '#F59E0B', '#10B981', '#0EA5E9',
@@ -159,7 +242,8 @@ const PALETTE = [
 
 export function getLogoUrl(symbol: string): string | null {
   const key = symbol.toUpperCase();
-  const domain = STOCK_DOMAINS[key];
+  // Check IN first (most common), then US.
+  const domain = STOCK_DOMAINS[key] || US_STOCK_DOMAINS[key];
   if (!domain) return null;
   // Use DuckDuckGo favicon service - each domain gets its correct logo
   return `https://icons.duckduckgo.com/ip3/${domain}.ico`;

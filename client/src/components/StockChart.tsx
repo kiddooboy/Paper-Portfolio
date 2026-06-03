@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import {
   createChart, CandlestickSeries, LineSeries, HistogramSeries,
   ColorType, CrosshairMode, LineStyle,
@@ -22,13 +22,41 @@ const RANGES = [
   { label: '1Y', range: '1y',  interval: '1wk' },
 ] as const;
 
+// lightweight-charts wants its `time` field as Unix epoch SECONDS in the
+// chart's display timezone (not UTC). India trades 9:15-15:30 IST so we add
+// the IST offset to UTC bars; US trades 9:30-16:00 ET so we add the ET
+// offset (handled via Intl below to stay DST-correct).
 const IST_OFFSET_S = 5.5 * 3600;
-function toTimestamp(dateStr: string): number {
-  const epochS = Math.floor(new Date(dateStr).getTime() / 1000);
-  return (dateStr.includes('T') || dateStr.includes(' ')) ? epochS + IST_OFFSET_S : epochS;
+
+function etOffsetSeconds(date: Date): number {
+  // Negative because ET is behind UTC. Uses Intl so ESTâ†”EDT is automatic.
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  });
+  const parts = dtf.formatToParts(date);
+  const o: Record<string, string> = {};
+  for (const p of parts) if (p.type !== 'literal') o[p.type] = p.value;
+  const wallEt = Date.UTC(
+    Number(o.year), Number(o.month) - 1, Number(o.day),
+    Number(o.hour) === 24 ? 0 : Number(o.hour),
+    Number(o.minute), Number(o.second),
+  );
+  // wallEt is the *numeric* UTC representation of the ET wall-clock for `date`.
+  return Math.round((wallEt - date.getTime()) / 1000);
 }
 
-// ── Indicator math ────────────────────────────────────────────────────────────
+function toTimestamp(dateStr: string, exchange: string): number {
+  const isUS = exchange === 'NASDAQ' || exchange === 'NYSE';
+  const date = new Date(dateStr);
+  const epochS = Math.floor(date.getTime() / 1000);
+  const isIntraday = dateStr.includes('T') || dateStr.includes(' ');
+  if (!isIntraday) return epochS;
+  return isUS ? epochS + etOffsetSeconds(date) : epochS + IST_OFFSET_S;
+}
+
+// â”€â”€ Indicator math â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function calcSMA(closes: number[], period: number): (number | null)[] {
   return closes.map((_, i) => {
     if (i < period - 1) return null;
@@ -191,7 +219,7 @@ function calcSupertrend(bars: Bar[], period = 10, mult = 3) {
   return { values: out, dirs };
 }
 
-// ── Indicator definitions ─────────────────────────────────────────────────────
+// â”€â”€ Indicator definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const IND_DEFS = [
   { key: 'ma20',  label: 'MA 20',           color: '#f59e0b', sub: false },
   { key: 'ma50',  label: 'MA 50',           color: '#3b82f6', sub: false },
@@ -207,7 +235,7 @@ const IND_DEFS = [
 type IndKey = typeof IND_DEFS[number]['key'];
 type Indicators = Record<IndKey, boolean>;
 
-// ── Drawing tools ─────────────────────────────────────────────────────────────
+// â”€â”€ Drawing tools â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 type DrawTool = 'cursor' | 'trendline' | 'hline' | 'channel' | 'text' | 'emoji' | 'measure' | 'zoom' | 'magnet';
 
 const TOOL_GROUPS: { id: DrawTool; title: string; Icon: any }[][] = [
@@ -239,9 +267,9 @@ const TOOL_HINTS: Partial<Record<DrawTool, string>> = {
   magnet:    'Click to snap-draw horizontal line to OHLC',
 };
 
-const EMOJIS = ['📈', '📉', '⭐', '✅', '❌', '🎯', '💰', '⚠️', '🔴', '🟢', '💡', '🔔'];
+const EMOJIS = ['ðŸ“ˆ', 'ðŸ“‰', 'â­', 'âœ…', 'âŒ', 'ðŸŽ¯', 'ðŸ’°', 'âš ï¸', 'ðŸ”´', 'ðŸŸ¢', 'ðŸ’¡', 'ðŸ””'];
 
-// ── Scale margins helper ──────────────────────────────────────────────────────
+// â”€â”€ Scale margins helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function getMargins(showRsi: boolean, showMacd: boolean) {
   if (!showRsi && !showMacd) return { price: { top: 0.02, bottom: 0.20 }, volume: { top: 0.82, bottom: 0.00 }, rsi: null, macd: null };
   if (showRsi && !showMacd)  return { price: { top: 0.02, bottom: 0.38 }, volume: { top: 0.63, bottom: 0.26 }, rsi: { top: 0.76, bottom: 0.02 }, macd: null };
@@ -285,7 +313,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
   const liveQuote    = useMarketStore(s => s.quotes[symbol.toUpperCase()]);
   const marketIsOpen = useMarketStore(s => s.status?.isOpen ?? false);
 
-  // ── Close indicator dropdown on outside click ──────────────────────────────
+  // â”€â”€ Close indicator dropdown on outside click â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (indRef.current && !indRef.current.contains(e.target as Node)) setIndOpen(false);
@@ -294,14 +322,14 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
     return () => document.removeEventListener('mousedown', h);
   }, []);
 
-  // ── Auto-refresh during market hours (every 5 min to pull new bars) ────────
+  // â”€â”€ Auto-refresh during market hours (every 5 min to pull new bars) â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!marketIsOpen) return;
     const id = setInterval(() => setRefreshCount(c => c + 1), 5 * 60_000);
     return () => clearInterval(id);
   }, [marketIsOpen]);
 
-  // ── Fetch history ──────────────────────────────────────────────────────────
+  // â”€â”€ Fetch history â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -316,7 +344,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
     return () => { cancelled = true; };
   }, [symbol, exchange, activeRange, refreshCount]);
 
-  // ── Build chart ────────────────────────────────────────────────────────────
+  // â”€â”€ Build chart â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!containerRef.current || bars.length === 0) return;
 
@@ -357,13 +385,13 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
         wickUpColor: '#00c087', wickDownColor: '#ef4444',
       });
       mainSeries.setData(sorted.map(b => ({
-        time: toTimestamp(b.date) as any,
+        time: toTimestamp(b.date, exchange) as any,
         open: b.open, high: b.high, low: b.low, close: b.close,
       })));
       chart.subscribeCrosshairMove(param => {
         if (param.time) {
           const ts = Number(param.time);
-          setCrosshair(sorted.find(b => toTimestamp(b.date) === ts) ?? null);
+          setCrosshair(sorted.find(b => toTimestamp(b.date, exchange) === ts) ?? null);
         } else setCrosshair(null);
       });
     } else {
@@ -372,7 +400,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
         crosshairMarkerVisible: true, crosshairMarkerRadius: 4,
         lastValueVisible: true, priceLineVisible: true,
       });
-      mainSeries.setData(sorted.map(b => ({ time: toTimestamp(b.date) as any, value: b.close })));
+      mainSeries.setData(sorted.map(b => ({ time: toTimestamp(b.date, exchange) as any, value: b.close })));
     }
     mainSerRef.current = mainSeries;
 
@@ -381,7 +409,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
     });
     chart.priceScale('volume').applyOptions({ scaleMargins: margins.volume });
     volSeries.setData(sorted.map(b => ({
-      time: toTimestamp(b.date) as any, value: b.volume,
+      time: toTimestamp(b.date, exchange) as any, value: b.volume,
       color: b.close >= b.open ? '#00c08740' : '#ef444440',
     })));
 
@@ -396,7 +424,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
     };
   }, [bars, chartType]);
 
-  // ── Overlay + sub-pane indicators ─────────────────────────────────────────
+  // â”€â”€ Overlay + sub-pane indicators â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!chartReady || !chartRef.current || bars.length === 0) return;
     const chart = chartRef.current;
@@ -407,7 +435,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
 
     const sorted = [...bars].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     const closes = sorted.map(b => b.close);
-    const times  = sorted.map(b => toTimestamp(b.date) as any);
+    const times  = sorted.map(b => toTimestamp(b.date, exchange) as any);
 
     const toSer = (vals: (number | null)[]) =>
       vals.map((v, i) => v !== null ? { time: times[i], value: v } : null).filter(Boolean) as any[];
@@ -483,7 +511,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
     chart.timeScale().fitContent();
   }, [indicators, chartReady, bars]);
 
-  // ── Drawing tools ──────────────────────────────────────────────────────────
+  // â”€â”€ Drawing tools â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!chartReady || !chartRef.current || !mainSerRef.current) return;
     const chart = chartRef.current;
@@ -499,11 +527,11 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
       const rawPrice = main.coordinateToPrice(param.point.y);
       if (rawPrice === null || rawPrice === undefined) return;
 
-      // ── Magnet: snap to nearest OHLC at this candle ──────────────────────
+      // â”€â”€ Magnet: snap to nearest OHLC at this candle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       const getSnappedPrice = (p: number): number => {
         if (activeTool !== 'magnet') return p;
         const ts = Number(param.time);
-        const bar = sorted.find(b => toTimestamp(b.date) === ts);
+        const bar = sorted.find(b => toTimestamp(b.date, exchange) === ts);
         if (!bar) return p;
         const ohlc = [bar.open, bar.high, bar.low, bar.close];
         return ohlc.reduce((best, v) => Math.abs(v - p) < Math.abs(best - p) ? v : best);
@@ -511,7 +539,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
 
       const price = getSnappedPrice(rawPrice);
 
-      // ── Horizontal line ──────────────────────────────────────────────────
+      // â”€â”€ Horizontal line â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       if (activeTool === 'hline') {
         const pl = main.createPriceLine({
           price, color: '#64748b', lineWidth: 1,
@@ -520,16 +548,16 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
         plinesRef.current.push({ series: main, line: pl });
       }
 
-      // ── Magnet snap line ────────────────────────────────────────────────
+      // â”€â”€ Magnet snap line â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       if (activeTool === 'magnet') {
         const pl = main.createPriceLine({
           price, color: '#00B386', lineWidth: 1,
-          lineStyle: LineStyle.Solid, axisLabelVisible: true, title: '⊕',
+          lineStyle: LineStyle.Solid, axisLabelVisible: true, title: 'âŠ•',
         });
         plinesRef.current.push({ series: main, line: pl });
       }
 
-      // ── Trend line ──────────────────────────────────────────────────────
+      // â”€â”€ Trend line â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       if (activeTool === 'trendline') {
         if (!trendRef.current) {
           trendRef.current = { time: param.time, price };
@@ -546,7 +574,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
         }
       }
 
-      // ── Parallel channel ─────────────────────────────────────────────────
+      // â”€â”€ Parallel channel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       if (activeTool === 'channel') {
         if (!channelRef.current) {
           channelRef.current = { price };
@@ -562,7 +590,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
         }
       }
 
-      // ── Text label ───────────────────────────────────────────────────────
+      // â”€â”€ Text label â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       if (activeTool === 'text') {
         const text = window.prompt('Enter label text:', '');
         if (text?.trim()) {
@@ -574,13 +602,13 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
         }
       }
 
-      // ── Emoji ─────────────────────────────────────────────────────────────
+      // â”€â”€ Emoji â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       if (activeTool === 'emoji') {
         setEmojiPos({ price, time: param.time });
         setEmojiOpen(true);
       }
 
-      // ── Measure ──────────────────────────────────────────────────────────
+      // â”€â”€ Measure â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       if (activeTool === 'measure') {
         if (!measureRef.current) {
           measureRef.current = { price, time: param.time };
@@ -605,7 +633,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
         }
       }
 
-      // ── Zoom ──────────────────────────────────────────────────────────────
+      // â”€â”€ Zoom â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       if (activeTool === 'zoom') {
         if (!zoomRef.current) {
           zoomRef.current = { time: param.time };
@@ -625,12 +653,12 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
     };
   }, [activeTool, chartReady, bars]);
 
-  // ── Live price update ──────────────────────────────────────────────────────
+  // â”€â”€ Live price update â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!chartReady || !mainSerRef.current || !liveQuote?.price || bars.length === 0) return;
     const sorted = [...bars].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     const lastBar = sorted[sorted.length - 1];
-    const lastTs  = toTimestamp(lastBar.date);
+    const lastTs  = toTimestamp(lastBar.date, exchange);
     try {
       if (chartType === 'candle') {
         mainSerRef.current.update({
@@ -673,7 +701,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
 
   return (
     <div className="bg-white dark:bg-groww-card rounded-2xl border border-gray-100 dark:border-gray-800 p-3 flex flex-col h-full min-h-[320px] gap-2">
-      {/* ── Top controls ── */}
+      {/* â”€â”€ Top controls â”€â”€ */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex gap-1">
           {RANGES.map(r => (
@@ -707,7 +735,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
             {indOpen && (
               <div className="absolute left-0 top-full mt-1.5 w-60 bg-white dark:bg-groww-card border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl z-50 overflow-hidden">
                 <div className="p-2 border-b border-gray-100 dark:border-gray-800">
-                  <input autoFocus placeholder="Search indicators…" value={indSearch}
+                  <input autoFocus placeholder="Search indicatorsâ€¦" value={indSearch}
                     onChange={e => setIndSearch(e.target.value)}
                     className="w-full px-2.5 py-1.5 text-xs bg-gray-100 dark:bg-gray-800 rounded-lg outline-none placeholder-gray-400" />
                 </div>
@@ -757,7 +785,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
         </div>
       </div>
 
-      {/* ── Active indicator pills ── */}
+      {/* â”€â”€ Active indicator pills â”€â”€ */}
       {activeCount > 0 && (
         <div className="flex items-center gap-1 flex-wrap">
           {IND_DEFS.filter(d => indicators[d.key as IndKey]).map(({ key, label, color }) => (
@@ -773,7 +801,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
         </div>
       )}
 
-      {/* ── OHLCV readout ── */}
+      {/* â”€â”€ OHLCV readout â”€â”€ */}
       {displayBar && chartType === 'candle' && (
         <div className="flex gap-3 text-[11px] font-medium flex-wrap">
           <span className="text-gray-400">O <span className="text-gray-700 dark:text-gray-200">{displayBar.open?.toFixed(2)}</span></span>
@@ -784,7 +812,7 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
         </div>
       )}
 
-      {/* ── Chart + left toolbar ── */}
+      {/* â”€â”€ Chart + left toolbar â”€â”€ */}
       <div className="flex gap-2 flex-1 min-h-0 items-stretch">
         {/* Left drawing toolbar */}
         <div className="flex flex-col bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-lg p-1 shrink-0">
@@ -858,8 +886,8 @@ export default function StockChart({ symbol, exchange = 'NSE' }: Props) {
                 <button onClick={() => setMeasureResult(null)} className="text-gray-400 hover:text-red-500"><X className="w-3 h-3" /></button>
               </div>
               <div className="space-y-1 text-gray-600 dark:text-gray-400">
-                <div>From: <span className="font-mono text-gray-900 dark:text-white">₹{measureResult.fromP.toFixed(2)}</span></div>
-                <div>To: <span className="font-mono text-gray-900 dark:text-white">₹{measureResult.toP.toFixed(2)}</span></div>
+                <div>From: <span className="font-mono text-gray-900 dark:text-white">â‚¹{measureResult.fromP.toFixed(2)}</span></div>
+                <div>To: <span className="font-mono text-gray-900 dark:text-white">â‚¹{measureResult.toP.toFixed(2)}</span></div>
                 <div className={cn('font-bold', measureResult.diff >= 0 ? 'text-gain' : 'text-loss')}>
                   {measureResult.diff >= 0 ? '+' : ''}{measureResult.diff.toFixed(2)} ({measureResult.diff >= 0 ? '+' : ''}{measureResult.pct.toFixed(2)}%)
                 </div>

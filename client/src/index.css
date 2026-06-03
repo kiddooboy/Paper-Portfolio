@@ -18,8 +18,24 @@
 }
 
 @layer base {
+  /* Body font stack:
+     1. 'AppDigits' (JetBrains Mono, digits-only via unicode-range) so every
+        0-9 / . , + - renders monospaced for clean number alignment.
+     2. 'Inter' — the actual letter font. Promoted to the second slot so that
+        letters render in Inter on every OS instead of falling through to
+        system-ui (which varies wildly between Windows/Mac/Android).
+     This is the same combo the home watchlist uses; aligning the global
+     body to it gives the whole platform a consistent typographic feel. */
   body {
     font-family: 'AppDigits', 'Inter', 'DM Sans', system-ui, sans-serif;
+    /* tnum  → tabular numerals (numbers line up vertically)
+       cv11  → single-storey 'a' (cleaner at small sizes)
+       ss01  → tighter letter spacing for Inter
+       ss03  → straight 'l' tail */
+    font-feature-settings: 'tnum' 1, 'cv11' 1, 'ss01' 1, 'ss03' 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
     @apply bg-gray-50 text-gray-900 dark:bg-groww-dark dark:text-groww-text;
   }
 }

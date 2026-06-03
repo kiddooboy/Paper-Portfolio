@@ -1,20 +1,21 @@
-// Global Markets — the brand-new top-level section for US equity paper-trading.
+// Global Markets — the top-level section for US equity paper-trading.
 //
-// Distinct "Wall Street Dark" visual identity: navy/slate gradient hero, amber
-// accents, GICS sector grid, curated thematic watchlists, gainers/losers, news.
-// All data comes from the new /api/global/* endpoints; trading uses the
-// existing /api/orders endpoint (with exchange=NASDAQ|NYSE).
+// Styled to match the rest of Paper Portfolio (light bg-gray-50 / dark
+// groww-card, groww-primary green accents) — a familiar shell wrapping
+// US-specific data. The Region toggle in the header keeps prices in
+// either USD or ₹ (FX-converted) per the user's preference.
 
 import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import {
-  Globe, TrendingUp, TrendingDown, Sparkles, DollarSign, Building2,
-  Newspaper, Loader2, AlertCircle,
+  Globe, TrendingUp, TrendingDown, Sparkles,
+  Building2, Newspaper, Loader2, AlertCircle, Activity,
 } from 'lucide-react';
 import GlobalIndicesTicker from '../components/GlobalIndicesTicker';
 import CurrencyToggle from '../components/CurrencyToggle';
-import { formatCurrency } from '../lib/utils';
+import StockLogo from '../components/StockLogo';
+import { formatCurrency, cn } from '../lib/utils';
 import { useAuthStore } from '../store/authStore';
 
 interface USStock {
@@ -76,7 +77,7 @@ export default function GlobalMarketsPage() {
         setMovers(m.data);
         setSectors(sec.data?.sectors ?? []);
         setWatchlists(w.data?.watchlists ?? {});
-      } catch (e) { /* keep stale */ }
+      } catch { /* keep stale */ }
     }
     load();
     const t = setInterval(load, 30_000);
@@ -101,73 +102,71 @@ export default function GlobalMarketsPage() {
   const activeStocks = useMemo(() => watchlists[activeBucket] || [], [watchlists, activeBucket]);
 
   return (
-    <div className="min-h-[calc(100dvh-60px)] bg-gradient-to-br from-slate-950 via-blue-950/50 to-slate-950 text-gray-100">
-      {/* ─── Hero ───────────────────────────────────────────────────────── */}
-      <header className="relative overflow-hidden border-b border-white/10 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-900/40 via-slate-900 to-slate-950">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2260%22%20height%3D%2260%22%20viewBox%3D%220%200%2060%2060%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cg%20fill%3D%22none%22%20fill-rule%3D%22evenodd%22%3E%3Cg%20fill%3D%22%23fbbf24%22%20fill-opacity%3D%220.04%22%3E%3Cpath%20d%3D%22M36%2034v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6%2034v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6%204V0H4v4H0v2h4v4h2V6h4V4H6z%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E')] opacity-30" />
-
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
-          <div className="flex items-start justify-between gap-4 mb-6">
+    <div className="min-h-[calc(100dvh-60px)] bg-gray-50 dark:bg-groww-dark text-gray-900 dark:text-groww-text">
+      {/* ─── Page header ─────────────────────────────────────────────── */}
+      <div className="border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-groww-card">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
+          <div className="flex items-start justify-between gap-4 mb-4">
             <div>
-              <div className="flex items-center gap-3 mb-2">
-                <div className="p-2 rounded-lg bg-amber-400/10 border border-amber-400/30">
-                  <Globe className="w-5 h-5 text-amber-400" />
-                </div>
-                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-                  Global Markets
-                </h1>
+              <div className="flex items-center gap-2 mb-1">
+                <Globe className="w-5 h-5 text-groww-primary" strokeWidth={2.5} />
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Global Markets</h1>
                 {status && (
-                  <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full border ${
+                  <span className={cn(
+                    'text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full ml-1',
                     status.isOpen
-                      ? 'bg-emerald-400/10 text-emerald-300 border-emerald-400/30 animate-pulse'
-                      : 'bg-gray-500/10 text-gray-400 border-gray-500/30'
-                  }`}>
+                      ? 'bg-groww-primary/10 text-groww-primary'
+                      : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
+                  )}>
+                    {status.isOpen && <span className="inline-block w-1.5 h-1.5 rounded-full bg-groww-primary animate-pulse mr-1.5" />}
                     {status.label}
                   </span>
                 )}
               </div>
-              <p className="text-sm text-gray-400 max-w-xl">
-                Trade NASDAQ &amp; NYSE blue chips on paper. Real prices · simulated execution · settled in ₹ at the locked rate.
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 max-w-xl">
+                NASDAQ &amp; NYSE blue chips on paper. Real prices · simulated execution · settled in ₹ at the rate locked at trade time.
               </p>
             </div>
-            <CurrencyToggle />
+            <div className="flex items-center gap-3">
+              {fxRate > 0 && (
+                <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-xs">
+                  <Activity className="w-3.5 h-3.5 text-groww-primary" />
+                  <span className="text-gray-500 dark:text-gray-400">USD/INR</span>
+                  <span className="font-bold font-mono text-gray-900 dark:text-gray-100">₹{fxRate.toFixed(2)}</span>
+                </div>
+              )}
+              <CurrencyToggleLight />
+            </div>
           </div>
 
-          {fxRate > 0 && (
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 mb-5 rounded-lg bg-slate-900/60 border border-white/10 text-sm">
-              <DollarSign className="w-4 h-4 text-amber-400" />
-              <span className="text-gray-400">USD / INR</span>
-              <span className="font-mono font-bold text-amber-400">₹{fxRate.toFixed(2)}</span>
-              <span className="text-[10px] text-gray-500 ml-1">live · locks at trade submission</span>
-            </div>
-          )}
-
+          {/* Indices strip — keeps the groww-primary feel */}
           <GlobalIndicesTicker />
         </div>
-      </header>
+      </div>
 
-      {/* ─── Body ───────────────────────────────────────────────────────── */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* ─── Body ─────────────────────────────────────────────────────── */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
 
-        {/* ─── Main column ────────────────────────────────────────────── */}
-        <div className="lg:col-span-2 space-y-6">
+        {/* ─── Main column ───────────────────────────────────────────── */}
+        <div className="lg:col-span-2 space-y-4">
 
           {/* Curated baskets */}
-          <section>
+          <section className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-4">
             <div className="flex items-center gap-2 mb-3">
-              <Sparkles className="w-4 h-4 text-amber-400" />
-              <h2 className="text-sm font-bold uppercase tracking-wider text-gray-300">Curated baskets</h2>
+              <Sparkles className="w-4 h-4 text-groww-primary" />
+              <h2 className="text-sm font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300">Curated baskets</h2>
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-2 mb-3 -mx-2 px-2 scrollbar-thin">
+            <div className="flex gap-2 overflow-x-auto pb-2 mb-3 -mx-1 px-1 scrollbar-thin">
               {CURATED_BUCKETS.map((b) => (
                 <button
                   key={b}
                   onClick={() => setActiveBucket(b)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition ${
+                  className={cn(
+                    'px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition border',
                     activeBucket === b
-                      ? 'bg-amber-400 text-slate-950'
-                      : 'bg-white/5 text-gray-300 hover:bg-white/10 border border-white/10'
-                  }`}
+                      ? 'bg-groww-primary border-groww-primary text-white shadow-sm'
+                      : 'bg-white dark:bg-gray-800/60 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                  )}
                 >
                   {b}
                 </button>
@@ -178,23 +177,26 @@ export default function GlobalMarketsPage() {
                 <Link
                   key={s.symbol}
                   to={`/stock/${s.symbol}?exchange=${s.exchange}`}
-                  className="block rounded-lg bg-slate-900/60 border border-white/10 hover:border-amber-400/40 transition p-3"
+                  className="block rounded-lg bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 hover:border-groww-primary/40 hover:shadow-sm transition p-3"
                 >
-                  <div className="flex items-baseline justify-between mb-1">
-                    <span className="text-sm font-bold font-mono text-gray-100">{s.symbol}</span>
-                    <span className="text-[9px] uppercase text-gray-500">{s.exchange}</span>
+                  <div className="flex items-center gap-2 mb-2">
+                    <StockLogo symbol={s.symbol} size={24} />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-bold font-mono text-gray-900 dark:text-gray-100 truncate">{s.symbol}</div>
+                      <div className="text-[9px] uppercase text-gray-400 dark:text-gray-500">{s.exchange}</div>
+                    </div>
                   </div>
-                  <div className="text-xs text-gray-400 truncate mb-2">{s.name}</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 truncate mb-1.5">{s.name}</div>
                   <div className="flex items-baseline justify-between">
-                    <span className="text-sm font-bold text-gray-100">{renderPrice(s.price)}</span>
-                    <span className={`text-xs font-semibold ${s.change_percent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    <span className="text-sm font-bold text-gray-900 dark:text-gray-100">{renderPrice(s.price)}</span>
+                    <span className={cn('text-xs font-semibold', s.change_percent >= 0 ? 'text-gain' : 'text-loss')}>
                       {s.change_percent >= 0 ? '+' : ''}{s.change_percent.toFixed(2)}%
                     </span>
                   </div>
                 </Link>
               ))}
               {!activeStocks.length && (
-                <div className="col-span-full text-xs text-gray-500 text-center py-6 border border-dashed border-white/10 rounded-lg">
+                <div className="col-span-full text-xs text-gray-500 dark:text-gray-400 text-center py-6 border border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
                   Loading basket…
                 </div>
               )}
@@ -202,28 +204,28 @@ export default function GlobalMarketsPage() {
           </section>
 
           {/* Sectors */}
-          <section>
+          <section className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-4">
             <div className="flex items-center gap-2 mb-3">
-              <Building2 className="w-4 h-4 text-amber-400" />
-              <h2 className="text-sm font-bold uppercase tracking-wider text-gray-300">GICS Sectors</h2>
+              <Building2 className="w-4 h-4 text-groww-primary" />
+              <h2 className="text-sm font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300">GICS Sectors</h2>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
               {sectors.map((s) => {
                 const up = s.avg_change_percent >= 0;
                 return (
-                  <div key={s.name} className="rounded-lg bg-slate-900/60 border border-white/10 p-3">
-                    <div className="text-xs font-semibold text-gray-300 mb-1 truncate">{s.name}</div>
-                    <div className={`text-lg font-bold font-mono ${up ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  <div key={s.name} className="rounded-lg bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 p-3">
+                    <div className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1 truncate">{s.name}</div>
+                    <div className={cn('text-lg font-bold font-mono', up ? 'text-gain' : 'text-loss')}>
                       {up ? '+' : ''}{s.avg_change_percent.toFixed(2)}%
                     </div>
-                    <div className="text-[10px] text-gray-500 mt-1">
+                    <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
                       {s.up} ↑ &nbsp; {s.down} ↓
                     </div>
                   </div>
                 );
               })}
               {!sectors.length && (
-                <div className="col-span-full text-xs text-gray-500 text-center py-6 border border-dashed border-white/10 rounded-lg">
+                <div className="col-span-full text-xs text-gray-500 dark:text-gray-400 text-center py-6 border border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
                   Sectors warm up after the first US tier-2 sweep…
                 </div>
               )}
@@ -232,58 +234,62 @@ export default function GlobalMarketsPage() {
 
           {/* Gainers / Losers / Most Active */}
           {movers && (
-            <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <MoverTable title="Top Gainers" icon={<TrendingUp className="w-4 h-4 text-emerald-400" />} items={movers.gainers} renderPrice={renderPrice} />
-              <MoverTable title="Top Losers" icon={<TrendingDown className="w-4 h-4 text-rose-400" />} items={movers.losers} renderPrice={renderPrice} />
-              <MoverTable title="Most Active" icon={<Sparkles className="w-4 h-4 text-amber-400" />} items={movers.mostActive} renderPrice={renderPrice} />
+            <section className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <MoverTable title="Top Gainers" icon={<TrendingUp className="w-4 h-4 text-gain" />} items={movers.gainers} renderPrice={renderPrice} />
+              <MoverTable title="Top Losers" icon={<TrendingDown className="w-4 h-4 text-loss" />} items={movers.losers} renderPrice={renderPrice} />
+              <MoverTable title="Most Active" icon={<Sparkles className="w-4 h-4 text-groww-primary" />} items={movers.mostActive} renderPrice={renderPrice} />
             </section>
           )}
         </div>
 
-        {/* ─── News rail ─────────────────────────────────────────────────── */}
+        {/* ─── News rail ─────────────────────────────────────────────── */}
         <aside className="space-y-3">
-          <div className="flex items-center gap-2 mb-1">
-            <Newspaper className="w-4 h-4 text-amber-400" />
-            <h2 className="text-sm font-bold uppercase tracking-wider text-gray-300">US Market News</h2>
+          <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Newspaper className="w-4 h-4 text-groww-primary" />
+              <h2 className="text-sm font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300">US Market News</h2>
+            </div>
+            {loadingNews ? (
+              <div className="flex items-center justify-center py-10 text-gray-400">
+                <Loader2 className="w-5 h-5 animate-spin" />
+              </div>
+            ) : news.length === 0 ? (
+              <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 py-4">
+                <AlertCircle className="w-4 h-4" />
+                News feeds unavailable.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {news.slice(0, 12).map((n) => (
+                  <a key={n.id} href={n.link} target="_blank" rel="noopener noreferrer"
+                    className="block rounded-lg bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 hover:border-groww-primary/40 hover:shadow-sm p-3 transition">
+                    <div className="text-[10px] uppercase tracking-wider text-groww-primary mb-1 font-semibold">{n.source}</div>
+                    <div className="text-sm text-gray-900 dark:text-gray-100 font-medium line-clamp-2 mb-1">{n.title}</div>
+                    {n.description && (
+                      <div className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">{n.description}</div>
+                    )}
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
-          {loadingNews ? (
-            <div className="flex items-center justify-center py-12 text-gray-500">
-              <Loader2 className="w-5 h-5 animate-spin" />
-            </div>
-          ) : news.length === 0 ? (
-            <div className="flex items-center gap-2 text-xs text-gray-500 py-4">
-              <AlertCircle className="w-4 h-4" />
-              News feeds unavailable.
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {news.slice(0, 12).map((n) => (
-                <a key={n.id} href={n.link} target="_blank" rel="noopener noreferrer"
-                  className="block rounded-lg bg-slate-900/60 border border-white/10 hover:border-amber-400/40 p-3 transition">
-                  <div className="text-[10px] uppercase tracking-wider text-amber-400 mb-1 font-semibold">{n.source}</div>
-                  <div className="text-sm text-gray-100 font-medium line-clamp-2 mb-1">{n.title}</div>
-                  {n.description && (
-                    <div className="text-xs text-gray-500 line-clamp-2">{n.description}</div>
-                  )}
-                </a>
-              ))}
-            </div>
-          )}
         </aside>
-      </main>
+      </div>
 
-      {/* ─── Footer disclaimer ──────────────────────────────────────────── */}
-      <footer className="border-t border-white/10 bg-slate-950/50 mt-4">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 text-[11px] text-gray-500">
-          <p>
-            Paper-trading simulation only. US equity prices via Yahoo Finance; FX rate via USD/INR=X. Settled in ₹ at the rate
-            locked when the order is submitted. Not investment advice. Real US investing for Indian residents requires LRS
-            compliance — out of scope for this app.
-          </p>
+      {/* ─── Footer disclaimer ─────────────────────────────────────────── */}
+      <div className="border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-groww-card">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 text-[11px] text-gray-500 dark:text-gray-400">
+          Paper-trading simulation only. US equity prices via Yahoo Finance; FX rate via USD/INR=X.
+          Settled in ₹ at the rate locked when the order is submitted. Not investment advice.
         </div>
-      </footer>
+      </div>
     </div>
   );
+}
+
+/** Light-themed variant of the currency toggle, matching this page's palette. */
+function CurrencyToggleLight() {
+  return <CurrencyToggle className="bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700" />;
 }
 
 function MoverTable({
@@ -295,32 +301,33 @@ function MoverTable({
   renderPrice: (usd: number) => string;
 }) {
   return (
-    <div className="rounded-lg bg-slate-900/60 border border-white/10 overflow-hidden">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-white/10 bg-white/5">
+    <div className="rounded-xl bg-white dark:bg-groww-card border border-gray-100 dark:border-gray-800 overflow-hidden">
+      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40">
         {icon}
-        <h3 className="text-xs font-bold uppercase tracking-wider text-gray-300">{title}</h3>
+        <h3 className="text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300">{title}</h3>
       </div>
-      <div className="divide-y divide-white/5">
+      <div className="divide-y divide-gray-100 dark:divide-gray-800">
         {items.slice(0, 8).map((s) => (
           <Link
             key={s.symbol}
             to={`/stock/${s.symbol}?exchange=${s.exchange}`}
-            className="flex items-baseline justify-between px-3 py-2 hover:bg-white/5 transition"
+            className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition"
           >
-            <div>
-              <div className="text-sm font-bold font-mono text-gray-100">{s.symbol}</div>
-              <div className="text-[10px] text-gray-500 truncate max-w-[120px]">{s.name}</div>
+            <StockLogo symbol={s.symbol} size={22} />
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-bold font-mono text-gray-900 dark:text-gray-100">{s.symbol}</div>
+              <div className="text-[10px] text-gray-500 dark:text-gray-400 truncate max-w-[120px]">{s.name}</div>
             </div>
             <div className="text-right">
-              <div className="text-xs font-bold text-gray-100">{renderPrice(s.price)}</div>
-              <div className={`text-[10px] font-semibold ${s.change_percent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              <div className="text-xs font-bold text-gray-900 dark:text-gray-100">{renderPrice(s.price)}</div>
+              <div className={cn('text-[10px] font-semibold', s.change_percent >= 0 ? 'text-gain' : 'text-loss')}>
                 {s.change_percent >= 0 ? '+' : ''}{s.change_percent.toFixed(2)}%
               </div>
             </div>
           </Link>
         ))}
         {!items.length && (
-          <div className="px-3 py-6 text-xs text-gray-500 text-center">Warming up…</div>
+          <div className="px-3 py-6 text-xs text-gray-500 dark:text-gray-400 text-center">Warming up…</div>
         )}
       </div>
     </div>

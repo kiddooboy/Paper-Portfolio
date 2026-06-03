@@ -36,7 +36,7 @@ export default function GlobalIndicesTicker() {
     return (
       <div className="grid grid-cols-2 md:grid-cols-6 gap-2 animate-pulse">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="h-16 rounded-lg bg-white/5 border border-white/10" />
+          <div key={i} className="h-16 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700" />
         ))}
       </div>
     );
@@ -49,17 +49,17 @@ export default function GlobalIndicesTicker() {
         return (
           <div
             key={q.symbol}
-            className="rounded-lg bg-slate-900/60 border border-white/10 p-3 hover:border-amber-400/40 transition"
+            className="rounded-lg bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 p-2.5 hover:border-groww-primary/40 hover:shadow-sm transition"
           >
-            <div className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-1">
+            <div className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 font-semibold mb-1 truncate">
               {q.name}
             </div>
-            <div className="flex items-baseline gap-2">
-              <div className="text-base font-bold text-gray-100 font-mono">
+            <div className="flex items-baseline justify-between gap-1">
+              <div className="text-sm font-bold text-gray-900 dark:text-gray-100 font-mono">
                 {q.price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <div className={`text-xs font-semibold flex items-center gap-0.5 ${up ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {up ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+              <div className={`text-[10.5px] font-semibold flex items-center gap-0.5 ${up ? 'text-gain' : 'text-loss'}`}>
+                {up ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
                 {(q.change_percent ?? 0).toFixed(2)}%
               </div>
             </div>
