@@ -122,7 +122,7 @@ export default function HomeWatchlist() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
+    <div className="flex flex-col bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
       {/* Header */}
       <div className="px-3 pt-3 pb-2 border-b border-gray-100 dark:border-gray-800">
         <div className="flex items-center justify-between mb-2">
@@ -151,8 +151,9 @@ export default function HomeWatchlist() {
         </div>
       </div>
 
-      {/* Rows */}
-      <div className="flex-1 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800/60">
+      {/* Rows — no internal scroll; the panel sizes to its content so every
+          row is visible at a glance. */}
+      <div className="divide-y divide-gray-100 dark:divide-gray-800/60">
         {filtered.map((w) => {
           const q = quotes[w.symbol];
           const price = q?.price ?? 0;
@@ -164,7 +165,7 @@ export default function HomeWatchlist() {
             <Link
               key={`${w.symbol}-${w.exchange}`}
               to={`/stock/${w.symbol}?exchange=${w.exchange}`}
-              className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition"
+              className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition"
             >
               <StockLogo symbol={w.symbol} size={26} />
               <div className="min-w-0 flex-1">

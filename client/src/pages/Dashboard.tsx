@@ -260,8 +260,10 @@ export default function Dashboard() {
 
     </div>{/* end left col */}
 
-    {/* ── Right: Live cross-region watchlist ── */}
-    <div className="hidden xl:flex flex-col w-[360px] shrink-0 lg:h-full">
+    {/* ── Right: Live cross-region watchlist ──
+        Self-sized (no fixed height) so every row is visible without an
+        inner scrollbar. */}
+    <div className="hidden xl:flex flex-col w-[360px] shrink-0">
       <HomeWatchlist />
     </div>
 
