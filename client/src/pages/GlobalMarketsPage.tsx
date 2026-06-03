@@ -105,7 +105,7 @@ export default function GlobalMarketsPage() {
     <div className="min-h-[calc(100dvh-60px)] bg-gray-50 dark:bg-groww-dark text-gray-900 dark:text-groww-text">
       {/* ─── Page header ─────────────────────────────────────────────── */}
       <div className="border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-groww-card">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
+        <div className="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
           <div className="flex items-start justify-between gap-4 mb-4">
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -145,10 +145,10 @@ export default function GlobalMarketsPage() {
       </div>
 
       {/* ─── Body ─────────────────────────────────────────────────────── */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6 grid grid-cols-1 lg:grid-cols-4 xl:grid-cols-5 gap-4">
 
         {/* ─── Main column ───────────────────────────────────────────── */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className="lg:col-span-3 xl:col-span-4 space-y-4">
 
           {/* Curated baskets */}
           <section className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-4">
@@ -172,7 +172,7 @@ export default function GlobalMarketsPage() {
                 </button>
               ))}
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-7 gap-2">
               {activeStocks.map((s) => (
                 <Link
                   key={s.symbol}
@@ -209,7 +209,7 @@ export default function GlobalMarketsPage() {
               <Building2 className="w-4 h-4 text-groww-primary" />
               <h2 className="text-sm font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300">GICS Sectors</h2>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-7 gap-2">
               {sectors.map((s) => {
                 const up = s.avg_change_percent >= 0;
                 return (
@@ -278,7 +278,7 @@ export default function GlobalMarketsPage() {
 
       {/* ─── Footer disclaimer ─────────────────────────────────────────── */}
       <div className="border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-groww-card">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 text-[11px] text-gray-500 dark:text-gray-400">
+        <div className="w-full px-4 sm:px-6 lg:px-8 py-4 text-[11px] text-gray-500 dark:text-gray-400">
           Paper-trading simulation only. US equity prices via Yahoo Finance; FX rate via USD/INR=X.
           Settled in ₹ at the rate locked when the order is submitted. Not investment advice.
         </div>

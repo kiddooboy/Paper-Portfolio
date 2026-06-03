@@ -83,11 +83,17 @@ export const useMarketStore = create<MarketState>((set, get) => ({
       const res = await axios.get('/api/stocks/live', {
         params: extra ? { symbols: extra } : undefined,
       });
-      set({
-        quotes: res.data.quotes || {},
-        status: res.data.status || null,
+      // MERGE the polled response into the existing map instead of replacing.
+      // /api/stocks/live only returns NSE quotes; replacing the whole map on
+      // every 10 s tick wiped any US quotes the SSE stream had populated, so
+      // AAPL/MSFT/NVDA appeared to "vanish" between US tier-1 ticks (every
+      // 2 min when US is closed).
+      const incoming: Record<string, LiveQuote> = res.data.quotes || {};
+      set((s) => ({
+        quotes: { ...s.quotes, ...incoming },
+        status: res.data.status || s.status,
         lastFetched: Date.now(),
-      });
+      }));
     } catch {
       // Silent fail — keep stale data
     } finally {
