@@ -16,6 +16,7 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 // ── All authenticated pages: lazy-load on demand ──
 const Dashboard          = lazy(() => import('./pages/Dashboard'));
 const MarketExplorer     = lazy(() => import('./pages/MarketExplorer'));
+const GlobalMarketsPage  = lazy(() => import('./pages/GlobalMarketsPage'));
 const TerminalPage       = lazy(() => import('./pages/TerminalPage'));
 const StockDetail        = lazy(() => import('./pages/StockDetail'));
 const PortfolioPage      = lazy(() => import('./pages/PortfolioPage'));
@@ -78,6 +79,7 @@ function App() {
         <Route element={<Layout />}>
           <Route path="/dashboard"       element={<Dashboard />} />
           <Route path="/market"          element={<MarketExplorer />} />
+          <Route path="/global-markets"  element={<GlobalMarketsPage />} />
           <Route path="/terminal/:symbol" element={<TerminalPage />} />
           <Route path="/stock/:symbol"   element={<StockDetail />} />
           <Route path="/portfolio"       element={<PortfolioPage />} />

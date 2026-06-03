@@ -2,7 +2,9 @@ import { Router } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { db } from '../db/index.js';
-import { getCachedQuotes, getCachedIndices, getMarketStatus } from '../services/marketData.js';
+import { getCachedQuotes, getCachedIndices, getCachedUsIndices, getMarketStatus } from '../services/marketData.js';
+import { isRegionOpen, REGIONS } from '../services/regions.js';
+import { getCachedUsdInrRate } from '../services/fxService.js';
 
 const router = Router();
 
@@ -31,7 +33,15 @@ async function getUserContext(userId: number): Promise<string> {
     if (holdings.length === 0) {
       ctx += '\nPortfolio: Empty — no holdings yet.\n';
     } else {
-      const quotes = getCachedQuotes(holdings.map((h) => ({ symbol: h.symbol, exchange: 'NSE' as const })));
+      // Look up each holding's actual exchange so we hit the right cache.
+      const exRows = db.prepare(
+        `SELECT symbol, exchange FROM stocks WHERE symbol IN (${holdings.map(() => '?').join(',')})`
+      ).all(...holdings.map((h) => h.symbol)) as any[];
+      const exMap = new Map(exRows.map((r: any) => [r.symbol, r.exchange]));
+      const quotes = getCachedQuotes(holdings.map((h) => ({
+        symbol: h.symbol,
+        exchange: (exMap.get(h.symbol) || 'NSE') as any,
+      })));
       const qmap = new Map(quotes.map((q) => [q.symbol, q]));
       let invested = 0, current = 0;
 
@@ -95,12 +105,30 @@ function getMarketContext(): string {
   try {
     const status = getMarketStatus();
     const indices = getCachedIndices();
-    let ctx = `\n## LIVE MARKET\nStatus: ${status.isOpen ? 'OPEN' : 'CLOSED'} (${status.label})\n`;
+    let ctx = `\n## LIVE MARKET (India)\nStatus: ${status.isOpen ? 'OPEN' : 'CLOSED'} (${status.label})\n`;
     if (!status.isOpen && status.nextOpen) ctx += `Next open: ${status.nextOpen}\n`;
-    ctx += `\n### Index Levels\n`;
+    ctx += `\n### Indian Index Levels\n`;
     for (const idx of indices) {
       if (idx.price > 0) ctx += `- ${idx.name}: ${fmt(idx.price)} (${pct(idx.change_percent ?? 0)})\n`;
     }
+
+    // ── US market block — only when there's something to report ──────────
+    try {
+      const usOpen = isRegionOpen(REGIONS.US);
+      const usIdx = getCachedUsIndices();
+      const fx = getCachedUsdInrRate();
+      if (usIdx.length || usOpen || fx) {
+        ctx += `\n## LIVE MARKET (US)\nStatus: ${usOpen ? 'OPEN' : 'CLOSED'}\n`;
+        if (fx?.rate) ctx += `USD/INR rate: ₹${fx.rate.toFixed(2)}\n`;
+        if (usIdx.length) {
+          ctx += `\n### US Index Levels\n`;
+          for (const idx of usIdx) {
+            if (idx.price > 0) ctx += `- ${idx.name}: ${idx.price.toFixed(2)} (${pct(idx.change_percent ?? 0)})\n`;
+          }
+        }
+      }
+    } catch {}
+
     return ctx;
   } catch { return ''; }
 }
@@ -118,6 +146,16 @@ You have real-time access to the user's portfolio and live market data (provided
 - Market microstructure: circuit breakers (2/5/10/20%), upper/lower circuits, bulk deals, block deals, VWAP orders
 - Corporate actions: dividends, bonus, rights, splits, buybacks, mergers, demergers
 - Regulatory: SEBI, PMLA, PAN-Aadhaar linking, FII/DII flows, promoter pledging, insider trading rules
+
+### US Equity Markets (Global section of this app)
+- NYSE & NASDAQ: trading hours 9:30 AM–4:00 PM ET (= 7:00–01:30 PM IST winter / 6:00–00:30 PM IST summer; DST applies). T+1 settlement post May-2024.
+- Indices: S&P 500 (^GSPC), NASDAQ Composite (^IXIC), Dow Jones (^DJI), VIX (^VIX), Russell 2000 (^RUT), FTSE 100 (^FTSE)
+- Pre-market 04:00–09:30 ET, after-hours 16:00–20:00 ET (paper app shows regular session only)
+- Macro drivers: Fed funds rate, FOMC, CPI/PCE, NFP, ISM, jobless claims, 10Y yield, DXY (dollar index)
+- Sectors (GICS): Information Technology, Financials, Health Care, Communication Services, Consumer Discretionary, Consumer Staples, Industrials, Energy, Utilities, Real Estate, Materials
+- Earnings cadence: quarterly, ~6 weeks after quarter end. Forward guidance often moves price more than the print itself.
+- For Indian residents: paper portfolio simulates US trades; real-money requires LRS compliance (Liberalised Remittance Scheme) — out of scope for paper trading.
+- This app settles US trades to a single ₹ wallet by locking the USD/INR rate at order submission. P&L is shown in ₹ at the *current* FX rate (so currency moves contribute to unrealized P&L on US holdings).
 
 ### Fundamental Analysis
 - Valuation: P/E, Forward P/E, PEG, P/B, EV/EBITDA, EV/Sales, Price-to-FCF, Dividend Yield

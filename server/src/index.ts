@@ -27,8 +27,11 @@ import cookieParser from 'cookie-parser';
 import compression from 'compression';
 import { initSchema, db, shutdownPool } from './db/index.js';
 import cron from 'node-cron';
-import { getQuote, getQuotes, getHistory, getIndices, isMarketOpen, NIFTY50, markPollSuccess, markPollFailure, isCircuitOpen, getAllCachedQuotes } from './services/marketData.js';
+import { getQuote, getQuotes, getHistory, getIndices, getUsIndices, isMarketOpen, NIFTY50, markPollSuccess, markPollFailure, isCircuitOpen, getAllCachedQuotes } from './services/marketData.js';
 import { broadcast as broadcastTick, subscriberCount, getDynamicSymbols } from './services/tickBroadcast.js';
+import { REGIONS, isRegionOpen } from './services/regions.js';
+import { primeFxRate } from './services/fxService.js';
+import { refreshNyseHolidays } from './services/nyseHolidays.js';
 
 // Race a promise against a deadline so a stuck Yahoo connection can never
 // block the poll loop. The cache's stale-while-revalidate keeps serving the
@@ -79,6 +82,8 @@ import algoRoutes from './routes/algo.js';
 import learnRoutes from './routes/learn.js';
 
 import recommendationsRoutes from './routes/recommendations.js';
+import globalRoutes from './routes/global.js';
+import fxRoutes from './routes/fx.js';
 
 const PORT = process.env.PORT || 5000;
 
@@ -87,6 +92,14 @@ async function main() {
 
   // Kick off symbol ingestion in background; don't block server start.
   ingestSymbols().catch((e) => console.warn('[symbols] ingest failed:', e?.message || e));
+
+  // Global Markets foundation: NYSE holiday calendar + USD/INR FX rate + US
+  // symbol universe. None of these block server start.
+  refreshNyseHolidays().catch((e) => console.warn('[nyseHolidays] refresh failed:', e?.message || e));
+  primeFxRate().catch((e) => console.warn('[fx] prime failed:', e?.message || e));
+  import('./services/usSymbolIngest.js')
+    .then((m) => m.ingestUsSymbols())
+    .catch((e) => console.warn('[us-symbols] ingest failed:', e?.message || e));
 
   // Phase 2: ensure ~1y of Nifty/Sensex closes are available for benchmarking
   backfillIndexHistory(400).catch((e) => console.warn('[indexHistory] backfill failed:', e?.message || e));
@@ -163,6 +176,8 @@ async function main() {
   app.use('/api/fo', foRoutes);
   app.use('/api/algo', algoRoutes);
   app.use('/api/learn', learnRoutes);
+  app.use('/api/global', globalRoutes);
+  app.use('/api/fx', fxRoutes);
 
   app.use('/api/recommendations', recommendationsRoutes);
 
@@ -395,6 +410,62 @@ async function main() {
     }
   }
 
+  // ── US tier 1 + tier 2 (parallel to the India poll, separate Yahoo budget) ──
+  async function pollTier1Us() {
+    try {
+      const heldOrWatched = ((await db.prepare(
+        `SELECT DISTINCT h.symbol AS symbol
+           FROM holdings h
+           JOIN stocks s ON s.symbol = h.symbol
+          WHERE s.exchange IN ('NASDAQ','NYSE')
+          UNION
+         SELECT DISTINCT wi.symbol AS symbol
+           FROM watchlist_items wi
+           JOIN stocks s ON s.symbol = wi.symbol
+          WHERE s.exchange IN ('NASDAQ','NYSE')`
+      ).all()) as any[]).map((r) => r.symbol).filter(Boolean);
+
+      // Top-150 by turnover from the warm US cache (same trick as the IN side).
+      const top150 = Array.from(getAllCachedQuotes().values())
+        .filter((q) => q && (q.exchange === 'NASDAQ' || q.exchange === 'NYSE') && q.price > 0 && q.volume > 0)
+        .sort((a, b) => (b.volume * b.price) - (a.volume * a.price))
+        .slice(0, 150)
+        .map((q) => ({ symbol: q.symbol, exchange: q.exchange as 'NASDAQ' | 'NYSE' }));
+
+      // Pull each symbol's exchange from the DB so we route NYSE vs NASDAQ correctly.
+      const heldOrWatchedRows = heldOrWatched.length
+        ? ((await db.prepare(
+            `SELECT symbol, exchange FROM stocks WHERE symbol IN (${heldOrWatched.map(() => '?').join(',')}) AND exchange IN ('NASDAQ','NYSE')`
+          ).all(...heldOrWatched)) as any[]).map((r) => ({ symbol: r.symbol, exchange: r.exchange as 'NASDAQ' | 'NYSE' }))
+        : [];
+
+      const items = [...top150, ...heldOrWatchedRows]
+        .filter((v, i, a) => a.findIndex((x) => x.symbol === v.symbol) === i);
+      if (!items.length) return;
+
+      const quotes = await withTimeout(getQuotes(items, true), 12_000, 'tier1.us.getQuotes');
+      await withTimeout(getUsIndices(true), 8_000, 'tier1.us.getIndices').catch(() => {});
+      broadcastTick(quotes);
+      console.log(`[market] tier1 US — ${quotes.length}/${items.length} symbols (open=${isRegionOpen(REGIONS.US)})`);
+    } catch (err: any) {
+      console.warn('[market] tier1 US poll error:', err?.message ?? err);
+    }
+  }
+
+  async function pollTier2Us() {
+    try {
+      const rows = (await db.prepare(
+        `SELECT symbol, exchange FROM stocks WHERE exchange IN ('NASDAQ','NYSE')`
+      ).all()) as any[];
+      if (!rows.length) return;
+      const items = rows.map((r) => ({ symbol: r.symbol, exchange: r.exchange as 'NASDAQ' | 'NYSE' }));
+      const quotes = await withTimeout(getQuotes(items, true), 60_000, 'tier2.us.getQuotes');
+      console.log(`[market] tier2 US sweep — ${quotes.length}/${items.length} US stocks cached`);
+    } catch (err: any) {
+      console.warn('[market] tier2 US poll error:', err?.message ?? err);
+    }
+  }
+
   function scheduleTier1() {
     // Circuit-aware cadence: 4s live, 2min closed, 30s while the circuit is
     // open (i.e. several consecutive Yahoo failures) — back off so we stop
@@ -418,6 +489,19 @@ async function main() {
     }, delay);
   }
 
+  // US scheduling: independent of the IN cadence because the sessions don't
+  // overlap. 4s while NYSE/NASDAQ is open, 2min in pre/post, 30min overnight.
+  function scheduleTier1Us() {
+    const usOpen = isRegionOpen(REGIONS.US);
+    const delay = usOpen ? 4_000 : 120_000;
+    setTimeout(async () => { await pollTier1Us(); scheduleTier1Us(); }, delay);
+  }
+  function scheduleTier2Us() {
+    const usOpen = isRegionOpen(REGIONS.US);
+    const delay = usOpen ? 60_000 : 1_800_000;
+    setTimeout(async () => { await pollTier2Us(); scheduleTier2Us(); }, delay);
+  }
+
   // Warm the cache immediately on startup, then start both schedulers.
   pollTier1().then(() => {
     getQuote('RELIANCE', 'NSE', true).then((q) => {
@@ -430,6 +514,15 @@ async function main() {
       pollTier2().then(() => scheduleTier2());
     }, 30_000);
   });
+
+  // US polling: warm tier2 first (so tier1 has a turnover-ranked universe to pick from),
+  // then start both US schedulers. Wait 45s so the US ingest has time to populate the DB.
+  setTimeout(() => {
+    pollTier2Us().then(() => {
+      scheduleTier2Us();
+      pollTier1Us().then(() => scheduleTier1Us());
+    });
+  }, 45_000);
 
   const server = app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);

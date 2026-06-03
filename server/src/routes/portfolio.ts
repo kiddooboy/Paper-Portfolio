@@ -227,10 +227,37 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
 
   const holdings = (await db.prepare('SELECT * FROM holdings WHERE user_id = ?').all(userId)) as any[];
 
-  // Fetch full quotes for every holding
+  // Resolve each holding's actual exchange (NSE / NASDAQ / NYSE / …) so we
+  // hit the right region's cache and convert USD positions to ₹ for totals.
+  const exMap = new Map<string, string>();
+  if (holdings.length) {
+    const exRows = (await db.prepare(
+      `SELECT symbol, exchange FROM stocks WHERE symbol IN (${holdings.map(() => '?').join(',')})`
+    ).all(...holdings.map((h: any) => h.symbol))) as any[];
+    for (const r of exRows) exMap.set(r.symbol, r.exchange);
+  }
+
+  // Lazy FX rate — used only when at least one US holding exists.
+  let fxRate: number | null = null;
+  const needsFx = holdings.some((h: any) => {
+    const ex = exMap.get(h.symbol);
+    return h.currency === 'USD' || ex === 'NASDAQ' || ex === 'NYSE';
+  });
+  if (needsFx) {
+    try {
+      const m = await import('../services/fxService.js');
+      fxRate = await m.getUsdInrRate();
+    } catch { fxRate = 83.20; }
+  }
+
+  // Fetch full quotes for every holding, region-aware.
   const quoteMap = new Map<string, Quote>();
   if (holdings.length) {
-    const quotes = getCachedQuotes(holdings.map((h) => ({ symbol: h.symbol, exchange: 'NSE' as const })));
+    const items = holdings.map((h: any) => ({
+      symbol: h.symbol,
+      exchange: (exMap.get(h.symbol) || 'NSE') as any,
+    }));
+    const quotes = getCachedQuotes(items);
     for (const q of quotes) quoteMap.set(q.symbol, q);
   }
 
@@ -242,15 +269,24 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
 
   for (const h of holdings) {
     const q = quoteMap.get(h.symbol);
-    const price = q?.price ?? h.avg_buy_price;
-    const prevClose = q?.previous_close ?? price;
+    const ex = exMap.get(h.symbol) || 'NSE';
+    const isUs = h.currency === 'USD' || ex === 'NASDAQ' || ex === 'NYSE';
+    const nativePrice = q?.price ?? (isUs ? (h.avg_price_native || (h.avg_buy_price / (fxRate || 1))) : h.avg_buy_price);
+    const nativePrev  = q?.previous_close ?? nativePrice;
+    // INR-equivalent price/prev — used for the existing ₹-based aggregates.
+    const priceInr = isUs ? nativePrice * (fxRate || 0) : nativePrice;
+    const prevInr  = isUs ? nativePrev  * (fxRate || 0) : nativePrev;
 
-    h.current_price = price;
-    h.current_value = price * h.quantity;
-    h.pnl = (price - h.avg_buy_price) * h.quantity;
-    h.pnl_percent = h.avg_buy_price > 0 ? +((price - h.avg_buy_price) / h.avg_buy_price * 100).toFixed(2) : 0;
-    h.day_change = (price - prevClose) * h.quantity;
-    h.day_change_percent = prevClose > 0 ? +((price - prevClose) / prevClose * 100).toFixed(2) : 0;
+    h.current_price = priceInr;          // ₹ — keeps existing UI math working
+    h.current_price_native = nativePrice; // USD for US holdings, INR for IN
+    h.currency = h.currency || (isUs ? 'USD' : 'INR');
+    h.avg_price_native = h.avg_price_native ?? (isUs ? (h.avg_buy_price / (fxRate || 1)) : h.avg_buy_price);
+    h.fx_rate = isUs ? (fxRate || 0) : null;
+    h.current_value = priceInr * h.quantity;
+    h.pnl = (priceInr - h.avg_buy_price) * h.quantity;
+    h.pnl_percent = h.avg_buy_price > 0 ? +((priceInr - h.avg_buy_price) / h.avg_buy_price * 100).toFixed(2) : 0;
+    h.day_change = (priceInr - prevInr) * h.quantity;
+    h.day_change_percent = prevInr > 0 ? +((priceInr - prevInr) / prevInr * 100).toFixed(2) : 0;
     h.name = q?.name || h.symbol;
     h.day_high = q?.day_high;
     h.day_low = q?.day_low;
@@ -259,7 +295,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
     h.market_cap = q?.market_cap;
     h.pe_ratio = q?.pe_ratio;
     h.volume = q?.volume;
-    h.exchange = q?.exchange || 'NSE';
+    h.exchange = q?.exchange || ex;
 
     investedValue += h.avg_buy_price * h.quantity;
     currentValue += h.current_value;

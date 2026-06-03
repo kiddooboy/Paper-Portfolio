@@ -1,8 +1,11 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
-import { getQuote, getCachedQuote, isMarketOpen } from '../services/marketData.js';
+import { getQuote, getCachedQuote, isMarketOpen, type ExchangeCode } from '../services/marketData.js';
 import { computeCharges } from '../services/fees.js';
+import { computeChargesUS } from '../services/fees.us.js';
+import { regionFor } from '../services/regions.js';
+import { getUsdInrRate } from '../services/fxService.js';
 import { pushToUser } from '../services/push.js';
 import { z } from 'zod';
 import { logActivity, getClientIp } from '../services/activityLogger.js';
@@ -14,7 +17,7 @@ const router = Router();
 
 const orderSchema = z.object({
   symbol: z.string(),
-  exchange: z.enum(['NSE', 'BSE']).optional(),
+  exchange: z.enum(['NSE', 'BSE', 'NASDAQ', 'NYSE']).optional(),
   type: z.enum(['MARKET', 'LIMIT', 'SL', 'SL-M']),
   transactionType: z.enum(['BUY', 'SELL']),
   quantity: z.number().int().positive(),
@@ -22,7 +25,7 @@ const orderSchema = z.object({
   triggerPrice: z.number().positive().optional(),
   targetPrice: z.number().positive().optional(),
   stopLossPrice: z.number().positive().optional(),
-  productType: z.enum(['CNC', 'MIS']).optional().default('CNC'),
+  productType: z.enum(['CNC', 'MIS', 'DAY', 'GTC']).optional().default('CNC'),
   is_amo: z.boolean().optional().default(false),
   trailingPct: z.number().positive().max(50).optional(),  // % trail for SL/SL-M orders
 });
@@ -154,8 +157,24 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { symbol, exchange, type, transactionType, quantity, limitPrice, triggerPrice, targetPrice, stopLossPrice, productType, is_amo, trailingPct } = orderSchema.parse(req.body);
     const userId = req.user!.id;
-    const ex = exchange ?? 'NSE';
+    const ex: ExchangeCode = (exchange ?? 'NSE') as ExchangeCode;
+    const region = regionFor(ex);
     const upperSymbol = symbol.toUpperCase();
+
+    // ── US branch: completely separate fill path ────────────────────────────
+    // The India side has deep MIS/short/CNC entanglement that doesn't apply to
+    // US equities. Branching early keeps both surfaces clean.
+    if (region.code === 'US') {
+      // Validate product type for US — only DAY / GTC allowed.
+      if (productType === 'CNC' || productType === 'MIS') {
+        return res.status(400).json({ error: 'CNC and MIS are India-only. Use DAY or GTC for US orders.' });
+      }
+      return handleUsOrder(req, res, {
+        userId, symbol: upperSymbol, exchange: ex as 'NASDAQ' | 'NYSE',
+        type, transactionType, quantity,
+        limitPrice, triggerPrice, targetPrice, productType: productType as 'DAY' | 'GTC',
+      });
+    }
 
     if ((type === 'SL' || type === 'SL-M') && !triggerPrice) {
       return res.status(400).json({ error: 'Trigger price required for SL/SL-M orders' });
@@ -607,5 +626,206 @@ router.post('/:id/cancel', authMiddleware, async (req: AuthRequest, res) => {
   logActivity(userId, 'CANCEL_ORDER', { orderId, symbol: order.symbol, type: order.type }, getClientIp(req));
   res.json({ success: true });
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// US order flow — separate from the India path so MIS/CNC logic stays clean.
+// ────────────────────────────────────────────────────────────────────────────
+
+interface UsOrderInput {
+  userId: number;
+  symbol: string;
+  exchange: 'NASDAQ' | 'NYSE';
+  type: 'MARKET' | 'LIMIT' | 'SL' | 'SL-M';
+  transactionType: 'BUY' | 'SELL';
+  quantity: number;
+  limitPrice?: number;
+  triggerPrice?: number;
+  targetPrice?: number;
+  productType: 'DAY' | 'GTC';
+}
+
+async function handleUsOrder(_req: AuthRequest, res: any, input: UsOrderInput) {
+  const { userId, symbol, exchange, type, transactionType, quantity, limitPrice, triggerPrice, productType } = input;
+
+  if ((type === 'SL' || type === 'SL-M') && !triggerPrice) {
+    return res.status(400).json({ error: 'Trigger price required for SL/SL-M orders' });
+  }
+
+  const quote = await getQuote(symbol, exchange);
+  if (!quote || quote.price <= 0) {
+    return res.status(404).json({ error: 'Live US market data is unavailable for this symbol right now.' });
+  }
+
+  // Verify the symbol is in our universe (only enforced for BUY).
+  if (transactionType === 'BUY') {
+    const known = db.prepare(`SELECT 1 FROM stocks WHERE symbol = ? AND exchange IN ('NASDAQ','NYSE') LIMIT 1`).get(symbol);
+    if (!known) {
+      return res.status(400).json({ error: 'This US symbol is not in the tradeable universe.' });
+    }
+  }
+
+  const usdPrice = quote.price;
+  const effectiveType = type;
+  const effectiveLimitPrice = limitPrice;
+  const orderUsdPrice = (effectiveType === 'MARKET' || effectiveType === 'SL-M')
+    ? usdPrice
+    : (effectiveLimitPrice || triggerPrice || usdPrice);
+
+  // Lock the FX rate at submission. Order math (debit/credit, charges) all
+  // uses this rate so the user sees a single deterministic ₹ amount.
+  const fxRate = await getUsdInrRate();
+  const inrPrice = orderUsdPrice * fxRate;
+  const inrTotal = inrPrice * quantity;
+  const usCharges = computeChargesUS(transactionType, productType, quantity, orderUsdPrice);
+  const inrCharges = {
+    brokerage: usCharges.brokerage * fxRate,
+    stt: 0,
+    exchange: usCharges.exchange * fxRate,
+    sebi: usCharges.sebi * fxRate,
+    gst: 0,
+    stamp: 0,
+    dp: 0,
+    total: usCharges.total * fxRate,
+  };
+
+  const usMarketOpen = isMarketOpen(exchange);
+
+  let orderId = 0;
+  let queued = false;
+  let filledNow = false;
+
+  try {
+    await db.transaction(async () => {
+      // Balance check (wallet stays in ₹)
+      if (transactionType === 'BUY') {
+        const user = (await db.prepare('SELECT balance FROM users WHERE id = ?').get(userId)) as any;
+        if (!user) throw new Error('User not found');
+        if (Number(user.balance) < inrTotal + inrCharges.total) throw new Error('Insufficient balance');
+      } else {
+        const holding = (await db.prepare('SELECT quantity, currency FROM holdings WHERE user_id = ? AND symbol = ?').get(userId, symbol)) as any;
+        if (!holding || Number(holding.quantity) < quantity) throw new Error(`You don't own enough shares of ${symbol} to sell`);
+      }
+
+      const result = await db.prepare(`
+        INSERT INTO orders (user_id, symbol, type, transaction_type, quantity, price, limit_price, trigger_price, target_price, product_type, is_amo, status, currency, price_native, fx_rate)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'PENDING', 'USD', ?, ?)
+      `).run(userId, symbol, effectiveType, transactionType, quantity, inrPrice,
+             effectiveLimitPrice != null ? effectiveLimitPrice * fxRate : null,
+             triggerPrice != null ? triggerPrice * fxRate : null,
+             input.targetPrice != null ? input.targetPrice * fxRate : null,
+             productType, orderUsdPrice, fxRate);
+      orderId = result.lastInsertRowid as number;
+
+      if (!usMarketOpen) {
+        queued = true;
+        await db.prepare(`INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, 'order')`).run(
+          userId,
+          `Order Queued: ${transactionType} ${symbol}`,
+          `US markets are closed. Your ${effectiveType} ${transactionType} order for ${quantity} ${symbol} share(s) will execute at next US market open (9:30 AM ET).`,
+        );
+        return;
+      }
+
+      if (effectiveType === 'MARKET') {
+        await fillOrderUS(orderId, userId, symbol, exchange, transactionType, quantity, orderUsdPrice, fxRate);
+        filledNow = true;
+      } else {
+        // LIMIT/SL — same condition check as IN side, but on USD prices.
+        const conditionMet = checkFillCondition(effectiveType, transactionType, usdPrice, effectiveLimitPrice ?? null, triggerPrice ?? null);
+        if (conditionMet) {
+          await fillOrderUS(orderId, userId, symbol, exchange, transactionType, quantity, orderUsdPrice, fxRate);
+          filledNow = true;
+        }
+      }
+    });
+  } catch (e: any) {
+    return res.status(400).json({ error: e?.message || 'Order failed' });
+  }
+
+  res.json({
+    success: true,
+    orderId,
+    queued,
+    status: queued ? 'PENDING' : (filledNow ? 'FILLED' : 'PENDING'),
+    region: 'US',
+    fxRate,
+    inrTotal,
+    message: queued ? 'US markets are closed. Order queued for next session.' : undefined,
+  });
+}
+
+/** US order fill — stores USD natively, debits/credits in ₹ at the locked FX rate. */
+export async function fillOrderUS(
+  orderId: number,
+  userId: number,
+  symbol: string,
+  exchange: 'NASDAQ' | 'NYSE',
+  transactionType: 'BUY' | 'SELL',
+  quantity: number,
+  usdPrice: number,
+  fxRate: number,
+) {
+  const inrPrice = usdPrice * fxRate;
+  const inrTotal = inrPrice * quantity;
+  const orderRow = db.prepare('SELECT product_type FROM orders WHERE id = ?').get(orderId) as any;
+  const productType: 'DAY' | 'GTC' = orderRow?.product_type === 'GTC' ? 'GTC' : 'DAY';
+  const usCharges = computeChargesUS(transactionType, productType, quantity, usdPrice);
+  const inrChargesTotal = usCharges.total * fxRate;
+  const netInr = transactionType === 'BUY' ? inrTotal + inrChargesTotal : inrTotal - inrChargesTotal;
+
+  await db.transaction(async () => {
+    if (transactionType === 'BUY') {
+      await db.prepare('UPDATE users SET balance = balance - ? WHERE id = ?').run(netInr, userId);
+      const holding = (await db.prepare('SELECT * FROM holdings WHERE user_id = ? AND symbol = ?').get(userId, symbol)) as any;
+      if (holding) {
+        const newQty = holding.quantity + quantity;
+        const newAvgInr = ((Number(holding.avg_buy_price) * holding.quantity) + netInr) / newQty;
+        const newAvgUsd = ((Number(holding.avg_price_native || usdPrice) * holding.quantity) + usdPrice * quantity) / newQty;
+        await db.prepare('UPDATE holdings SET quantity = ?, avg_buy_price = ?, avg_price_native = ?, currency = ? WHERE id = ?')
+          .run(newQty, newAvgInr, newAvgUsd, 'USD', holding.id);
+      } else {
+        const avgInr = netInr / quantity;
+        await db.prepare('INSERT INTO holdings (user_id, symbol, quantity, avg_buy_price, avg_price_native, currency) VALUES (?, ?, ?, ?, ?, ?)')
+          .run(userId, symbol, quantity, avgInr, usdPrice, 'USD');
+      }
+    } else {
+      await db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?').run(netInr, userId);
+      const holding = (await db.prepare('SELECT * FROM holdings WHERE user_id = ? AND symbol = ?').get(userId, symbol)) as any;
+      if (holding) {
+        const newQty = holding.quantity - quantity;
+        if (newQty <= 0) await db.prepare('DELETE FROM holdings WHERE id = ?').run(holding.id);
+        else await db.prepare('UPDATE holdings SET quantity = ? WHERE id = ?').run(newQty, holding.id);
+        const realizedPnlInr = (inrPrice - Number(holding.avg_buy_price)) * quantity - inrChargesTotal;
+        await db.prepare(`
+          INSERT INTO trade_pnl (user_id, symbol, sell_order_id, quantity, buy_price, sell_price, realized_pnl)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(userId, symbol, orderId, quantity, Number(holding.avg_buy_price), inrPrice, realizedPnlInr);
+      }
+    }
+
+    const inrChargesJson = JSON.stringify({
+      brokerage: usCharges.brokerage * fxRate,
+      stt: 0, gst: 0, stamp: 0, dp: 0,
+      exchange: usCharges.exchange * fxRate,
+      sebi: usCharges.sebi * fxRate,
+      total: inrChargesTotal,
+      _native: { currency: 'USD', fxRate, ...usCharges },
+    });
+    await db.prepare(`
+      INSERT INTO transactions (user_id, order_id, symbol, type, quantity, price, total_amount, charges, net_amount)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(userId, orderId, symbol, transactionType, quantity, inrPrice, inrTotal, inrChargesJson, netInr);
+
+    await db.prepare(`UPDATE orders SET status = 'FILLED', filled_at = CURRENT_TIMESTAMP WHERE id = ?`).run(orderId);
+
+    const title = `Order Filled: ${transactionType} ${symbol}`;
+    const msg = `${quantity} ${symbol} @ $${usdPrice.toFixed(2)} (₹${inrPrice.toFixed(2)} @ ₹${fxRate.toFixed(2)}/$ locked)`;
+    try {
+      db.prepare(`INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, 'order')`).run(userId, title, msg);
+    } catch {}
+    pushToUser(userId, title, msg, { type: 'order', symbol, region: 'US' }).catch(() => {});
+  });
+  void exchange; // exchange currently informational; reserved for venue-specific extensions
+}
 
 export default router;

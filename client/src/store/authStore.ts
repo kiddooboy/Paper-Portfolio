@@ -12,6 +12,7 @@ interface User {
   balance: number;
   has_mpin?: boolean;
   tour_seen?: boolean;
+  currency_display?: 'INR' | 'USD';
 }
 
 interface AuthState {
@@ -26,6 +27,7 @@ interface AuthState {
   loginMpin: (email: string, mpin: string) => Promise<void>;
   setMpin: (mpin: string) => Promise<void>;
   setHasMpin: () => void;
+  setCurrencyDisplay: (currency: 'INR' | 'USD') => Promise<void>;
   setHydrated: () => void;
   setInitialized: () => void;
 }
@@ -89,6 +91,13 @@ export const useAuthStore = create<AuthState>()(
       setHasMpin: () => set((state) => ({
         user: state.user ? { ...state.user, has_mpin: true } : null,
       })),
+      setCurrencyDisplay: async (currency) => {
+        // Optimistic local update; server is the source of truth on next /me.
+        set((state) => ({
+          user: state.user ? { ...state.user, currency_display: currency } : null,
+        }));
+        try { await axios.post('/api/auth/preferences', { currency_display: currency }); } catch {}
+      },
       setHydrated: () => set({ hydrated: true }),
       setInitialized: () => set({ isInitializing: false }),
     }),

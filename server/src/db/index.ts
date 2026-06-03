@@ -874,6 +874,27 @@ export async function initSchema() {
   )`, 'table: mis_shorts');
   safeExec(`CREATE INDEX IF NOT EXISTS idx_mis_shorts_user ON mis_shorts(user_id)`, 'index: mis_shorts');
 
+  // ── Global Markets (US equities) ──
+  // All four idempotent — existing rows default to INR semantics so the
+  // entire India side keeps working exactly as before.
+  safeExec(`ALTER TABLE stocks   ADD COLUMN currency TEXT NOT NULL DEFAULT 'INR'`,        'migration: stocks.currency');
+  safeExec(`ALTER TABLE holdings ADD COLUMN currency TEXT NOT NULL DEFAULT 'INR'`,        'migration: holdings.currency');
+  safeExec(`ALTER TABLE holdings ADD COLUMN avg_price_native REAL`,                       'migration: holdings.avg_price_native');
+  safeExec(`ALTER TABLE orders   ADD COLUMN currency TEXT NOT NULL DEFAULT 'INR'`,        'migration: orders.currency');
+  safeExec(`ALTER TABLE orders   ADD COLUMN price_native REAL`,                           'migration: orders.price_native');
+  safeExec(`ALTER TABLE orders   ADD COLUMN fx_rate REAL`,                                'migration: orders.fx_rate');
+  safeExec(`ALTER TABLE users    ADD COLUMN currency_display TEXT NOT NULL DEFAULT 'INR'`, 'migration: users.currency_display');
+
+  // NYSE/NASDAQ trading-holiday calendar — parallel of nse_holidays.
+  safeExec(`
+    CREATE TABLE IF NOT EXISTS nyse_holidays (
+      date        TEXT PRIMARY KEY,
+      description TEXT NOT NULL DEFAULT '',
+      source      TEXT NOT NULL DEFAULT 'fallback',
+      updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `, 'table: nyse_holidays');
+
   // ── Phase 3: updated_at triggers ──
   // Drop-and-recreate so any older incompatible trigger definition (e.g.
   // from a previous Postgres-flavoured deploy) is replaced cleanly.

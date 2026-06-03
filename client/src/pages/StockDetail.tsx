@@ -14,7 +14,22 @@ import NewsFeed from '../components/NewsFeed';
 export default function StockDetail() {
   const { symbol } = useParams<{ symbol: string }>();
   const [searchParams] = useSearchParams();
-  const exchange = (searchParams.get('exchange') || 'NSE') as 'NSE' | 'BSE';
+  const exchange = (searchParams.get('exchange') || 'NSE') as 'NSE' | 'BSE' | 'NASDAQ' | 'NYSE';
+  const isUS = exchange === 'NASDAQ' || exchange === 'NYSE';
+
+  const ccyPref = useAuthStore((s) => s.user?.currency_display || 'INR');
+  const [fxRate, setFxRate] = useState<number>(0);
+
+  // For US stocks, pull current USD/INR so we can render the dual price
+  // and pass productType=DAY in the order payload.
+  useEffect(() => {
+    if (!isUS) return;
+    let alive = true;
+    axios.get('/api/fx/usdinr').then((res) => {
+      if (alive) setFxRate(Number(res.data?.rate) || 0);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [isUS]);
 
   const [stock, setStock] = useState<any>(null);
   const [tab, setTab] = useState<'buy' | 'sell'>('buy');
@@ -49,10 +64,12 @@ export default function StockDetail() {
     try {
       const res = await axios.post('/api/orders', {
         symbol,
+        exchange,
         type: orderType,
         transactionType: tab,
         quantity: qtyNum,
         limitPrice: orderType === 'LIMIT' ? Number(limitPrice) : undefined,
+        productType: isUS ? 'DAY' : 'CNC',
       });
       if (res.data.queued) {
         toast.success(res.data.message || 'Order queued for next market open', { duration: 5000, icon: '🕐' });
@@ -129,11 +146,35 @@ export default function StockDetail() {
           </div>
         </div>
         <div className="text-right shrink-0">
-          <p className="text-3xl font-bold tabular-nums">{formatCurrency(stock.price)}</p>
-          <p className={cn('text-sm font-semibold flex items-center justify-end gap-1 mt-0.5', isGain ? 'text-gain' : 'text-loss')}>
-            {isGain ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-            {isGain ? '+' : ''}{stock.change?.toFixed(2)} ({isGain ? '+' : ''}{stock.change_percent?.toFixed(2)}%)
-          </p>
+          {isUS ? (
+            <>
+              <p className="text-3xl font-bold tabular-nums">
+                {ccyPref === 'USD' || !fxRate
+                  ? formatCurrency(stock.price, { currency: 'USD' })
+                  : formatCurrency(stock.price * fxRate, { currency: 'INR' })}
+              </p>
+              {fxRate > 0 && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 tabular-nums">
+                  {ccyPref === 'USD'
+                    ? `≈ ${formatCurrency(stock.price * fxRate, { currency: 'INR' })}`
+                    : `≈ ${formatCurrency(stock.price, { currency: 'USD' })}`}
+                  <span className="ml-1 text-[10px]">@ ₹{fxRate.toFixed(2)}/$</span>
+                </p>
+              )}
+              <p className={cn('text-sm font-semibold flex items-center justify-end gap-1 mt-0.5', isGain ? 'text-gain' : 'text-loss')}>
+                {isGain ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                {isGain ? '+' : ''}{stock.change?.toFixed(2)} ({isGain ? '+' : ''}{stock.change_percent?.toFixed(2)}%)
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-3xl font-bold tabular-nums">{formatCurrency(stock.price)}</p>
+              <p className={cn('text-sm font-semibold flex items-center justify-end gap-1 mt-0.5', isGain ? 'text-gain' : 'text-loss')}>
+                {isGain ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                {isGain ? '+' : ''}{stock.change?.toFixed(2)} ({isGain ? '+' : ''}{stock.change_percent?.toFixed(2)}%)
+              </p>
+            </>
+          )}
         </div>
       </div>
 
@@ -207,8 +248,18 @@ export default function StockDetail() {
             )}
             <div className="flex justify-between items-center text-sm pt-1">
               <span className="text-gray-500">Total</span>
-              <span className="font-bold text-base tabular-nums">{formatCurrency(total)}</span>
+              <span className="font-bold text-base tabular-nums">
+                {isUS
+                  ? formatCurrency(total, { currency: 'USD' })
+                  : formatCurrency(total)}
+              </span>
             </div>
+            {isUS && fxRate > 0 && qtyNum > 0 && (
+              <div className="flex justify-between items-center text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 rounded-md px-2 py-1.5">
+                <span>₹ debit @ ₹{fxRate.toFixed(2)}/$ <span className="text-gray-500 dark:text-gray-400">(locks at submit)</span></span>
+                <span className="font-bold tabular-nums">{formatCurrency(total * fxRate, { currency: 'INR' })}</span>
+              </div>
+            )}
             <div className="flex justify-between items-center text-xs text-gray-400">
               <span>Available balance</span>
               <span className="font-semibold text-gray-600 dark:text-gray-300">{formatCurrency(balance)}</span>

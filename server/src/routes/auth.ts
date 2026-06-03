@@ -139,7 +139,7 @@ router.post('/login-mpin', async (req, res) => {
 
 router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
   const user = (await db.prepare(
-    'SELECT id, name, email, role, balance, mpin_hash, tour_seen, last_login, created_at FROM users WHERE id = ?'
+    'SELECT id, name, email, role, balance, mpin_hash, tour_seen, last_login, created_at, currency_display FROM users WHERE id = ?'
   ).get(req.user!.id)) as any;
   if (!user) return res.status(401).json({ error: 'User not found' });
   res.json({
@@ -153,8 +153,22 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
       tour_seen: !!user.tour_seen,
       last_login: user.last_login,
       created_at: user.created_at,
+      currency_display: user.currency_display || 'INR',
     },
   });
+});
+
+// POST /auth/preferences — currently used for the USD/INR display toggle on
+// the Global Markets section. Lightweight: just one column update.
+router.post('/preferences', authMiddleware, async (req: AuthRequest, res) => {
+  const { currency_display } = req.body || {};
+  if (currency_display && currency_display !== 'USD' && currency_display !== 'INR') {
+    return res.status(400).json({ error: "currency_display must be 'USD' or 'INR'" });
+  }
+  if (currency_display) {
+    await db.prepare('UPDATE users SET currency_display = ? WHERE id = ?').run(currency_display, req.user!.id);
+  }
+  res.json({ ok: true, currency_display: currency_display || 'INR' });
 });
 
 // POST /auth/firebase — sign in or register via Firebase Google token

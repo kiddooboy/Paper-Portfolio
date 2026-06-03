@@ -1,5 +1,6 @@
 import { db } from '../db/index.js';
-import { getCachedQuote, isMarketOpen } from './marketData.js';
+import { getCachedQuote, isMarketOpen, type ExchangeCode } from './marketData.js';
+import { fillOrderUS } from '../routes/orders.js';
 import { fillOrder } from '../routes/orders.js';
 import { logActivity } from './activityLogger.js';
 import { executeDueSIPs } from '../routes/sip.js';
@@ -226,13 +227,29 @@ async function sweepPendingOrders(label: string) {
   const pending = db.prepare(`SELECT * FROM orders WHERE status = 'PENDING' ORDER BY created_at ASC`).all() as unknown as PendingOrder[];
   if (pending.length === 0) return { filled: 0, kept: 0, failed: 0 };
 
-  // Build symbol set, fetch all at once from cache
+  // Resolve each symbol → its trading venue (NSE/BSE/NASDAQ/NYSE) from the
+  // stocks master, so we can fetch the correct cached quote per region.
   const symbols = [...new Set(pending.map(o => o.symbol))];
-  const priceMap = new Map<string, number>();
+  const exchangeBySymbol = new Map<string, ExchangeCode>();
+  if (symbols.length) {
+    const rows = db.prepare(
+      `SELECT symbol, exchange FROM stocks WHERE symbol IN (${symbols.map(() => '?').join(',')})`
+    ).all(...symbols) as any[];
+    for (const r of rows) {
+      // Prefer US listing when symbol is a known US ticker, otherwise NSE.
+      const ex = r.exchange as ExchangeCode;
+      if (!exchangeBySymbol.has(r.symbol) || ex === 'NASDAQ' || ex === 'NYSE') {
+        exchangeBySymbol.set(r.symbol, ex);
+      }
+    }
+  }
+
+  const priceMap = new Map<string, { price: number; exchange: ExchangeCode }>();
   for (const sym of symbols) {
-    const q = getCachedQuote(sym, 'NSE');
+    const ex = exchangeBySymbol.get(sym) ?? 'NSE';
+    const q = getCachedQuote(sym, ex);
     if (q && q.price > 0) {
-      priceMap.set(sym, q.price);
+      priceMap.set(sym, { price: q.price, exchange: ex });
       checkPriceAlerts(sym, q.price, q.previous_close);
       if (q.previous_close && q.previous_close > 0) {
         checkSmartHoldingsAlerts(sym, q.price, q.previous_close);
@@ -242,8 +259,13 @@ async function sweepPendingOrders(label: string) {
 
   let filled = 0, kept = 0, failed = 0;
   for (const order of pending) {
-    const currentPrice = priceMap.get(order.symbol);
-    if (!currentPrice) { kept++; continue; }
+    const entry = priceMap.get(order.symbol);
+    if (!entry) { kept++; continue; }
+    const currentPrice = entry.price;
+
+    // Skip orders whose region is currently closed (US orders queued from IST
+    // shouldn't fill until 9:30 ET).
+    if (!isMarketOpen(entry.exchange)) { kept++; continue; }
 
     // For trailing SL/SL-M orders, advance the anchor and refresh trigger_price
     // BEFORE evaluating the fill condition. Mutates the order row in place.
@@ -253,8 +275,18 @@ async function sweepPendingOrders(label: string) {
     }
 
     try {
-      const ok = await tryFillOrder(order, currentPrice);
-      if (ok) filled++; else kept++;
+      // US orders go through fillOrderUS with their locked fx_rate.
+      const orderRow = order as any;
+      if (orderRow.currency === 'USD' && (entry.exchange === 'NASDAQ' || entry.exchange === 'NYSE')) {
+        const fxRate = Number(orderRow.fx_rate) || 0;
+        if (!fxRate) { kept++; continue; }
+        const usdPrice = currentPrice;
+        await fillOrderUS(order.id, order.user_id, order.symbol, entry.exchange, order.transaction_type as 'BUY' | 'SELL', order.quantity, usdPrice, fxRate);
+        filled++;
+      } else {
+        const ok = await tryFillOrder(order, currentPrice);
+        if (ok) filled++; else kept++;
+      }
     } catch (err) {
       console.error(`[OrderExecution] order ${order.id} sweep error:`, err);
       try { await failOrder(order, 'Internal error during execution'); failed++; } catch {}
@@ -302,9 +334,29 @@ async function squareOffMisPositions() {
 async function recordPortfolioSnapshots() {
   console.log('[OrderExecution] Recording portfolio snapshots');
   const users = db.prepare(`SELECT id, balance FROM users`).all() as any[];
-  const allHoldings = db.prepare(`SELECT user_id, symbol, quantity, avg_buy_price FROM holdings WHERE quantity > 0`).all() as any[];
+  const allHoldings = db.prepare(`SELECT user_id, symbol, quantity, avg_buy_price, currency FROM holdings WHERE quantity > 0`).all() as any[];
 
-  // Group holdings by user
+  // Resolve each held symbol → exchange so we fetch the right cached quote.
+  const symbols = [...new Set(allHoldings.map((h) => h.symbol))];
+  const exMap = new Map<string, ExchangeCode>();
+  if (symbols.length) {
+    const rows = db.prepare(
+      `SELECT symbol, exchange FROM stocks WHERE symbol IN (${symbols.map(() => '?').join(',')})`
+    ).all(...symbols) as any[];
+    for (const r of rows) exMap.set(r.symbol, r.exchange as ExchangeCode);
+  }
+
+  // Lazy FX rate for USD holdings — used to convert into ₹ for the snapshot.
+  let fxRate: number | null = null;
+  async function fx(): Promise<number> {
+    if (fxRate != null) return fxRate;
+    try {
+      const m = await import('./fxService.js');
+      fxRate = await m.getUsdInrRate();
+    } catch { fxRate = 83.20; }
+    return fxRate;
+  }
+
   const holdingsByUser = new Map<number, any[]>();
   for (const h of allHoldings) {
     if (!holdingsByUser.has(h.user_id)) holdingsByUser.set(h.user_id, []);
@@ -315,9 +367,15 @@ async function recordPortfolioSnapshots() {
     const holdings = holdingsByUser.get(user.id) || [];
     let holdingsValue = 0;
     for (const h of holdings) {
-      const q = getCachedQuote(h.symbol, 'NSE');
-      const price = q?.price ?? h.avg_buy_price;
-      holdingsValue += price * h.quantity;
+      const ex = exMap.get(h.symbol) ?? 'NSE';
+      const q = getCachedQuote(h.symbol, ex);
+      const nativePrice = q?.price ?? h.avg_buy_price;
+      // USD holdings: convert native price × FX → ₹ before summing.
+      if (h.currency === 'USD' || ex === 'NASDAQ' || ex === 'NYSE') {
+        holdingsValue += nativePrice * (await fx()) * h.quantity;
+      } else {
+        holdingsValue += nativePrice * h.quantity;
+      }
     }
     const totalValue = user.balance + holdingsValue;
     try {
@@ -333,7 +391,9 @@ export async function executePendingOrdersAtOpen() {
 }
 
 export async function executePendingOrdersIntraday() {
-  if (!isMarketOpen()) return;
+  // Run the sweep whenever any region we trade is open. The sweep itself
+  // skips orders for a region whose market is currently closed.
+  if (!isMarketOpen('NSE') && !isMarketOpen('NASDAQ')) return;
   await sweepPendingOrders('intraday');
 }
 

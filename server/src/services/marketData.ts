@@ -1,14 +1,18 @@
 import YahooFinance from 'yahoo-finance2';
 import { isHolidayToday, holidayDescription } from './nseHolidays.js';
+import { regionFor, isRegionOpen, regionStatusLabel, REGIONS, type Region } from './regions.js';
 
 const yahooFinance = new YahooFinance();
 
 // Silence the noisy survey/notice banner (best-effort, API varies by version)
 try { (yahooFinance as any).suppressNotices?.(['yahooSurvey']); } catch {}
 
+/** All trading-venue codes the engine understands. */
+export type ExchangeCode = 'NSE' | 'BSE' | 'NASDAQ' | 'NYSE';
+
 export interface Quote {
-  symbol: string;          // raw symbol e.g. "RELIANCE"
-  exchange: 'NSE' | 'BSE'; // which suffix we used
+  symbol: string;          // raw symbol e.g. "RELIANCE" or "AAPL"
+  exchange: ExchangeCode;  // which venue + region we used
   price: number;
   change: number;
   change_percent: number;
@@ -36,10 +40,14 @@ export function getISTDate(): Date {
   return new Date(utcMs + 5.5 * 3600000);
 }
 
-export function isMarketOpen(): boolean {
+export function isMarketOpen(exchange?: ExchangeCode): boolean {
   // Opt-in bypass for the AI-Trade sandbox / UAT only. Production (flag unset)
   // enforces real NSE hours so out-of-hours orders queue for the next open.
   if (process.env.BYPASS_MARKET_HOURS === 'true') return true;
+  // Delegate to region calendar when caller specifies a non-IN venue.
+  if (exchange === 'NASDAQ' || exchange === 'NYSE') {
+    return isRegionOpen(REGIONS.US);
+  }
   const ist = getISTDate();
   const day = ist.getDay(); // 0=Sun, 6=Sat
   if (day === 0 || day === 6) return false;
@@ -48,6 +56,17 @@ export function isMarketOpen(): boolean {
   const openMin = MARKET_OPEN_H * 60 + MARKET_OPEN_M;
   const closeMin = MARKET_CLOSE_H * 60 + MARKET_CLOSE_M;
   return minutes >= openMin && minutes <= closeMin;
+}
+
+/** Status for the US region — for the new Global Markets page. */
+export function getUsMarketStatus() {
+  const region = REGIONS.US;
+  const now = new Date();
+  return {
+    isOpen: isRegionOpen(region, now),
+    label: regionStatusLabel(region, now),
+    pollIntervalMs: isRegionOpen(region, now) ? 4_000 : 300_000,
+  };
 }
 
 export function getMarketStatus() {
@@ -177,16 +196,18 @@ export const TRADEABLE_INDICES = [
   { symbol: 'NIFTYMIDCAP', name: 'NIFTY Midcap Index' },
 ];
 
-function yahooTicker(symbol: string, exchange: 'NSE' | 'BSE') {
+function yahooTicker(symbol: string, exchange: ExchangeCode) {
   const up = symbol.toUpperCase();
   if (up.startsWith('^')) return up;          // raw Yahoo index ticker
   const idx = INDEX_TICKERS[up];
   if (idx) return idx;                        // tradeable index alias
+  if (exchange === 'NASDAQ' || exchange === 'NYSE') return up; // US tickers are bare
   return `${symbol}.${exchange === 'NSE' ? 'NS' : 'BO'}`;
 }
 
-function mapYahooQuote(q: any, symbol: string, exchange: 'NSE' | 'BSE'): Quote | null {
+function mapYahooQuote(q: any, symbol: string, exchange: ExchangeCode): Quote | null {
   if (!q || typeof q.regularMarketPrice !== 'number') return null;
+  const defaultCcy = (exchange === 'NASDAQ' || exchange === 'NYSE') ? 'USD' : 'INR';
   return {
     symbol,
     exchange,
@@ -197,7 +218,7 @@ function mapYahooQuote(q: any, symbol: string, exchange: 'NSE' | 'BSE'): Quote |
     day_high: q.regularMarketDayHigh ?? q.regularMarketPrice,
     day_low: q.regularMarketDayLow ?? q.regularMarketPrice,
     volume: q.regularMarketVolume ?? 0,
-    currency: q.currency ?? 'INR',
+    currency: q.currency ?? defaultCcy,
     market_cap: q.marketCap,
     pe_ratio: q.trailingPE,
     high_52w: q.fiftyTwoWeekHigh,
@@ -219,7 +240,7 @@ function sleep(ms: number) {
  * even when /v7/quote returns 429 "Failed to get crumb" (common on shared
  * cloud IPs). Slower than batched quote() but reliable.
  */
-async function fetchQuoteViaChart(symbol: string, exchange: 'NSE' | 'BSE'): Promise<Quote | null> {
+async function fetchQuoteViaChart(symbol: string, exchange: ExchangeCode): Promise<Quote | null> {
   try {
     const ticker = yahooTicker(symbol, exchange);
     const res = (await yahooFinance.chart(ticker, {
@@ -232,6 +253,7 @@ async function fetchQuoteViaChart(symbol: string, exchange: 'NSE' | 'BSE'): Prom
     const prevClose: number = meta.chartPreviousClose ?? meta.previousClose ?? price;
     const change = price - prevClose;
     const changePct = prevClose > 0 ? (change / prevClose) * 100 : 0;
+    const defaultCcy = (exchange === 'NASDAQ' || exchange === 'NYSE') ? 'USD' : 'INR';
     return {
       symbol,
       exchange,
@@ -242,7 +264,7 @@ async function fetchQuoteViaChart(symbol: string, exchange: 'NSE' | 'BSE'): Prom
       day_high: meta.regularMarketDayHigh ?? price,
       day_low: meta.regularMarketDayLow ?? price,
       volume: meta.regularMarketVolume ?? 0,
-      currency: meta.currency ?? 'INR',
+      currency: meta.currency ?? defaultCcy,
       name: meta.longName || meta.shortName || meta.symbol,
       exchange_long: meta.fullExchangeName,
     };
@@ -257,13 +279,14 @@ async function fetchQuoteViaChart(symbol: string, exchange: 'NSE' | 'BSE'): Prom
  * or a zero-priced dummy if we have nothing yet. The background poller is
  * the sole source of truth for cache freshness.
  */
-export function getCachedQuote(symbol: string, exchange: 'NSE' | 'BSE' = 'NSE'): Quote {
+export function getCachedQuote(symbol: string, exchange: ExchangeCode = 'NSE'): Quote {
   const hit = cache.get(`${symbol}:${exchange}`);
   if (hit) return hit.data;
-  return { symbol, exchange, price: 0, change: 0, change_percent: 0, previous_close: 0, day_high: 0, day_low: 0, volume: 0, currency: 'INR' };
+  const ccy = (exchange === 'NASDAQ' || exchange === 'NYSE') ? 'USD' : 'INR';
+  return { symbol, exchange, price: 0, change: 0, change_percent: 0, previous_close: 0, day_high: 0, day_low: 0, volume: 0, currency: ccy };
 }
 
-export function getCachedQuotes(items: { symbol: string; exchange?: 'NSE' | 'BSE' }[]): Quote[] {
+export function getCachedQuotes(items: { symbol: string; exchange?: ExchangeCode }[]): Quote[] {
   return items.map((it) => getCachedQuote(it.symbol, it.exchange ?? 'NSE'));
 }
 
@@ -284,7 +307,7 @@ export function getCachedIndices(): IndexQuote[] {
   return out;
 }
 
-export async function getQuote(symbol: string, exchange: 'NSE' | 'BSE' = 'NSE', forceRefresh = false): Promise<Quote | null> {
+export async function getQuote(symbol: string, exchange: ExchangeCode = 'NSE', forceRefresh = false): Promise<Quote | null> {
   const key = `${symbol}:${exchange}`;
   const hit = cache.get(key);
   const now = Date.now();
@@ -316,23 +339,24 @@ export async function getQuote(symbol: string, exchange: 'NSE' | 'BSE' = 'NSE', 
   if (hit && now - hit.at < STALE_GRACE_MS) return hit.data;
 
   // Otherwise, cache a dummy to prevent immediate retry spam
-  const dummy: Quote = { symbol, exchange, price: 0, change: 0, change_percent: 0, previous_close: 0, day_high: 0, day_low: 0, volume: 0, currency: 'INR' };
+  const dummyCcy = (exchange === 'NASDAQ' || exchange === 'NYSE') ? 'USD' : 'INR';
+  const dummy: Quote = { symbol, exchange, price: 0, change: 0, change_percent: 0, previous_close: 0, day_high: 0, day_low: 0, volume: 0, currency: dummyCcy };
   cache.set(key, { data: dummy, at: now });
   return dummy;
 }
 
 export async function getQuotes(
-  items: { symbol: string; exchange?: 'NSE' | 'BSE' }[],
+  items: { symbol: string; exchange?: ExchangeCode }[],
   forceRefresh = false
 ): Promise<Quote[]> {
   const now = Date.now();
   const ttl = getTTL();
   const tickers: string[] = [];
-  const missKey: Record<string, { symbol: string; exchange: 'NSE' | 'BSE' }> = {};
+  const missKey: Record<string, { symbol: string; exchange: ExchangeCode }> = {};
   const out: Quote[] = [];
 
   for (const it of items) {
-    const exchange = it.exchange ?? 'NSE';
+    const exchange: ExchangeCode = it.exchange ?? 'NSE';
     const key = `${it.symbol}:${exchange}`;
     const hit = cache.get(key);
 
@@ -376,7 +400,8 @@ export async function getQuotes(
         if (!foundTickers.has(ticker)) {
           const src = missKey[ticker];
           if (src) {
-            const dummy: Quote = { symbol: src.symbol, exchange: src.exchange, price: 0, change: 0, change_percent: 0, previous_close: 0, day_high: 0, day_low: 0, volume: 0, currency: 'INR' };
+            const ccy = (src.exchange === 'NASDAQ' || src.exchange === 'NYSE') ? 'USD' : 'INR';
+            const dummy: Quote = { symbol: src.symbol, exchange: src.exchange, price: 0, change: 0, change_percent: 0, previous_close: 0, day_high: 0, day_low: 0, volume: 0, currency: ccy };
             cache.set(`${src.symbol}:${src.exchange}`, { data: dummy, at: now });
             out.push(dummy);
           }
@@ -429,7 +454,7 @@ export async function getQuotes(
 
 export async function getHistory(
   symbol: string,
-  exchange: 'NSE' | 'BSE' = 'NSE',
+  exchange: ExchangeCode = 'NSE',
   period1: Date = new Date(Date.now() - 90 * 24 * 3600 * 1000),
   interval: '1m' | '2m' | '5m' | '15m' | '30m' | '60m' | '90m' | '1h' | '1d' | '5d' | '1wk' | '1mo' | '3mo' = '1d'
 ) {
@@ -452,26 +477,37 @@ export async function getHistory(
 }
 
 /**
- * Free-text symbol/name search via Yahoo Finance. Returns NSE/BSE only.
+ * Free-text symbol/name search via Yahoo Finance. Includes NSE, BSE, NASDAQ
+ * and NYSE results. Pass `region` to scope the search.
  */
-export async function searchSymbols(query: string, limit = 15) {
+export async function searchSymbols(query: string, limit = 15, region?: 'IN' | 'US' | 'all') {
   if (!query) return [];
   try {
     const res = (await yahooFinance.search(query, { quotesCount: limit * 2, newsCount: 0 })) as any;
     const quotes = res?.quotes || [];
-    return quotes
-      .filter((q: any) => q?.symbol && (q.symbol.endsWith('.NS') || q.symbol.endsWith('.BO')))
-      .slice(0, limit)
-      .map((q: any) => {
-        const ex = q.symbol.endsWith('.NS') ? 'NSE' : 'BSE';
-        const bareSymbol = q.symbol.replace(/\.(NS|BO)$/, '');
-        return {
-          symbol: bareSymbol,
-          name: q.longname || q.shortname || bareSymbol,
-          exchange: ex,
-          type: q.quoteType,
-        };
-      });
+    const filtered = quotes.filter((q: any) => {
+      if (!q?.symbol) return false;
+      const inIN = q.symbol.endsWith('.NS') || q.symbol.endsWith('.BO');
+      const inUS = (q.exchange === 'NMS' || q.exchange === 'NYQ' || q.exchange === 'NGM' || q.exchange === 'NCM')
+        && !q.symbol.includes('.') && !q.symbol.startsWith('^');
+      if (region === 'IN') return inIN;
+      if (region === 'US') return inUS;
+      return inIN || inUS;
+    });
+    return filtered.slice(0, limit).map((q: any) => {
+      let ex: ExchangeCode = 'NSE';
+      let bareSymbol = q.symbol as string;
+      if (q.symbol.endsWith('.NS')) { ex = 'NSE'; bareSymbol = q.symbol.replace(/\.NS$/, ''); }
+      else if (q.symbol.endsWith('.BO')) { ex = 'BSE'; bareSymbol = q.symbol.replace(/\.BO$/, ''); }
+      else if (q.exchange === 'NYQ') { ex = 'NYSE'; }
+      else { ex = 'NASDAQ'; }
+      return {
+        symbol: bareSymbol,
+        name: q.longname || q.shortname || bareSymbol,
+        exchange: ex,
+        type: q.quoteType,
+      };
+    });
   } catch {
     return [];
   }
@@ -485,6 +521,16 @@ export const INDICES = [
   { symbol: '^CNX100',     name: 'NIFTY 100' },
   { symbol: '^CNXIT',      name: 'NIFTY IT' },
   { symbol: '^NSEMDCP50',  name: 'MIDCAP 50' },
+];
+
+// ── US/global market indices ──
+export const US_INDICES = [
+  { symbol: '^GSPC',  name: 'S&P 500' },
+  { symbol: '^IXIC',  name: 'NASDAQ Composite' },
+  { symbol: '^DJI',   name: 'Dow Jones' },
+  { symbol: '^VIX',   name: 'VIX' },
+  { symbol: '^RUT',   name: 'Russell 2000' },
+  { symbol: '^FTSE',  name: 'FTSE 100' },
 ];
 
 export interface IndexQuote {
@@ -564,6 +610,61 @@ export async function getIndices(forceRefresh = false): Promise<IndexQuote[]> {
           const stale = indexCache.get(idx.symbol);
           if (stale) fresh.push(stale.data);
         }
+      }
+    }
+  }
+  return fresh;
+}
+
+// ── US indices: cache + fetch ──
+const usIndexCache = new Map<string, { at: number; data: IndexQuote }>();
+
+export function getCachedUsIndices(): IndexQuote[] {
+  const out: IndexQuote[] = [];
+  for (const idx of US_INDICES) {
+    const hit = usIndexCache.get(idx.symbol);
+    if (hit) out.push(hit.data);
+  }
+  return out;
+}
+
+export async function getUsIndices(forceRefresh = false): Promise<IndexQuote[]> {
+  const ttl = getTTL();
+  const now = Date.now();
+  const fresh: IndexQuote[] = [];
+  const missing: typeof US_INDICES = [];
+
+  for (const idx of US_INDICES) {
+    const hit = usIndexCache.get(idx.symbol);
+    const isFreshEnough = forceRefresh ? (hit && now - hit.at < ttl) : (hit && now - hit.at < STALE_GRACE_MS);
+    if (isFreshEnough && hit) fresh.push(hit.data);
+    else missing.push(idx);
+  }
+
+  if (missing.length) {
+    try {
+      const results = (await yahooFinance.quote(missing.map((i) => i.symbol))) as any;
+      const arr = Array.isArray(results) ? results : [results];
+      for (const q of arr) {
+        if (!q || typeof q.regularMarketPrice !== 'number') continue;
+        const meta = missing.find((m) => m.symbol === q.symbol);
+        if (!meta) continue;
+        const data: IndexQuote = {
+          symbol: meta.symbol,
+          name: meta.name,
+          price: q.regularMarketPrice,
+          change: q.regularMarketChange ?? 0,
+          change_percent: q.regularMarketChangePercent ?? 0,
+          previous_close: q.regularMarketPreviousClose ?? q.regularMarketPrice,
+        };
+        usIndexCache.set(meta.symbol, { at: now, data });
+        fresh.push(data);
+      }
+    } catch (err: any) {
+      console.warn('[market] getUsIndices failed:', err?.message || err);
+      for (const idx of missing) {
+        const stale = usIndexCache.get(idx.symbol);
+        if (stale) fresh.push(stale.data);
       }
     }
   }

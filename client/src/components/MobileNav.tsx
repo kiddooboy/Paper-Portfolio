@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom';
-import { LayoutDashboard, Search, Wallet, Bookmark, User, TrendingUp } from 'lucide-react';
+import { LayoutDashboard, Wallet, Bookmark, User, TrendingUp, Globe } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 const navItems = [
   { path: '/', label: 'Home', icon: LayoutDashboard },
-  { path: '/market', label: 'Market', icon: Search },
+  { path: '/global-markets', label: 'Global', icon: Globe },
   { path: '/portfolio', label: 'Portfolio', icon: Wallet },
   { path: '/positions', label: 'Holdings', icon: TrendingUp },
   { path: '/watchlist', label: 'Watch', icon: Bookmark },
