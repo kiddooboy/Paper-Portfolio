@@ -128,9 +128,12 @@ async function poll() {
   const store = useMarketStore.getState();
   await store.fetchLive();
 
-  // 10s during market hours, 5min when closed (use server status to detect)
+  // 10s during market hours, 30min when closed. The 30-min cadence is just
+  // enough to detect the transition back to open without continuously
+  // refreshing prices that haven't changed since the close — the Top Gainers
+  // / Top Losers / Most Active / Watchlist widgets visibly freeze.
   const isOpen = store.status?.isOpen ?? true;
-  const interval = isOpen ? 10_000 : 300_000;
+  const interval = isOpen ? 10_000 : 1_800_000;
   pollTimer = setTimeout(poll, interval);
 }
 

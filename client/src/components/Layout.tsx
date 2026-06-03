@@ -110,7 +110,7 @@ export default function Layout() {
             <TrendingUp className="w-6 h-6 text-groww-primary" />
             <span className="font-bold text-lg tracking-tight hidden sm:inline">Paper Portfolio</span>
           </div>
-          <MarketBadge />
+          <MarketBadges />
           <div className="flex-1 flex justify-center" data-tour="search">
             <GlobalSearch />
           </div>
@@ -382,25 +382,51 @@ function ProfileMenu({ dark, onToggleDark }: { dark: boolean; onToggleDark: () =
   );
 }
 
-function MarketBadge() {
-  const status = useMarketStore((s) => s.status);
-  if (!status) return null;
+function MarketBadges() {
+  const inStatus = useMarketStore((s) => s.status);
+  const [usStatus, setUsStatus] = useState<{ isOpen: boolean; label: string } | null>(null);
 
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      try {
+        const res = await axios.get('/api/global/status');
+        if (alive) setUsStatus({ isOpen: !!res.data?.isOpen, label: res.data?.label || 'Closed' });
+      } catch { /* keep stale */ }
+    }
+    load();
+    // Cheap 30 s poll — just a status flip, not market data.
+    const t = setInterval(load, 30_000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+
+  return (
+    <div className="hidden sm:flex items-center gap-1.5 shrink-0">
+      <MarketPill region="IN" label={inStatus?.label || '…'} isOpen={!!inStatus?.isOpen} />
+      <MarketPill region="US" label={usStatus?.label || '…'} isOpen={!!usStatus?.isOpen} />
+    </div>
+  );
+}
+
+function MarketPill({ region, label, isOpen }: { region: 'IN' | 'US'; label: string; isOpen: boolean }) {
   const colorMap: Record<string, string> = {
     Open: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
     'Pre-market': 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
     'After hours': 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
-    Closed: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+    Holiday: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+    Closed: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
   };
-  const dotColor = status.isOpen ? 'bg-green-500' : 'bg-red-500';
-
   return (
-    <div className={cn('hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide shrink-0', colorMap[status.label] || colorMap.Closed)}>
-      <span className="relative flex h-2 w-2">
-        {status.isOpen && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />}
-        <span className={cn('relative inline-flex rounded-full h-2 w-2', dotColor)} />
+    <div
+      title={`${region === 'IN' ? 'NSE / BSE' : 'NYSE / NASDAQ'} — ${label}`}
+      className={cn('flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide', colorMap[label] || colorMap.Closed)}
+    >
+      <span className="relative flex h-1.5 w-1.5">
+        {isOpen && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />}
+        <span className={cn('relative inline-flex rounded-full h-1.5 w-1.5', isOpen ? 'bg-green-500' : 'bg-gray-400')} />
       </span>
-      {status.label}
+      <span className="hidden md:inline">{region}</span>
+      <span className="text-[9px] opacity-80">{label}</span>
     </div>
   );
 }

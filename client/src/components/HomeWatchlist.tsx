@@ -53,6 +53,7 @@ export default function HomeWatchlist() {
   const [fxRate, setFxRate] = useState<number>(0);
 
   const quotes = useMarketStore((s) => s.quotes);
+  const inMarketOpen = useMarketStore((s) => s.status?.isOpen ?? true);
   const ccyPref = useAuthStore((s) => s.user?.currency_display || 'INR');
 
   // Make sure tier1 picks up our visible symbols.
@@ -70,7 +71,8 @@ export default function HomeWatchlist() {
     return () => { alive = false; };
   }, []);
 
-  // Fetch today's intraday sparkline once on mount, then refresh every 5 min.
+  // Fetch today's intraday sparkline once on mount, then refresh every 5 min
+  // while IN market is open. When closed, fetch once and freeze the chart.
   useEffect(() => {
     let alive = true;
     async function fetchAll() {
@@ -100,9 +102,12 @@ export default function HomeWatchlist() {
       }
     }
     fetchAll();
+    // Only set up the 5-min refresh interval when IN market is open; when
+    // closed the sparkline stays at the closing intraday curve.
+    if (!inMarketOpen) return () => { alive = false; };
     const id = setInterval(fetchAll, 5 * 60_000);
     return () => { alive = false; clearInterval(id); };
-  }, []);
+  }, [inMarketOpen]);
 
   const filtered = useMemo(
     () => (tab === 'all' ? WATCHLIST : WATCHLIST.filter((w) => w.region === tab)),
@@ -196,7 +201,7 @@ export default function HomeWatchlist() {
 
       {/* Footer */}
       <div className="px-3 py-2 text-[10px] text-gray-400 dark:text-gray-500 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between">
-        <span>Live · refresh 4s · sparkline = today's intraday</span>
+        <span>{inMarketOpen ? 'Live · 4s · sparkline = today' : 'Frozen at close · sparkline = today'}</span>
         {fxRate > 0 && <span className="font-mono">₹{fxRate.toFixed(2)}/$</span>}
       </div>
     </div>
