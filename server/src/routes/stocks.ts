@@ -1,15 +1,19 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
-import { getQuote, getCachedQuote, getCachedQuotes, getCachedIndices, getHistory, isMarketOpen, getMarketStatus, getSectors, getAllCachedQuotes } from '../services/marketData.js';
+import { getQuote, getCachedQuote, getCachedQuotes, getCachedIndices, getHistory, isMarketOpen, getMarketStatus, getSectors, getAllCachedQuotes, type ExchangeCode } from '../services/marketData.js';
 import { subscribe as subscribeTick, subscribeWithSession, setSessionSymbols } from '../services/tickBroadcast.js';
 import { logActivity, getClientIp } from '../services/activityLogger.js';
 
 const router = Router();
 
-type Exchange = 'NSE' | 'BSE';
+type Exchange = ExchangeCode;
 function parseExchange(v: any): Exchange {
-  return (v === 'BSE' ? 'BSE' : 'NSE');
+  const up = String(v || '').toUpperCase();
+  if (up === 'BSE') return 'BSE';
+  if (up === 'NASDAQ') return 'NASDAQ';
+  if (up === 'NYSE') return 'NYSE';
+  return 'NSE';
 }
 
 // GET /api/stocks/market-status — market open/closed status + recommended poll interval
@@ -638,7 +642,9 @@ router.get('/:symbol/fundamentals', async (req, res) => {
     const { getFundamentals } = await import('../services/fundamentals.js');
     const symbol = req.params.symbol.toUpperCase();
     const exchange = parseExchange(req.query.exchange);
-    const data = await getFundamentals(symbol, exchange);
+    // getFundamentals is India-only (screener.in) — pin to NSE for US symbols.
+    const fundEx: 'NSE' | 'BSE' = exchange === 'BSE' ? 'BSE' : 'NSE';
+    const data = await getFundamentals(symbol, fundEx);
     res.set('Cache-Control', 'public, max-age=600');
     res.json(data);
   } catch (err: any) {
@@ -744,11 +750,12 @@ router.get('/:symbol/history', async (req, res) => {
   const symbol = req.params.symbol.toUpperCase();
   const exchange = parseExchange(req.query.exchange);
   const range = String(req.query.range || '3mo');
-  const interval = (String(req.query.interval || '1d') as '1d' | '1h' | '1wk' | '1mo');
+  const interval = (String(req.query.interval || '1d') as '5m' | '15m' | '30m' | '60m' | '1h' | '1d' | '1wk' | '1mo');
 
   const now = Date.now();
   const rangeMs: Record<string, number> = {
-    '1d':  7  * 24 * 3600 * 1000,  // 7 days back so weekends/holidays always have data
+    'today': 2 * 24 * 3600 * 1000,   // for intraday sparkline — last 2 calendar days
+    '1d':  7  * 24 * 3600 * 1000,    // 7 days back so weekends/holidays always have data
     '5d':  14 * 24 * 3600 * 1000,
     '1mo': 35 * 24 * 3600 * 1000,
     '3mo': 95 * 24 * 3600 * 1000,

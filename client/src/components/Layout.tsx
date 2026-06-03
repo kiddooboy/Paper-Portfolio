@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import Sidebar from './Sidebar';
 import MobileNav from './MobileNav';
+import AIChatFab from './AIChatFab';
 import GlobalSearch from './GlobalSearch';
 import SetMpinModal from './SetMpinModal';
 import IdleLock from './IdleLock';
@@ -212,6 +213,7 @@ export default function Layout() {
       <IdleLock />
       {tourOpen && <ProductTour onClose={closeTour} />}
       {!isFullscreen && <MobileNav activePath={location.pathname} />}
+      {!isFullscreen && isAuthenticated && <AIChatFab />}
 
     </div>
   );

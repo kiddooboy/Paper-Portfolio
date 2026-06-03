@@ -6,7 +6,7 @@ import { useAuthStore } from '../store/authStore';
 import { useMarketStore } from '../store/marketStore';
 import { usePortfolioStore } from '../store/portfolioStore';
 import StockLogo from '../components/StockLogo';
-import AIChatPanel from '../components/AIChatPanel';
+import HomeWatchlist from '../components/HomeWatchlist';
 import axios from 'axios';
 
 interface SectorQuote {
@@ -260,9 +260,9 @@ export default function Dashboard() {
 
     </div>{/* end left col */}
 
-    {/* ── Right: AI Chat Panel ── */}
+    {/* ── Right: Live cross-region watchlist ── */}
     <div className="hidden xl:flex flex-col w-[360px] shrink-0 lg:h-full">
-      <AIChatPanel />
+      <HomeWatchlist />
     </div>
 
     </div>
