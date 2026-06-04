@@ -56,25 +56,64 @@ export default function Dashboard() {
   const lastFetched = useMarketStore((s) => s.lastFetched);
   const tick = lastTickAt || lastFetched;
 
+  const [rotationIndex, setRotationIndex] = useState(() => Math.floor(Math.random() * 100));
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setRotationIndex((prev) => prev + 1);
+    }, 4000);
+    return () => clearInterval(id);
+  }, []);
+
   // Derive gainers/losers, most bought from the global live quote store.
   // - Only consider quotes with a real price (>0) so we never surface ghost
   //   entries that would render as "₹0.00" in the UI.
   // - Restrict to Indian venues (NSE/BSE) — US tickers have their own
   //   dedicated section under /global-markets, so mixing them into the
   //   main Dashboard movers (whose prices are formatted in ₹) is confusing.
-  const { gainers, losers, mostBought } = useMemo(() => {
+  const { allGainers, allLosers, allMostActive } = useMemo(() => {
     const arr = Object.values(allQuotes).filter(
       (q): q is NonNullable<typeof q> => !!q
         && typeof q.change_percent === 'number'
         && q.price > 0
         && (q.exchange === 'NSE' || q.exchange === 'BSE')
     );
-    const g = arr.filter(q => q.change_percent > 0).sort((a, b) => b.change_percent - a.change_percent).slice(0, 8);
-    const l = arr.filter(q => q.change_percent < 0).sort((a, b) => a.change_percent - b.change_percent).slice(0, 8);
-    const mb = arr.filter(q => q.volume && q.volume > 0).sort((a, b) => (b.volume || 0) - (a.volume || 0)).slice(0, 8);
-    return { gainers: g, losers: l, mostBought: mb };
+    const g = arr.filter(q => q.change_percent > 0).sort((a, b) => b.change_percent - a.change_percent).slice(0, 24);
+    const l = arr.filter(q => q.change_percent < 0).sort((a, b) => a.change_percent - b.change_percent).slice(0, 24);
+    const ma = arr.filter(q => q.volume && q.volume > 0).sort((a, b) => (b.volume || 0) - (a.volume || 0)).slice(0, 24);
+    return { allGainers: g, allLosers: l, allMostActive: ma };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allQuotes, tick]);
+
+  const gainers = useMemo(() => {
+    if (allGainers.length <= 6) return allGainers;
+    const start = rotationIndex % allGainers.length;
+    const res = [];
+    for (let i = 0; i < 6; i++) {
+      res.push(allGainers[(start + i) % allGainers.length]);
+    }
+    return res;
+  }, [allGainers, rotationIndex]);
+
+  const losers = useMemo(() => {
+    if (allLosers.length <= 6) return allLosers;
+    const start = rotationIndex % allLosers.length;
+    const res = [];
+    for (let i = 0; i < 6; i++) {
+      res.push(allLosers[(start + i) % allLosers.length]);
+    }
+    return res;
+  }, [allLosers, rotationIndex]);
+
+  const mostBought = useMemo(() => {
+    if (allMostActive.length <= 6) return allMostActive;
+    const start = rotationIndex % allMostActive.length;
+    const res = [];
+    for (let i = 0; i < 6; i++) {
+      res.push(allMostActive[(start + i) % allMostActive.length]);
+    }
+    return res;
+  }, [allMostActive, rotationIndex]);
 
   // Enrich portfolio holdings with live prices
   const enrichedPortfolio = useMemo(() => {
