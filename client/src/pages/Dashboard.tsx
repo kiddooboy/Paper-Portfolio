@@ -21,9 +21,12 @@ interface SectorQuote {
 }
 
 // Sector name → its NSE sector-index symbol on Yahoo. Used to fetch a fresh
-// intraday curve per sector so each card carries a real day-shape sparkline,
-// not a fabricated one.
+// intraday curve per sector so each card carries a real day-shape sparkline.
+// Covers both NSE's industry classifications (Capital Goods, Fast Moving
+// Consumer Goods, …) used by the screener and the shorter sectoral-index
+// names used elsewhere — same Yahoo ticker, multiple aliases.
 const SECTOR_INDEX_SYMBOL: Record<string, string> = {
+  // Direct sectoral-index names
   IT: '^CNXIT',
   FMCG: '^CNXFMCG',
   Pharma: '^CNXPHARMA',
@@ -44,6 +47,34 @@ const SECTOR_INDEX_SYMBOL: Record<string, string> = {
   Consumption: '^CNXCONSUMPTION',
   Commodities: '^CNXCOMMODITY',
   Smallcap: '^CNXSMALLCAP',
+
+  // NSE industry-classification aliases (what /api/stocks/sectors actually returns)
+  'Information Technology':              '^CNXIT',
+  'Fast Moving Consumer Goods':          '^CNXFMCG',
+  'Consumer Staples':                    '^CNXFMCG',
+  'Automobile and Auto Components':      '^CNXAUTO',
+  'Health Care':                         '^CNXHEALTHCARE',
+  'Financial Services':                  '^CNXFINANCE',
+  'Financials':                          '^CNXFINANCE',
+  'Oil Gas & Consumable Fuels':          '^CNXENERGY',
+  'Utilities':                           '^CNXENERGY',
+  'Power':                               '^CNXENERGY',
+  'Metals & Mining':                     '^CNXMETAL',
+  'Materials':                           '^CNXMETAL',
+  'Real Estate':                         '^CNXREALTY',
+  'Capital Goods':                       '^CNXINFRA',
+  'Construction':                        '^CNXINFRA',
+  'Construction Materials':              '^CNXINFRA',
+  'Industrials':                         '^CNXINFRA',
+  'Consumer Durables':                   '^CNXCONSUMPTION',
+  'Consumer Discretionary':              '^CNXCONSUMPTION',
+  'Consumer Services':                   '^CNXSERVICE',
+  'Media Entertainment & Publication':   '^CNXMEDIA',
+  'Communication Services':              '^CNXMEDIA',
+  'Telecommunication':                   '^CNXMEDIA',
+  'Chemicals':                           '^CNXCOMMODITY',
+  // Some sectors genuinely have no Yahoo NSE index proxy — they fall back
+  // to a flat baseline instead of an infinite loading pulse.
 };
 
 export default function Dashboard() {
@@ -110,13 +141,16 @@ export default function Dashboard() {
     return () => { alive = false; clearInterval(id); };
   }, [sectors, marketIsOpen]);
 
-  // Derive gainers/losers, most bought from the global live quote store
+  // Derive gainers/losers, most bought from the global live quote store.
+  // Only consider quotes with a real price (>0) so we never surface ghost
+  // entries that would render as "₹0.00" in the UI.
   const { gainers, losers, mostBought } = useMemo(() => {
-    const arr = Object.values(allQuotes);
-    const sorted = arr.filter(q => q && typeof q.change_percent === 'number');
-    const g = sorted.filter(q => q.change_percent > 0).sort((a, b) => b.change_percent - a.change_percent).slice(0, 5);
-    const l = sorted.filter(q => q.change_percent < 0).sort((a, b) => a.change_percent - b.change_percent).slice(0, 5);
-    const mb = sorted.filter(q => q.volume && q.volume > 0).sort((a, b) => (b.volume || 0) - (a.volume || 0)).slice(0, 5);
+    const arr = Object.values(allQuotes).filter(
+      (q): q is NonNullable<typeof q> => !!q && typeof q.change_percent === 'number' && q.price > 0
+    );
+    const g = arr.filter(q => q.change_percent > 0).sort((a, b) => b.change_percent - a.change_percent).slice(0, 5);
+    const l = arr.filter(q => q.change_percent < 0).sort((a, b) => a.change_percent - b.change_percent).slice(0, 5);
+    const mb = arr.filter(q => q.volume && q.volume > 0).sort((a, b) => (b.volume || 0) - (a.volume || 0)).slice(0, 5);
     return { gainers: g, losers: l, mostBought: mb };
   }, [allQuotes]);
 
@@ -246,6 +280,10 @@ export default function Dashboard() {
                   {sectors.slice(0, 8).map((s) => {
                     const up = s.change_percent >= 0;
                     const points = sectorSpark[s.name];
+                    // Only sectors with a mapped Yahoo index get a real spark;
+                    // others show a static baseline coloured by today's direction
+                    // (no infinite loading pulse).
+                    const hasMapping = !!SECTOR_INDEX_SYMBOL[s.name];
                     return (
                       <Link
                         key={s.name}
@@ -256,8 +294,13 @@ export default function Dashboard() {
                         <div className="mt-1 -mx-0.5 h-[18px]">
                           {points && points.length > 1 ? (
                             <Sparkline data={points} positive={up} width={68} height={18} strokeWidth={1.5} />
-                          ) : (
+                          ) : hasMapping ? (
                             <div className="h-full rounded bg-gray-100 dark:bg-gray-800/60 animate-pulse" />
+                          ) : (
+                            // No index proxy for this sector — flat baseline.
+                            <svg width={68} height={18} viewBox="0 0 68 18" className="opacity-50">
+                              <line x1="0" y1="9" x2="68" y2="9" stroke={up ? '#10b981' : '#ef4444'} strokeWidth={1.5} strokeDasharray="3 3" />
+                            </svg>
                           )}
                         </div>
                         <p className={cn('text-xs font-bold mt-0.5 tabular-nums', up ? 'text-gain' : 'text-loss')}>
@@ -317,7 +360,7 @@ export default function Dashboard() {
                   </div>
                 </span>
                 <div className="text-right shrink-0">
-                  <p className="text-sm font-semibold tabular-nums">{formatCurrency(s.price || 0)}</p>
+                  <p className="text-sm font-semibold tabular-nums">{s.price > 0 ? formatCurrency(s.price) : '—'}</p>
                   <p className={cn('text-[11px] font-medium tabular-nums', (s.change_percent ?? 0) >= 0 ? 'text-gain' : 'text-loss')}>
                     {(s.change_percent ?? 0) >= 0 ? '+' : ''}{(s.change_percent ?? 0).toFixed(2)}%
                   </p>
@@ -343,6 +386,7 @@ export default function Dashboard() {
 
 function StockRow({ s, pctColor }: { s: any; pctColor: 'gain' | 'loss' }) {
   const pct = s.change_percent ?? 0;
+  const priceLabel = s.price > 0 ? formatCurrency(s.price) : '—';
   return (
     <Link to={`/terminal/${s.symbol}?exchange=${s.exchange || 'NSE'}&fullscreen=1`}
       target="_blank" rel="noopener noreferrer"
@@ -352,7 +396,7 @@ function StockRow({ s, pctColor }: { s: any; pctColor: 'gain' | 'loss' }) {
         <p className="text-sm font-medium truncate">{s.symbol}</p>
       </span>
       <div className="text-right shrink-0">
-        <p className="text-sm font-semibold tabular-nums">{formatCurrency(s.price ?? 0)}</p>
+        <p className="text-sm font-semibold tabular-nums">{priceLabel}</p>
         <p className={cn('text-[11px] font-medium tabular-nums', pctColor === 'gain' ? 'text-gain' : 'text-loss')}>
           {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
         </p>
