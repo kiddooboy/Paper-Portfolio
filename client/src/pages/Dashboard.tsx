@@ -142,11 +142,17 @@ export default function Dashboard() {
   }, [sectors, marketIsOpen]);
 
   // Derive gainers/losers, most bought from the global live quote store.
-  // Only consider quotes with a real price (>0) so we never surface ghost
-  // entries that would render as "₹0.00" in the UI.
+  // - Only consider quotes with a real price (>0) so we never surface ghost
+  //   entries that would render as "₹0.00" in the UI.
+  // - Restrict to Indian venues (NSE/BSE) — US tickers have their own
+  //   dedicated section under /global-markets, so mixing them into the
+  //   main Dashboard movers (whose prices are formatted in ₹) is confusing.
   const { gainers, losers, mostBought } = useMemo(() => {
     const arr = Object.values(allQuotes).filter(
-      (q): q is NonNullable<typeof q> => !!q && typeof q.change_percent === 'number' && q.price > 0
+      (q): q is NonNullable<typeof q> => !!q
+        && typeof q.change_percent === 'number'
+        && q.price > 0
+        && (q.exchange === 'NSE' || q.exchange === 'BSE')
     );
     const g = arr.filter(q => q.change_percent > 0).sort((a, b) => b.change_percent - a.change_percent).slice(0, 5);
     const l = arr.filter(q => q.change_percent < 0).sort((a, b) => a.change_percent - b.change_percent).slice(0, 5);
