@@ -50,7 +50,7 @@ export default function StockDetail() {
     if (!symbol) return;
     const fetch = () => axios.get(`/api/stocks/${symbol}`, { params: { exchange } }).then((res) => setStock(res.data));
     fetch();
-    const id = setInterval(fetch, 15_000);
+    const id = setInterval(fetch, 8_000);
     return () => clearInterval(id);
   }, [symbol, exchange]);
 

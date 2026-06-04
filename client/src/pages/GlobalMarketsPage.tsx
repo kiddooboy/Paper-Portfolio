@@ -80,7 +80,7 @@ export default function GlobalMarketsPage() {
       } catch { /* keep stale */ }
     }
     load();
-    const t = setInterval(load, 30_000);
+    const t = setInterval(load, 8_000);
     return () => { alive = false; clearInterval(t); };
   }, []);
 

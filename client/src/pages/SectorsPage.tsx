@@ -77,7 +77,7 @@ export default function SectorsPage() {
       if (!cancelled) setLoading(false);
     };
     fetchData();
-    const id = setInterval(fetchData, 60_000);
+    const id = setInterval(fetchData, 8_000);
     return () => { cancelled = true; clearInterval(id); };
   }, []);
 

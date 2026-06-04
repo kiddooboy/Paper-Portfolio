@@ -245,7 +245,7 @@ function IndexTicker() {
       } catch {}
     };
     fetch();
-    const id = setInterval(fetch, 30_000);
+    const id = setInterval(fetch, 8_000);
     return () => { cancelled = true; clearInterval(id); };
   }, []);
 
@@ -397,7 +397,7 @@ function MarketBadges() {
     }
     load();
     // Cheap 30 s poll — just a status flip, not market data.
-    const t = setInterval(load, 30_000);
+    const t = setInterval(load, 8_000);
     return () => { alive = false; clearInterval(t); };
   }, []);
 

@@ -39,7 +39,11 @@ export default function PortfolioPage() {
   const [benchHistory, setBenchHistory] = useState<any>(null);
   const [selectedShareTrade, setSelectedShareTrade] = useState<any | null>(null);
 
-  useEffect(() => { fetchPortfolio(); }, [fetchPortfolio]);
+  useEffect(() => {
+    fetchPortfolio();
+    const id = setInterval(() => fetchPortfolio(true), 8_000);
+    return () => clearInterval(id);
+  }, [fetchPortfolio]);
 
   useEffect(() => {
     if ((tab === 'pnl' || tab === 'analytics') && !tradePnl) {

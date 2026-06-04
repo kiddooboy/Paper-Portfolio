@@ -46,7 +46,7 @@ export default function Dashboard() {
     fetch();
     // Freeze refresh when NSE is closed — values aren't changing anyway.
     if (!marketIsOpen) return () => { cancelled = true; };
-    const id = setInterval(fetch, 60_000);
+    const id = setInterval(fetch, 8_000);
     return () => { cancelled = true; clearInterval(id); };
   }, [marketIsOpen]);
 
@@ -97,7 +97,12 @@ export default function Dashboard() {
     return { ...portfolio, holdings };
   }, [portfolio, allQuotes]);
 
-  useEffect(() => { fetchPortfolioStore(); }, [fetchPortfolioStore]);
+  useEffect(() => {
+    fetchPortfolioStore();
+    if (!marketIsOpen) return;
+    const id = setInterval(() => fetchPortfolioStore(true), 8_000);
+    return () => clearInterval(id);
+  }, [fetchPortfolioStore, marketIsOpen]);
   useEffect(() => {
     if (portfolio?.balance !== undefined) updateBalance(portfolio.balance);
   }, [portfolio?.balance, updateBalance]);

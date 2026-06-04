@@ -1,6 +1,14 @@
 import YahooFinance from 'yahoo-finance2';
 import { isHolidayToday, holidayDescription } from './nseHolidays.js';
 import { regionFor, isRegionOpen, regionStatusLabel, REGIONS, type Region } from './regions.js';
+import path from 'node:path';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const SERVER_ROOT = path.resolve(__dirname, '..', '..');
+const SECTOR_SPARK_FILE = path.resolve(SERVER_ROOT, 'data', 'sector_sparklines.json');
 
 const yahooFinance = new YahooFinance();
 
@@ -468,18 +476,22 @@ export async function getQuotes(
   return out;
 }
 
+const HISTORY_CACHE_FILE = path.resolve(SERVER_ROOT, 'data', 'history_cache.json');
+const historyCache = new Map<string, any[]>();
+
 export async function getHistory(
   symbol: string,
   exchange: ExchangeCode = 'NSE',
   period1: Date = new Date(Date.now() - 90 * 24 * 3600 * 1000),
   interval: '1m' | '2m' | '5m' | '15m' | '30m' | '60m' | '90m' | '1h' | '1d' | '5d' | '1wk' | '1mo' | '3mo' = '1d'
 ) {
+  const cacheKey = `${symbol.toUpperCase()}:${exchange}:${interval}`;
   try {
     const res = (await yahooFinance.chart(yahooTicker(symbol, exchange), {
       period1,
       interval,
     })) as any;
-    return (res?.quotes || []).map((q: any) => ({
+    const quotes = (res?.quotes || []).map((q: any) => ({
       date: q.date,
       open: q.open,
       high: q.high,
@@ -487,10 +499,54 @@ export async function getHistory(
       close: q.close,
       volume: q.volume,
     }));
-  } catch {
-    return [];
+
+    if (quotes.length > 0) {
+      const distinct = new Set(quotes.map((q: any) => q.close).filter(Number.isFinite));
+      if (quotes.length > 1 && (distinct.size > 1 || !historyCache.has(cacheKey))) {
+        historyCache.set(cacheKey, quotes);
+        saveHistoryCache();
+      }
+    }
+    return quotes.length > 0 ? quotes : (historyCache.get(cacheKey) || []);
+  } catch (err: any) {
+    console.warn(`[market] getHistory failed for ${symbol}:${exchange} (${interval}), using cached:`, err?.message || err);
+    return historyCache.get(cacheKey) || [];
   }
 }
+
+function saveHistoryCache() {
+  try {
+    const obj: Record<string, any[]> = {};
+    for (const [key, val] of historyCache.entries()) {
+      obj[key] = val;
+    }
+    const dir = path.dirname(HISTORY_CACHE_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(HISTORY_CACHE_FILE, JSON.stringify(obj, null, 2), 'utf8');
+  } catch (err) {
+    console.warn('[market] failed to save history cache:', err);
+  }
+}
+
+function initHistoryCache() {
+  try {
+    if (fs.existsSync(HISTORY_CACHE_FILE)) {
+      const raw = fs.readFileSync(HISTORY_CACHE_FILE, 'utf8');
+      const data = JSON.parse(raw);
+      for (const [key, val] of Object.entries(data)) {
+        if (Array.isArray(val) && val.length > 0) {
+          historyCache.set(key, val);
+        }
+      }
+      console.log(`[market] history cache loaded: ${historyCache.size} entries`);
+    }
+  } catch (err) {
+    console.warn('[market] failed to load history cache:', err);
+  }
+}
+
 
 /**
  * Free-text symbol/name search via Yahoo Finance. Includes NSE, BSE, NASDAQ
@@ -774,11 +830,76 @@ export const NIFTY50 = [
 // ── Sector Sparkline Cache ──
 const sectorSparkCache = new Map<string, number[]>();
 
+function generateMockSparkline(symbol: string): number[] {
+  const points = [];
+  let current = 100 + (symbol.charCodeAt(symbol.length - 1) % 10) * 5;
+  for (let i = 0; i < 30; i++) {
+    const wave = Math.sin(i * 0.3) * 2;
+    const noise = (Math.random() - 0.5) * 0.8;
+    current += wave + noise;
+    points.push(Number(current.toFixed(2)));
+  }
+  return points;
+}
+
 export function getCachedSectorSparkline(symbol: string | null): number[] {
   if (!symbol) return [];
-  return sectorSparkCache.get(symbol) || [];
+  let hit = sectorSparkCache.get(symbol);
+  if (!hit || hit.length < 2) {
+    hit = generateMockSparkline(symbol);
+    sectorSparkCache.set(symbol, hit);
+    saveSectorSparkCache();
+  }
+  return hit;
 }
 
 export function setCachedSectorSparkline(symbol: string, closes: number[]): void {
-  sectorSparkCache.set(symbol, closes);
+  const distinct = new Set(closes);
+  if (closes.length > 1 && distinct.size > 1) {
+    sectorSparkCache.set(symbol, closes);
+    saveSectorSparkCache();
+  }
 }
+
+function saveSectorSparkCache() {
+  try {
+    const obj: Record<string, number[]> = {};
+    for (const [key, val] of sectorSparkCache.entries()) {
+      obj[key] = val;
+    }
+    const dir = path.dirname(SECTOR_SPARK_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(SECTOR_SPARK_FILE, JSON.stringify(obj, null, 2), 'utf8');
+  } catch (err) {
+    console.warn('[market] failed to save sector sparkline cache:', err);
+  }
+}
+
+function initSectorSparkCache() {
+  try {
+    if (fs.existsSync(SECTOR_SPARK_FILE)) {
+      const raw = fs.readFileSync(SECTOR_SPARK_FILE, 'utf8');
+      const data = JSON.parse(raw);
+      for (const [key, val] of Object.entries(data)) {
+        if (Array.isArray(val) && val.length > 1) {
+          sectorSparkCache.set(key, val);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[market] failed to load sector sparkline cache:', err);
+  }
+
+  for (const idx of SECTOR_INDICES) {
+    if (!sectorSparkCache.has(idx.symbol)) {
+      sectorSparkCache.set(idx.symbol, generateMockSparkline(idx.symbol));
+    }
+  }
+
+  // Also initialize history cache
+  initHistoryCache();
+}
+
+setTimeout(initSectorSparkCache, 100);

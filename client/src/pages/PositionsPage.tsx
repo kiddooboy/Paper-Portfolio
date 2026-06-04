@@ -74,20 +74,21 @@ export default function PositionsPage() {
       }
     }
     fetchPositions();
-    // Refresh day positions every 15s so new buys / live P&L appear without
-    // a manual reload.
+    // Refresh holdings, day positions and shorts every 8s so new trades appear without manual reload.
     const id = setInterval(async () => {
       try {
-        const [dayRes, shortsRes] = await Promise.all([
+        const [portfolioRes, dayRes, shortsRes] = await Promise.all([
+          axios.get('/api/portfolio'),
           axios.get('/api/orders/day-positions'),
           axios.get('/api/orders/mis-shorts'),
         ]);
         if (cancelled) return;
+        setHoldings(portfolioRes.data.holdings || []);
         setDayPositions(dayRes.data?.positions || []);
         setMisShorts(shortsRes.data || []);
         setDayDate(dayRes.data?.date || '');
       } catch {}
-    }, 15_000);
+    }, 8_000);
     return () => { cancelled = true; clearInterval(id); };
   }, []);
 

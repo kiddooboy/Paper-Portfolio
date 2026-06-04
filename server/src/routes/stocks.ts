@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
-import { getQuote, getCachedQuote, getCachedQuotes, getCachedIndices, getHistory, isMarketOpen, getMarketStatus, getSectors, getAllCachedQuotes, getCachedSectorSparkline, type ExchangeCode } from '../services/marketData.js';
+import { getQuote, getCachedQuote, getCachedQuotes, getCachedIndices, getHistory, isMarketOpen, getMarketStatus, getSectors, getAllCachedQuotes, getCachedSectorSparkline, SECTOR_INDICES, type ExchangeCode } from '../services/marketData.js';
 import { subscribe as subscribeTick, subscribeWithSession, setSessionSymbols } from '../services/tickBroadcast.js';
 import { logActivity, getClientIp } from '../services/activityLogger.js';
 
@@ -150,6 +150,7 @@ router.get('/sectors', async (_req, res) => {
         // Weighted avg (by market cap) when data available
         const weightedAvg = stats.sumMcap > 0 ? stats.weightedChangeSum / stats.sumMcap : avgChange;
         const indexName = SECTOR_INDEX_MAP[name];
+        const staticSymbol = indexName ? (SECTOR_INDICES.find(si => si.key === indexName || si.name === indexName)?.symbol || null) : null;
         const idx = indexName ? indexByName[indexName] : undefined;
         return {
           name,
@@ -161,10 +162,10 @@ router.get('/sectors', async (_req, res) => {
           unchanged: stats.unchanged,
           change_percent: +weightedAvg.toFixed(2),
           // Index reference (optional context)
-          indexSymbol: idx?.symbol || null,
+          indexSymbol: staticSymbol,
           indexPrice: idx?.price || null,
           indexChange: idx?.change_percent || null,
-          sparkline: idx?.symbol ? getCachedSectorSparkline(idx.symbol) : [],
+          sparkline: getCachedSectorSparkline(staticSymbol || name),
         };
       })
       .sort((a, b) => b.change_percent - a.change_percent);
