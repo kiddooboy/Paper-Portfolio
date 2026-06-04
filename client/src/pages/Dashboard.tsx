@@ -7,7 +7,6 @@ import { useMarketStore } from '../store/marketStore';
 import { usePortfolioStore } from '../store/portfolioStore';
 import StockLogo from '../components/StockLogo';
 import HomeWatchlist from '../components/HomeWatchlist';
-import Sparkline from '../components/Sparkline';
 import axios from 'axios';
 
 interface SectorQuote {
@@ -22,6 +21,47 @@ interface SectorQuote {
   indexPrice: number | null;
   indexChange: number | null;
   sparkline?: number[];
+}
+
+function heatColor(pct: number) {
+  if (pct >= 2) return 'bg-green-700 dark:bg-green-800';
+  if (pct >= 1) return 'bg-green-600 dark:bg-green-700';
+  if (pct >= 0) return 'bg-green-500/80 dark:bg-green-700/70';
+  if (pct >= -1) return 'bg-red-500/80 dark:bg-red-700/70';
+  if (pct >= -2) return 'bg-red-600 dark:bg-red-700';
+  return 'bg-red-700 dark:bg-red-800';
+}
+
+function shortName(name: string): string {
+  const map: Record<string, string> = {
+    'Information Technology': 'IT',
+    'Fast Moving Consumer Goods': 'FMCG',
+    'Healthcare': 'Healthcare',
+    'Automobile and Auto Components': 'Auto',
+    'Metals & Mining': 'Metals',
+    'Realty': 'Realty',
+    'Financial Services': 'Finance',
+    'Banking': 'Banking',
+    'Oil Gas & Consumable Fuels': 'Energy',
+    'Capital Goods': 'Cap Goods',
+    'Power': 'Power',
+    'Consumer Durables': 'Durables',
+    'Consumer Services': 'Services',
+    'Chemicals': 'Chemicals',
+    'Construction': 'Constru.',
+    'Construction Materials': 'Materials',
+    'Telecommunication': 'Telecom',
+    'Services': 'Services',
+    'Textiles': 'Textiles',
+    'Media Entertainment & Publication': 'Media',
+    'Metals': 'Metals',
+    'Mining': 'Mining',
+    'Agriculture': 'Agri.',
+    'IT Services': 'IT',
+    'Insurance': 'Insurance',
+    'Retailing': 'Retail',
+  };
+  return map[name] || name;
 }
 
 export default function Dashboard() {
@@ -242,39 +282,19 @@ export default function Dashboard() {
               <p className="text-sm text-gray-400 py-4 text-center">Loading sector data…</p>
             ) : (
               <>
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 mb-2">
-                  {sectors.slice(0, 8).map((s) => {
-                    const up = s.change_percent >= 0;
-                    const points = s.sparkline;
-                    // Only sectors with a mapped Yahoo index get a real spark;
-                    // others show a static baseline coloured by today's direction
-                    // (no infinite loading pulse).
-                    const hasMapping = !!s.indexSymbol;
-                    return (
-                      <Link
-                        key={s.name}
-                        to="/sectors"
-                        className="rounded-lg p-2 flex flex-col bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 hover:border-groww-primary/40 hover:shadow-sm transition"
-                      >
-                        <p className="text-[11px] font-semibold text-gray-700 dark:text-gray-200 leading-tight truncate">{s.name}</p>
-                        <div className="mt-1 -mx-0.5 h-[18px]">
-                          {points && points.length > 1 ? (
-                            <Sparkline data={points} positive={up} width={68} height={18} strokeWidth={1.5} />
-                          ) : hasMapping ? (
-                            <div className="h-full rounded bg-gray-100 dark:bg-gray-800/60 animate-pulse" />
-                          ) : (
-                            // No index proxy for this sector — flat baseline.
-                            <svg width={68} height={18} viewBox="0 0 68 18" className="opacity-50">
-                              <line x1="0" y1="9" x2="68" y2="9" stroke={up ? '#10b981' : '#ef4444'} strokeWidth={1.5} strokeDasharray="3 3" />
-                            </svg>
-                          )}
-                        </div>
-                        <p className={cn('text-xs font-bold mt-0.5 tabular-nums', up ? 'text-gain' : 'text-loss')}>
-                          {up ? '+' : ''}{s.change_percent.toFixed(2)}%
-                        </p>
-                      </Link>
-                    );
-                  })}
+                <div className="grid grid-cols-4 gap-1.5 mb-2">
+                  {sectors.slice(0, 12).map((s) => (
+                    <Link
+                      key={s.name}
+                      to="/sectors"
+                      className={cn('rounded-lg p-2 flex flex-col hover:opacity-90 transition text-center', heatColor(s.change_percent))}
+                    >
+                      <p className="text-[11px] font-semibold text-white/90 leading-tight truncate">{shortName(s.name)}</p>
+                      <p className={cn('text-xs font-bold mt-0.5', s.change_percent >= 0 ? 'text-green-200' : 'text-red-200')}>
+                        {s.change_percent >= 0 ? '+' : ''}{s.change_percent.toFixed(2)}%
+                      </p>
+                    </Link>
+                  ))}
                 </div>
                 <p className="text-[10px] text-gray-400">
                   Nifty 50 · {sectors.length} sectors · <Link to="/sectors" className="text-groww-primary hover:underline">Tap to explore</Link>
