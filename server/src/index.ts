@@ -357,9 +357,18 @@ async function main() {
   // Tier 2 (slow): All NSE stocks from DB (~2 000) every 5min during market
   //                hours, every 30min when closed.
   //
+  // Warmth flags to ensure we poll closed markets at least once on boot to fill the cache
+  let nseTier1Warmed = false;
+  let nseTier2Warmed = false;
+  let usTier1Warmed = false;
+  let usTier2Warmed = false;
+
   // Stale-while-revalidate in marketData.ts means old data is served when
   // Yahoo is temporarily unavailable — data never vanishes.
   async function pollTier1() {
+    if (!isMarketOpen('NSE') && nseTier1Warmed) {
+      return;
+    }
     try {
       const heldOrWatched = ((await db.prepare(
         `SELECT DISTINCT symbol FROM holdings UNION SELECT DISTINCT symbol FROM watchlist_items`
@@ -389,6 +398,7 @@ async function main() {
       broadcastTick(quotes);
       const subs = subscriberCount();
       console.log(`[market] tier1 poll — ${quotes.length}/${symbols.length} symbols (open=${isMarketOpen()})${subs ? ` · ${subs} sse` : ''}`);
+      nseTier1Warmed = true;
     } catch (err: any) {
       const msg = err?.message ?? String(err);
       markPollFailure(msg);
@@ -397,6 +407,9 @@ async function main() {
   }
 
   async function pollTier2() {
+    if (!isMarketOpen('NSE') && nseTier2Warmed) {
+      return;
+    }
     try {
       const nifty500 = ((await db.prepare(`SELECT symbol FROM stocks WHERE exchange = 'NSE'`).all()) as any[]).map((r) => r.symbol);
       if (!nifty500.length) return;
@@ -405,6 +418,7 @@ async function main() {
         60_000, 'tier2.getQuotes',
       );
       console.log(`[market] tier2 sweep — ${quotes.length}/${nifty500.length} NSE stocks cached`);
+      nseTier2Warmed = true;
     } catch (err: any) {
       console.warn('[market] tier2 poll error:', err?.message ?? err);
     }
@@ -412,6 +426,9 @@ async function main() {
 
   // ── US tier 1 + tier 2 (parallel to the India poll, separate Yahoo budget) ──
   async function pollTier1Us() {
+    if (!isMarketOpen('NASDAQ') && usTier1Warmed) {
+      return;
+    }
     try {
       const heldOrWatched = ((await db.prepare(
         `SELECT DISTINCT h.symbol AS symbol
@@ -447,12 +464,16 @@ async function main() {
       await withTimeout(getUsIndices(true), 8_000, 'tier1.us.getIndices').catch(() => {});
       broadcastTick(quotes);
       console.log(`[market] tier1 US — ${quotes.length}/${items.length} symbols (open=${isRegionOpen(REGIONS.US)})`);
+      usTier1Warmed = true;
     } catch (err: any) {
       console.warn('[market] tier1 US poll error:', err?.message ?? err);
     }
   }
 
   async function pollTier2Us() {
+    if (!isMarketOpen('NASDAQ') && usTier2Warmed) {
+      return;
+    }
     try {
       const rows = (await db.prepare(
         `SELECT symbol, exchange FROM stocks WHERE exchange IN ('NASDAQ','NYSE')`
@@ -461,6 +482,7 @@ async function main() {
       const items = rows.map((r) => ({ symbol: r.symbol, exchange: r.exchange as 'NASDAQ' | 'NYSE' }));
       const quotes = await withTimeout(getQuotes(items, true), 60_000, 'tier2.us.getQuotes');
       console.log(`[market] tier2 US sweep — ${quotes.length}/${items.length} US stocks cached`);
+      usTier2Warmed = true;
     } catch (err: any) {
       console.warn('[market] tier2 US poll error:', err?.message ?? err);
     }
