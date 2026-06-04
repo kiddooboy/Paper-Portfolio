@@ -248,11 +248,34 @@ router.get('/live', authMiddleware, async (req: AuthRequest, res) => {
     new Set([...NIFTY50, ...holdingSymbols, ...watchlistSymbols, ...extra])
   );
 
+  // Pull each symbol's exchange from the DB so we route NSE vs NASDAQ vs NYSE correctly.
+  const dbRows = allSymbols.length
+    ? (db.prepare(
+        `SELECT symbol, exchange FROM stocks WHERE symbol IN (${allSymbols.map(() => '?').join(',')})`
+      ).all(...allSymbols) as { symbol: string; exchange: string }[])
+    : [];
+
+  const exchangeMap = new Map<string, ExchangeCode>();
+  for (const row of dbRows) {
+    const sym = row.symbol.toUpperCase();
+    const current = exchangeMap.get(sym);
+    if (!current || row.exchange === 'NSE') {
+      exchangeMap.set(sym, row.exchange as ExchangeCode);
+    }
+  }
+
   // Cache-only read — the background poller (tier1/tier2) keeps the cache
   // warm. User requests must NEVER trigger Yahoo, otherwise rate-limit
   // failures multiply with concurrent users.
   const quotes = getCachedQuotes(
-    allSymbols.map((s) => ({ symbol: s, exchange: 'NSE' as const }))
+    allSymbols.map((s) => {
+      const sUp = s.toUpperCase();
+      let exchange: ExchangeCode = 'NSE';
+      if (exchangeMap.has(sUp)) {
+        exchange = exchangeMap.get(sUp)!;
+      }
+      return { symbol: s, exchange };
+    })
   );
 
   const priceMap: Record<string, any> = {};
@@ -754,7 +777,7 @@ router.get('/:symbol/history', async (req, res) => {
 
   const now = Date.now();
   const rangeMs: Record<string, number> = {
-    'today': 2 * 24 * 3600 * 1000,   // for intraday sparkline — last 2 calendar days
+    'today': 7 * 24 * 3600 * 1000,   // for intraday sparkline — last 7 calendar days to ensure weekends/holidays have data
     '1d':  7  * 24 * 3600 * 1000,    // 7 days back so weekends/holidays always have data
     '5d':  14 * 24 * 3600 * 1000,
     '1mo': 35 * 24 * 3600 * 1000,

@@ -282,6 +282,17 @@ async function fetchQuoteViaChart(symbol: string, exchange: ExchangeCode): Promi
 export function getCachedQuote(symbol: string, exchange: ExchangeCode = 'NSE'): Quote {
   const hit = cache.get(`${symbol}:${exchange}`);
   if (hit) return hit.data;
+
+  // Smart fallback: check if this symbol exists in the cache under another exchange with a valid price
+  const exchanges: ExchangeCode[] = ['NSE', 'NASDAQ', 'NYSE', 'BSE'];
+  for (const ex of exchanges) {
+    if (ex === exchange) continue;
+    const fallbackHit = cache.get(`${symbol}:${ex}`);
+    if (fallbackHit && fallbackHit.data && fallbackHit.data.price > 0) {
+      return fallbackHit.data;
+    }
+  }
+
   const ccy = (exchange === 'NASDAQ' || exchange === 'NYSE') ? 'USD' : 'INR';
   return { symbol, exchange, price: 0, change: 0, change_percent: 0, previous_close: 0, day_high: 0, day_low: 0, volume: 0, currency: ccy };
 }
