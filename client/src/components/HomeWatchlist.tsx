@@ -34,7 +34,6 @@ const WATCHLIST: WatchEntry[] = [
   { symbol: 'INFY',       exchange: 'NSE',    region: 'IN', name: 'Infosys' },
   { symbol: 'ICICIBANK',  exchange: 'NSE',    region: 'IN', name: 'ICICI Bank' },
   { symbol: 'BHARTIARTL', exchange: 'NSE',    region: 'IN', name: 'Bharti Airtel' },
-  { symbol: 'TATAMOTORS', exchange: 'NSE',    region: 'IN', name: 'Tata Motors' },
   // ── United States ──
   { symbol: 'AAPL',  exchange: 'NASDAQ', region: 'US', name: 'Apple' },
   { symbol: 'MSFT',  exchange: 'NASDAQ', region: 'US', name: 'Microsoft' },
