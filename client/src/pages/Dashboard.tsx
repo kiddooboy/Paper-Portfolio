@@ -50,6 +50,12 @@ export default function Dashboard() {
     return () => { cancelled = true; clearInterval(id); };
   }, [marketIsOpen]);
 
+  // Tick counter — forces useMemo recomputation on every SSE tick or poll
+  // so the movers lists update in real-time every ~4 seconds.
+  const lastTickAt = useMarketStore((s) => s.lastTickAt);
+  const lastFetched = useMarketStore((s) => s.lastFetched);
+  const tick = lastTickAt || lastFetched;
+
   // Derive gainers/losers, most bought from the global live quote store.
   // - Only consider quotes with a real price (>0) so we never surface ghost
   //   entries that would render as "₹0.00" in the UI.
@@ -63,11 +69,12 @@ export default function Dashboard() {
         && q.price > 0
         && (q.exchange === 'NSE' || q.exchange === 'BSE')
     );
-    const g = arr.filter(q => q.change_percent > 0).sort((a, b) => b.change_percent - a.change_percent).slice(0, 5);
-    const l = arr.filter(q => q.change_percent < 0).sort((a, b) => a.change_percent - b.change_percent).slice(0, 5);
-    const mb = arr.filter(q => q.volume && q.volume > 0).sort((a, b) => (b.volume || 0) - (a.volume || 0)).slice(0, 5);
+    const g = arr.filter(q => q.change_percent > 0).sort((a, b) => b.change_percent - a.change_percent).slice(0, 8);
+    const l = arr.filter(q => q.change_percent < 0).sort((a, b) => a.change_percent - b.change_percent).slice(0, 8);
+    const mb = arr.filter(q => q.volume && q.volume > 0).sort((a, b) => (b.volume || 0) - (a.volume || 0)).slice(0, 8);
     return { gainers: g, losers: l, mostBought: mb };
-  }, [allQuotes]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allQuotes, tick]);
 
   // Enrich portfolio holdings with live prices
   const enrichedPortfolio = useMemo(() => {
@@ -308,7 +315,10 @@ function StockRow({ s, pctColor }: { s: any; pctColor: 'gain' | 'loss' }) {
       className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
       <span className="flex items-center gap-2 min-w-0">
         <StockLogo symbol={s.symbol} size={28} />
-        <p className="text-sm font-medium truncate">{s.symbol}</p>
+        <div className="min-w-0">
+          <p className="text-sm font-medium truncate">{s.symbol}</p>
+          {s.name && <p className="text-[10px] text-gray-400 truncate max-w-[120px]">{s.name}</p>}
+        </div>
       </span>
       <div className="text-right shrink-0">
         <p className="text-sm font-semibold tabular-nums">{priceLabel}</p>
