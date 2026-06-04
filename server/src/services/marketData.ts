@@ -765,3 +765,15 @@ export const NIFTY50 = [
   'EICHERMOT', 'BRITANNIA', 'DIVISLAB', 'HEROMOTOCO', 'BPCL', 'UPL', 'TATACONSUM',
   'APOLLOHOSP', 'LTIM', 'SHREECEM',
 ];
+
+// ── Sector Sparkline Cache ──
+const sectorSparkCache = new Map<string, number[]>();
+
+export function getCachedSectorSparkline(symbol: string | null): number[] {
+  if (!symbol) return [];
+  return sectorSparkCache.get(symbol) || [];
+}
+
+export function setCachedSectorSparkline(symbol: string, closes: number[]): void {
+  sectorSparkCache.set(symbol, closes);
+}

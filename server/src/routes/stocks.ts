@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
-import { getQuote, getCachedQuote, getCachedQuotes, getCachedIndices, getHistory, isMarketOpen, getMarketStatus, getSectors, getAllCachedQuotes, type ExchangeCode } from '../services/marketData.js';
+import { getQuote, getCachedQuote, getCachedQuotes, getCachedIndices, getHistory, isMarketOpen, getMarketStatus, getSectors, getAllCachedQuotes, getCachedSectorSparkline, type ExchangeCode } from '../services/marketData.js';
 import { subscribe as subscribeTick, subscribeWithSession, setSessionSymbols } from '../services/tickBroadcast.js';
 import { logActivity, getClientIp } from '../services/activityLogger.js';
 
@@ -164,6 +164,7 @@ router.get('/sectors', async (_req, res) => {
           indexSymbol: idx?.symbol || null,
           indexPrice: idx?.price || null,
           indexChange: idx?.change_percent || null,
+          sparkline: idx?.symbol ? getCachedSectorSparkline(idx.symbol) : [],
         };
       })
       .sort((a, b) => b.change_percent - a.change_percent);

@@ -27,7 +27,7 @@ import cookieParser from 'cookie-parser';
 import compression from 'compression';
 import { initSchema, db, shutdownPool } from './db/index.js';
 import cron from 'node-cron';
-import { getQuote, getQuotes, getHistory, getIndices, getUsIndices, isMarketOpen, NIFTY50, markPollSuccess, markPollFailure, isCircuitOpen, getAllCachedQuotes } from './services/marketData.js';
+import { getQuote, getQuotes, getHistory, getIndices, getUsIndices, isMarketOpen, NIFTY50, markPollSuccess, markPollFailure, isCircuitOpen, getAllCachedQuotes, SECTOR_INDICES, setCachedSectorSparkline } from './services/marketData.js';
 import { broadcast as broadcastTick, subscriberCount, getDynamicSymbols } from './services/tickBroadcast.js';
 import { REGIONS, isRegionOpen } from './services/regions.js';
 import { primeFxRate } from './services/fxService.js';
@@ -524,6 +524,44 @@ async function main() {
     setTimeout(async () => { await pollTier2Us(); scheduleTier2Us(); }, delay);
   }
 
+  // ── Sector sparklines poller (background cache updates) ──
+  async function pollSectorSparklines() {
+    try {
+      const period1 = new Date(Date.now() - 7 * 24 * 3600 * 1000); // 7 days back to handle weekends
+      for (let i = 0; i < SECTOR_INDICES.length; i += 4) {
+        const chunk = SECTOR_INDICES.slice(i, i + 4);
+        await Promise.all(
+          chunk.map(async (idx) => {
+            try {
+              // Sector index history is NSE, 15m intervals
+              const history = await getHistory(idx.symbol, 'NSE', period1, '15m');
+              if (history && history.length > 1) {
+                const closes = history.map((h: any) => Number(h.close)).filter(Number.isFinite).slice(-30);
+                if (closes.length > 1) {
+                  setCachedSectorSparkline(idx.symbol, closes);
+                }
+              }
+            } catch {}
+          })
+        );
+        // Small delay between chunks to avoid slamming rate limits
+        await new Promise(r => setTimeout(r, 200));
+      }
+      console.log(`[market] sector sparklines polled — cached ${SECTOR_INDICES.length} sectors`);
+    } catch (err: any) {
+      console.warn('[market] sector sparklines poll error:', err?.message || err);
+    }
+  }
+
+  function scheduleSectorSparklines() {
+    // 5 minutes while NSE open, 30 minutes when closed
+    const delay = isMarketOpen() ? 300_000 : 1_800_000;
+    setTimeout(async () => {
+      await pollSectorSparklines();
+      scheduleSectorSparklines();
+    }, delay);
+  }
+
   // Warm the cache immediately on startup, then start both schedulers.
   pollTier1().then(() => {
     getQuote('RELIANCE', 'NSE', true).then((q) => {
@@ -536,6 +574,11 @@ async function main() {
       pollTier2().then(() => scheduleTier2());
     }, 30_000);
   });
+
+  // Delay sector sparklines warmup by 15s to spread startup load
+  setTimeout(() => {
+    pollSectorSparklines().then(() => scheduleSectorSparklines());
+  }, 15_000);
 
   // US polling: warm tier2 first (so tier1 has a turnover-ranked universe to pick from),
   // then start both US schedulers. Wait 45s so the US ingest has time to populate the DB.

@@ -18,64 +18,11 @@ interface SectorQuote {
   gainers: number;
   losers: number;
   change_percent: number;
+  indexSymbol: string | null;
+  indexPrice: number | null;
+  indexChange: number | null;
+  sparkline?: number[];
 }
-
-// Sector name → its NSE sector-index symbol on Yahoo. Used to fetch a fresh
-// intraday curve per sector so each card carries a real day-shape sparkline.
-// Covers both NSE's industry classifications (Capital Goods, Fast Moving
-// Consumer Goods, …) used by the screener and the shorter sectoral-index
-// names used elsewhere — same Yahoo ticker, multiple aliases.
-const SECTOR_INDEX_SYMBOL: Record<string, string> = {
-  // Direct sectoral-index names
-  IT: '^CNXIT',
-  FMCG: '^CNXFMCG',
-  Pharma: '^CNXPHARMA',
-  Auto: '^CNXAUTO',
-  Metal: '^CNXMETAL',
-  Realty: '^CNXREALTY',
-  'PSU Bank': '^CNXPSUBANK',
-  Energy: '^CNXENERGY',
-  Finance: '^CNXFINANCE',
-  Infra: '^CNXINFRA',
-  Banking: '^NSEBANK',
-  Healthcare: '^CNXHEALTHCARE',
-  Media: '^CNXMEDIA',
-  Midcap: '^CNXMIDCAP',
-  MNC: '^CNXMNC',
-  PSE: '^CNXPSE',
-  Services: '^CNXSERVICE',
-  Consumption: '^CNXCONSUMPTION',
-  Commodities: '^CNXCOMMODITY',
-  Smallcap: '^CNXSMALLCAP',
-
-  // NSE industry-classification aliases (what /api/stocks/sectors actually returns)
-  'Information Technology':              '^CNXIT',
-  'Fast Moving Consumer Goods':          '^CNXFMCG',
-  'Consumer Staples':                    '^CNXFMCG',
-  'Automobile and Auto Components':      '^CNXAUTO',
-  'Health Care':                         '^CNXHEALTHCARE',
-  'Financial Services':                  '^CNXFINANCE',
-  'Financials':                          '^CNXFINANCE',
-  'Oil Gas & Consumable Fuels':          '^CNXENERGY',
-  'Utilities':                           '^CNXENERGY',
-  'Power':                               '^CNXENERGY',
-  'Metals & Mining':                     '^CNXMETAL',
-  'Materials':                           '^CNXMETAL',
-  'Real Estate':                         '^CNXREALTY',
-  'Capital Goods':                       '^CNXINFRA',
-  'Construction':                        '^CNXINFRA',
-  'Construction Materials':              '^CNXINFRA',
-  'Industrials':                         '^CNXINFRA',
-  'Consumer Durables':                   '^CNXCONSUMPTION',
-  'Consumer Discretionary':              '^CNXCONSUMPTION',
-  'Consumer Services':                   '^CNXSERVICE',
-  'Media Entertainment & Publication':   '^CNXMEDIA',
-  'Communication Services':              '^CNXMEDIA',
-  'Telecommunication':                   '^CNXMEDIA',
-  'Chemicals':                           '^CNXCOMMODITY',
-  // Some sectors genuinely have no Yahoo NSE index proxy — they fall back
-  // to a flat baseline instead of an infinite loading pulse.
-};
 
 export default function Dashboard() {
   const portfolio = usePortfolioStore((s) => s.data);
@@ -86,8 +33,6 @@ export default function Dashboard() {
   const loading = portfolioLoading && !portfolio;
 
   const [sectors, setSectors] = useState<SectorQuote[]>([]);
-  // Per-sector intraday sparkline data (key = sector name → closes array).
-  const [sectorSpark, setSectorSpark] = useState<Record<string, number[]>>({});
   const marketIsOpen = useMarketStore((s) => s.status?.isOpen ?? true);
 
   useEffect(() => {
@@ -104,42 +49,6 @@ export default function Dashboard() {
     const id = setInterval(fetch, 60_000);
     return () => { cancelled = true; clearInterval(id); };
   }, [marketIsOpen]);
-
-  // Fetch per-sector intraday sparkline curves — one network round per sector,
-  // throttled so we don't slam Yahoo through our server. Refreshes every 5 min
-  // while NSE is open; otherwise fetched once on mount and frozen.
-  useEffect(() => {
-    let alive = true;
-    if (!sectors.length) return;
-    const targets = sectors.slice(0, 8).filter((s) => SECTOR_INDEX_SYMBOL[s.name]);
-    async function loadSparks() {
-      const out: Record<string, number[]> = {};
-      // Run in chunks of 4 to keep the server's Yahoo bandwidth happy.
-      for (let i = 0; i < targets.length; i += 4) {
-        const chunk = targets.slice(i, i + 4);
-        const results = await Promise.allSettled(
-          chunk.map((s) =>
-            axios.get(`/api/stocks/${SECTOR_INDEX_SYMBOL[s.name]}/history`, {
-              params: { exchange: 'NSE', range: 'today', interval: '15m' },
-            }).then((r) => r.data as { close: number }[])
-          )
-        );
-        if (!alive) return;
-        chunk.forEach((s, idx) => {
-          const r = results[idx];
-          if (r.status === 'fulfilled' && Array.isArray(r.value) && r.value.length > 1) {
-            const closes = r.value.map((p) => Number(p.close)).filter(Number.isFinite).slice(-30);
-            if (closes.length > 1) out[s.name] = closes;
-          }
-        });
-        setSectorSpark((prev) => ({ ...prev, ...out }));
-      }
-    }
-    loadSparks();
-    if (!marketIsOpen) return () => { alive = false; };
-    const id = setInterval(loadSparks, 5 * 60_000);
-    return () => { alive = false; clearInterval(id); };
-  }, [sectors, marketIsOpen]);
 
   // Derive gainers/losers, most bought from the global live quote store.
   // - Only consider quotes with a real price (>0) so we never surface ghost
@@ -285,11 +194,11 @@ export default function Dashboard() {
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 mb-2">
                   {sectors.slice(0, 8).map((s) => {
                     const up = s.change_percent >= 0;
-                    const points = sectorSpark[s.name];
+                    const points = s.sparkline;
                     // Only sectors with a mapped Yahoo index get a real spark;
                     // others show a static baseline coloured by today's direction
                     // (no infinite loading pulse).
-                    const hasMapping = !!SECTOR_INDEX_SYMBOL[s.name];
+                    const hasMapping = !!s.indexSymbol;
                     return (
                       <Link
                         key={s.name}
