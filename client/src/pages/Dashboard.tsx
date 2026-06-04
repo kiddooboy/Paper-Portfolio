@@ -80,7 +80,7 @@ export default function Dashboard() {
   useEffect(() => {
     let alive = true;
     if (!sectors.length) return;
-    const targets = sectors.slice(0, 12).filter((s) => SECTOR_INDEX_SYMBOL[s.name]);
+    const targets = sectors.slice(0, 8).filter((s) => SECTOR_INDEX_SYMBOL[s.name]);
     async function loadSparks() {
       const out: Record<string, number[]> = {};
       // Run in chunks of 4 to keep the server's Yahoo bandwidth happy.
@@ -243,7 +243,7 @@ export default function Dashboard() {
             ) : (
               <>
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 mb-2">
-                  {sectors.slice(0, 12).map((s) => {
+                  {sectors.slice(0, 8).map((s) => {
                     const up = s.change_percent >= 0;
                     const points = sectorSpark[s.name];
                     return (

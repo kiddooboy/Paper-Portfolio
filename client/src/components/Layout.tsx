@@ -385,6 +385,7 @@ function ProfileMenu({ dark, onToggleDark }: { dark: boolean; onToggleDark: () =
 function MarketBadges() {
   const inStatus = useMarketStore((s) => s.status);
   const [usStatus, setUsStatus] = useState<{ isOpen: boolean; label: string } | null>(null);
+  const [now, setNow] = useState(new Date());
 
   useEffect(() => {
     let alive = true;
@@ -400,15 +401,24 @@ function MarketBadges() {
     return () => { alive = false; clearInterval(t); };
   }, []);
 
+  // Tick the badge clocks every 15 s — minute precision is enough.
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 15_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const istTime = now.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false });
+  const etTime  = now.toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false });
+
   return (
     <div className="hidden sm:flex items-center gap-1.5 shrink-0">
-      <MarketPill region="IN" label={inStatus?.label || '…'} isOpen={!!inStatus?.isOpen} />
-      <MarketPill region="US" label={usStatus?.label || '…'} isOpen={!!usStatus?.isOpen} />
+      <MarketPill region="IN" label={inStatus?.label || '…'} isOpen={!!inStatus?.isOpen} time={istTime} tz="IST" />
+      <MarketPill region="US" label={usStatus?.label || '…'} isOpen={!!usStatus?.isOpen} time={etTime}  tz="ET" />
     </div>
   );
 }
 
-function MarketPill({ region, label, isOpen }: { region: 'IN' | 'US'; label: string; isOpen: boolean }) {
+function MarketPill({ region, label, isOpen, time, tz }: { region: 'IN' | 'US'; label: string; isOpen: boolean; time: string; tz: string }) {
   const colorMap: Record<string, string> = {
     Open: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
     'Pre-market': 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
@@ -418,7 +428,7 @@ function MarketPill({ region, label, isOpen }: { region: 'IN' | 'US'; label: str
   };
   return (
     <div
-      title={`${region === 'IN' ? 'NSE / BSE' : 'NYSE / NASDAQ'} — ${label}`}
+      title={`${region === 'IN' ? 'NSE / BSE' : 'NYSE / NASDAQ'} — ${label} · ${time} ${tz}`}
       className={cn('flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide', colorMap[label] || colorMap.Closed)}
     >
       <span className="relative flex h-1.5 w-1.5">
@@ -426,7 +436,9 @@ function MarketPill({ region, label, isOpen }: { region: 'IN' | 'US'; label: str
         <span className={cn('relative inline-flex rounded-full h-1.5 w-1.5', isOpen ? 'bg-green-500' : 'bg-gray-400')} />
       </span>
       <span className="hidden md:inline">{region}</span>
-      <span className="text-[9px] opacity-80">{label}</span>
+      <span className="font-mono tabular-nums tracking-tighter">{time}</span>
+      <span className="text-[9px] opacity-70">{tz}</span>
+      <span className="text-[9px] opacity-80 hidden lg:inline">· {label}</span>
     </div>
   );
 }
