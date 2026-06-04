@@ -203,9 +203,9 @@ export default function Dashboard() {
   const p = enrichedPortfolio;
 
   return (
-    <div className="flex flex-col lg:flex-row gap-3 p-3">
+    <div className="flex flex-col lg:flex-row gap-3 p-3 overflow-y-auto lg:overflow-hidden lg:h-[calc(100vh-150px)]">
     {/* ── Left: main dashboard content ── */}
-    <div className="flex-1 min-w-0 flex flex-col gap-3">
+    <div className="flex-1 min-w-0 flex flex-col gap-3 lg:h-full">
 
       {/* ── Row 1: Investments + Sector Heatmap ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:shrink-0">
@@ -305,9 +305,10 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      {/* ── Row 2: Gainers | Losers | Most Active ── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 lg:flex-1 lg:min-h-0">
 
-        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-3 flex flex-col h-[316px]">
+        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-3 flex flex-col min-h-0 lg:h-full">
           <h3 className="text-sm font-semibold flex items-center gap-2 mb-2 shrink-0">
             <TrendingUp className="w-4 h-4 text-gain" /> Top Gainers
           </h3>
@@ -317,7 +318,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-3 flex flex-col h-[316px]">
+        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-3 flex flex-col min-h-0 lg:h-full">
           <h3 className="text-sm font-semibold flex items-center gap-2 mb-2 shrink-0">
             <TrendingDown className="w-4 h-4 text-loss" /> Top Losers
           </h3>
@@ -327,7 +328,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-3 flex flex-col h-[316px]">
+        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-3 flex flex-col min-h-0 lg:h-full">
           <h3 className="text-sm font-semibold flex items-center gap-2 mb-2 shrink-0">
             <TrendingUp className="w-4 h-4 text-blue-500" /> Most Active
           </h3>
@@ -358,11 +359,9 @@ export default function Dashboard() {
 
     </div>{/* end left col */}
 
-    {/* ── Right: Live cross-region watchlist ──
-        Self-sized (no fixed height) so every row is visible without an
-        inner scrollbar. */}
-    <div className="hidden xl:flex flex-col w-[360px] shrink-0">
-      <HomeWatchlist className="h-[316px]" />
+    {/* ── Right: Live cross-region watchlist ── */}
+    <div className="hidden xl:flex flex-col w-[360px] shrink-0 lg:h-full">
+      <HomeWatchlist className="lg:h-full" />
     </div>
 
     </div>
