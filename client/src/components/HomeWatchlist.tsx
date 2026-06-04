@@ -46,7 +46,11 @@ const WATCHLIST: WatchEntry[] = [
 
 interface HistoryPoint { date: string; close: number; }
 
-export default function HomeWatchlist() {
+interface HomeWatchlistProps {
+  className?: string;
+}
+
+export default function HomeWatchlist({ className = '' }: HomeWatchlistProps) {
   const [tab, setTab] = useState<Region>('all');
   const [history, setHistory] = useState<Record<string, number[]>>({});
   const [fxRate, setFxRate] = useState<number>(0);
@@ -121,7 +125,7 @@ export default function HomeWatchlist() {
   };
 
   return (
-    <div className="flex flex-col bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
+    <div className={`flex flex-col bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden ${className}`}>
       {/* Header */}
       <div className="px-3 pt-3 pb-2 border-b border-gray-100 dark:border-gray-800">
         <div className="flex items-center justify-between mb-2">
@@ -150,9 +154,8 @@ export default function HomeWatchlist() {
         </div>
       </div>
 
-      {/* Rows — no internal scroll; the panel sizes to its content so every
-          row is visible at a glance. */}
-      <div className="divide-y divide-gray-100 dark:divide-gray-800/60">
+      {/* Rows — scrollable if constrained */}
+      <div className="divide-y divide-gray-100 dark:divide-gray-800/60 flex-1 overflow-y-auto">
         {filtered.map((w) => {
           const q = quotes[w.symbol];
           const price = q?.price ?? 0;

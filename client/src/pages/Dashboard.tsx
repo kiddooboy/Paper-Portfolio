@@ -307,31 +307,31 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
 
-        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-3 flex flex-col">
+        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-3 flex flex-col h-[316px]">
           <h3 className="text-sm font-semibold flex items-center gap-2 mb-2 shrink-0">
             <TrendingUp className="w-4 h-4 text-gain" /> Top Gainers
           </h3>
-          <div className="space-y-0.5">
+          <div className="flex-1 overflow-y-auto space-y-0.5">
             {gainers.length === 0 && <p className="text-xs text-gray-400 py-3 text-center">No data yet</p>}
             {gainers.map((s: any) => <StockRow key={s.symbol} s={s} pctColor="gain" />)}
           </div>
         </div>
 
-        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-3 flex flex-col">
+        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-3 flex flex-col h-[316px]">
           <h3 className="text-sm font-semibold flex items-center gap-2 mb-2 shrink-0">
             <TrendingDown className="w-4 h-4 text-loss" /> Top Losers
           </h3>
-          <div className="space-y-0.5">
+          <div className="flex-1 overflow-y-auto space-y-0.5">
             {losers.length === 0 && <p className="text-xs text-gray-400 py-3 text-center">No data yet</p>}
             {losers.map((s: any) => <StockRow key={s.symbol} s={s} pctColor="loss" />)}
           </div>
         </div>
 
-        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-3 flex flex-col">
+        <div className="bg-white dark:bg-groww-card rounded-xl border border-gray-100 dark:border-gray-800 p-3 flex flex-col h-[316px]">
           <h3 className="text-sm font-semibold flex items-center gap-2 mb-2 shrink-0">
             <TrendingUp className="w-4 h-4 text-blue-500" /> Most Active
           </h3>
-          <div className="space-y-0.5">
+          <div className="flex-1 overflow-y-auto space-y-0.5">
             {mostBought.length === 0 && <p className="text-xs text-gray-400 py-3 text-center">No data yet</p>}
             {mostBought.map((s: any) => (
               <Link key={s.symbol} to={`/terminal/${s.symbol}?exchange=${s.exchange || 'NSE'}&fullscreen=1`}
@@ -362,7 +362,7 @@ export default function Dashboard() {
         Self-sized (no fixed height) so every row is visible without an
         inner scrollbar. */}
     <div className="hidden xl:flex flex-col w-[360px] shrink-0">
-      <HomeWatchlist />
+      <HomeWatchlist className="h-[316px]" />
     </div>
 
     </div>
