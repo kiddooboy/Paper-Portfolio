@@ -168,6 +168,10 @@ function getTTL(): number {
   return isMarketOpen() ? TTL_LIVE_MS : TTL_CLOSED_MS;
 }
 
+export function getStockTTL(exchange: ExchangeCode): number {
+  return isMarketOpen(exchange) ? TTL_LIVE_MS : TTL_CLOSED_MS;
+}
+
 // ── Cache — stores BOTH live and last-known-good data ──
 // { data: Quote, at: number (last successful fetch), stale: boolean }
 interface CacheEntry { data: Quote; at: number; }
@@ -370,6 +374,7 @@ export async function getQuotes(
     const exchange: ExchangeCode = it.exchange ?? 'NSE';
     const key = `${it.symbol}:${exchange}`;
     const hit = cache.get(key);
+    const ttl = getStockTTL(exchange);
 
     const isFreshEnough = forceRefresh ? (hit && now - hit.at < ttl) : (hit && now - hit.at < STALE_GRACE_MS);
 
@@ -640,7 +645,7 @@ export function getCachedUsIndices(): IndexQuote[] {
 }
 
 export async function getUsIndices(forceRefresh = false): Promise<IndexQuote[]> {
-  const ttl = getTTL();
+  const ttl = getStockTTL('NASDAQ');
   const now = Date.now();
   const fresh: IndexQuote[] = [];
   const missing: typeof US_INDICES = [];

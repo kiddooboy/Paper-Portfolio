@@ -125,7 +125,7 @@ export default function HomeWatchlist() {
       {/* Header */}
       <div className="px-3 pt-3 pb-2 border-b border-gray-100 dark:border-gray-800">
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Live Watchlist</h3>
+          <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Watchlist</h3>
           <Link
             to="/global-markets"
             className="text-[10px] uppercase tracking-wider font-semibold text-amber-500 hover:text-amber-600 dark:text-amber-400"

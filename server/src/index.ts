@@ -386,10 +386,29 @@ async function main() {
         .map((q) => q.symbol);
 
       const dynamic = getDynamicSymbols();
-      const symbols = Array.from(new Set([...NIFTY50, ...top150, ...heldOrWatched, ...dynamic]));
+      const rawSymbols = Array.from(new Set([...NIFTY50, ...top150, ...heldOrWatched, ...dynamic]));
+
+      // Pull exchanges from the DB so we only poll NSE/BSE symbols here
+      const dbRows = rawSymbols.length
+        ? (db.prepare(
+            `SELECT symbol, exchange FROM stocks WHERE symbol IN (${rawSymbols.map(() => '?').join(',')})`
+          ).all(...rawSymbols) as { symbol: string; exchange: string }[])
+        : [];
+
+      const exchangeMap = new Map<string, string>();
+      for (const row of dbRows) {
+        exchangeMap.set(row.symbol.toUpperCase(), row.exchange);
+      }
+
+      // Only keep NSE/BSE symbols for the Indian poll (default to NSE if unknown, e.g. indices)
+      const inSymbols = rawSymbols.filter((s) => {
+        const ex = exchangeMap.get(s.toUpperCase());
+        return !ex || ex === 'NSE' || ex === 'BSE';
+      });
+
       // Hard deadline so a stuck Yahoo connection can never wedge the loop.
       const quotes = await withTimeout(
-        getQuotes(symbols.map((s) => ({ symbol: s, exchange: 'NSE' as const })), true),
+        getQuotes(inSymbols.map((s) => ({ symbol: s, exchange: (exchangeMap.get(s.toUpperCase()) as any) || 'NSE' })), true),
         12_000, 'tier1.getQuotes',
       );
       await withTimeout(getIndices(true), 8_000, 'tier1.getIndices');
@@ -397,7 +416,7 @@ async function main() {
       // Push to any SSE subscribers immediately. No-op when no one is connected.
       broadcastTick(quotes);
       const subs = subscriberCount();
-      console.log(`[market] tier1 poll — ${quotes.length}/${symbols.length} symbols (open=${isMarketOpen()})${subs ? ` · ${subs} sse` : ''}`);
+      console.log(`[market] tier1 poll — ${quotes.length}/${inSymbols.length} symbols (open=${isMarketOpen()})${subs ? ` · ${subs} sse` : ''}`);
       nseTier1Warmed = true;
     } catch (err: any) {
       const msg = err?.message ?? String(err);
@@ -449,14 +468,17 @@ async function main() {
         .slice(0, 150)
         .map((q) => ({ symbol: q.symbol, exchange: q.exchange as 'NASDAQ' | 'NYSE' }));
 
+      const dynamic = getDynamicSymbols();
+      const allCandidateSymbols = Array.from(new Set([...heldOrWatched, ...dynamic]));
+
       // Pull each symbol's exchange from the DB so we route NYSE vs NASDAQ correctly.
-      const heldOrWatchedRows = heldOrWatched.length
+      const dbRows = allCandidateSymbols.length
         ? ((await db.prepare(
-            `SELECT symbol, exchange FROM stocks WHERE symbol IN (${heldOrWatched.map(() => '?').join(',')}) AND exchange IN ('NASDAQ','NYSE')`
-          ).all(...heldOrWatched)) as any[]).map((r) => ({ symbol: r.symbol, exchange: r.exchange as 'NASDAQ' | 'NYSE' }))
+            `SELECT symbol, exchange FROM stocks WHERE symbol IN (${allCandidateSymbols.map(() => '?').join(',')}) AND exchange IN ('NASDAQ','NYSE')`
+          ).all(...allCandidateSymbols)) as any[]).map((r) => ({ symbol: r.symbol, exchange: r.exchange as 'NASDAQ' | 'NYSE' }))
         : [];
 
-      const items = [...top150, ...heldOrWatchedRows]
+      const items = [...top150, ...dbRows]
         .filter((v, i, a) => a.findIndex((x) => x.symbol === v.symbol) === i);
       if (!items.length) return;
 
@@ -580,14 +602,14 @@ async function main() {
     pollSectorSparklines().then(() => scheduleSectorSparklines());
   }, 15_000);
 
-  // US polling: warm tier2 first (so tier1 has a turnover-ranked universe to pick from),
-  // then start both US schedulers. Wait 45s so the US ingest has time to populate the DB.
+  // US polling: start US schedulers. Wait 5s to allow US ingest/schema setup to stabilize or load existing DB.
+  // Run pollTier1Us first so active watchlist/holdings quotes cache immediately, then warm tier2.
   setTimeout(() => {
-    pollTier2Us().then(() => {
-      scheduleTier2Us();
-      pollTier1Us().then(() => scheduleTier1Us());
+    pollTier1Us().then(() => {
+      scheduleTier1Us();
+      pollTier2Us().then(() => scheduleTier2Us());
     });
-  }, 45_000);
+  }, 5_000);
 
   const server = app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
