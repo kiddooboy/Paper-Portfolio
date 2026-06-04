@@ -12,9 +12,9 @@ RUN cd server && npm install
 COPY client/ ./client/
 COPY server/ ./server/
 
-# Build client and server
-RUN cd client && npm run build
-RUN cd server && npm run build
+# Build client and server with memory limits to prevent OOM on small EC2 instances
+RUN cd client && NODE_OPTIONS="--max-old-space-size=1024" npm run build
+RUN cd server && NODE_OPTIONS="--max-old-space-size=1024" npm run build
 
 # --- Production image (no client node_modules) ---
 FROM node:24-alpine
