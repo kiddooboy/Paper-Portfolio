@@ -540,6 +540,82 @@ export async function initSchema() {
     }
   }
 
+  // Fix orders.product_type CHECK — original constraint locked to ('CNC','MIS')
+  // which rejects US orders (product_type 'DAY' / 'GTC'). SQLite cannot ALTER
+  // a CHECK, so detect the stale constraint and rebuild the table atomically,
+  // preserving the global-markets columns added via earlier idempotent ALTERs.
+  {
+    const orderTableSql = (raw.prepare(
+      `SELECT sql FROM sqlite_master WHERE type='table' AND name='orders'`
+    ).get() as any)?.sql ?? '';
+    const hasDayGtc = orderTableSql.includes("'DAY'") && orderTableSql.includes("'GTC'");
+    if (!hasDayGtc) {
+      console.log('[db] migration: rebuilding orders table — adding DAY/GTC to product_type CHECK constraint');
+      try {
+        raw.exec(`
+          BEGIN;
+          CREATE TABLE orders_new (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            symbol            TEXT NOT NULL,
+            type              TEXT NOT NULL CHECK(type IN ('MARKET','LIMIT','SL','SL-M')),
+            transaction_type  TEXT NOT NULL CHECK(transaction_type IN ('BUY','SELL')),
+            quantity          INTEGER NOT NULL,
+            price             REAL NOT NULL,
+            limit_price       REAL,
+            trigger_price     REAL,
+            target_price      REAL,
+            product_type      TEXT NOT NULL DEFAULT 'CNC'
+                                CHECK(product_type IN ('CNC','MIS','DAY','GTC')),
+            status            TEXT NOT NULL DEFAULT 'PENDING'
+                                CHECK(status IN ('PENDING','FILLED','CANCELLED','EXPIRED','FAILED')),
+            created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+            filled_at         TEXT,
+            updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+            is_gtt            INTEGER NOT NULL DEFAULT 0,
+            gtt_valid_till    TEXT,
+            is_amo            INTEGER NOT NULL DEFAULT 0,
+            parent_order_id   INTEGER,
+            trailing_pct      REAL,
+            trail_anchor      REAL,
+            currency          TEXT NOT NULL DEFAULT 'INR',
+            price_native      REAL,
+            fx_rate           REAL
+          );
+          INSERT INTO orders_new (
+            id, user_id, symbol, type, transaction_type, quantity, price,
+            limit_price, trigger_price, target_price, product_type, status,
+            created_at, filled_at, updated_at,
+            is_gtt, gtt_valid_till, is_amo, parent_order_id,
+            trailing_pct, trail_anchor, currency, price_native, fx_rate
+          )
+          SELECT
+            id, user_id, symbol, type, transaction_type, quantity, price,
+            limit_price, trigger_price, target_price,
+            COALESCE(product_type, 'CNC'), status,
+            created_at, filled_at, updated_at,
+            COALESCE(is_gtt, 0), gtt_valid_till, COALESCE(is_amo, 0), parent_order_id,
+            trailing_pct, trail_anchor,
+            COALESCE(currency, 'INR'), price_native, fx_rate
+          FROM orders;
+          DROP TABLE orders;
+          ALTER TABLE orders_new RENAME TO orders;
+          COMMIT;
+        `);
+        raw.exec(`
+          CREATE INDEX IF NOT EXISTS idx_orders_user_id     ON orders(user_id);
+          CREATE INDEX IF NOT EXISTS idx_orders_status      ON orders(status);
+          CREATE INDEX IF NOT EXISTS idx_orders_user_status ON orders(user_id, status);
+          CREATE INDEX IF NOT EXISTS idx_orders_created_at  ON orders(created_at);
+        `);
+        console.log('[db] migration: orders product_type CHECK widened to include DAY/GTC');
+      } catch (err: any) {
+        try { raw.exec('ROLLBACK'); } catch {}
+        console.error('[db] migration: orders product_type rebuild failed —', err?.message);
+      }
+    }
+  }
+
   // Basket orders
   safeExec(`CREATE TABLE IF NOT EXISTS baskets (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
