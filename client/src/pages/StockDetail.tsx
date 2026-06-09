@@ -66,7 +66,9 @@ export default function StockDetail() {
         symbol,
         exchange,
         type: orderType,
-        transactionType: tab,
+        // Server's Zod schema is z.enum(['BUY','SELL']) — uppercase.
+        // `tab` is the UI state ('buy' | 'sell'), so normalise here.
+        transactionType: tab.toUpperCase(),
         quantity: qtyNum,
         limitPrice: orderType === 'LIMIT' ? Number(limitPrice) : undefined,
         productType: isUS ? 'DAY' : 'CNC',
