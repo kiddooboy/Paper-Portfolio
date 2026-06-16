@@ -424,7 +424,7 @@ async function fillMisShort(
 }
 
 // ── MIS Cover Buy fill ─────────────────────────────────────────────────────
-async function fillMisCover(
+export async function fillMisCover(
   orderId: number,
   userId: number,
   symbol: string,

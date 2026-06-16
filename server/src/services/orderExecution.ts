@@ -1,7 +1,6 @@
 import { db } from '../db/index.js';
-import { getCachedQuote, isMarketOpen, type ExchangeCode } from './marketData.js';
-import { fillOrderUS } from '../routes/orders.js';
-import { fillOrder } from '../routes/orders.js';
+import { getCachedQuote, getQuote, isMarketOpen, type ExchangeCode } from './marketData.js';
+import { fillOrderUS, fillOrder, fillMisCover } from '../routes/orders.js';
 import { logActivity } from './activityLogger.js';
 import { executeDueSIPs } from '../routes/sip.js';
 import { pushToUser } from './push.js';
@@ -301,7 +300,7 @@ async function squareOffMisPositions() {
   console.log('[OrderExecution] MIS square-off starting');
   const today = new Date().toISOString().slice(0, 10);
 
-  // Find all FILLED MIS orders from today
+  // 1. Square off MIS long positions (intraday BUYs still held)
   const misOrders = db.prepare(`
     SELECT DISTINCT user_id, symbol FROM orders
     WHERE product_type = 'MIS' AND status = 'FILLED'
@@ -323,11 +322,92 @@ async function squareOffMisPositions() {
         VALUES (?, ?, 'MARKET', 'SELL', ?, ?, 'MIS', 'PENDING')
       `).run(user_id, symbol, holding.quantity, price);
       await fillOrder(Number(result.lastInsertRowid), user_id, symbol, 'SELL', holding.quantity, price);
-      console.log(`[OrderExecution] MIS square-off: ${symbol} user ${user_id} @ ₹${price}`);
+      console.log(`[OrderExecution] MIS square-off (long): ${symbol} user ${user_id} @ ₹${price}`);
     } catch (err) {
       console.error(`[OrderExecution] MIS square-off failed for ${symbol}:`, err);
     }
   }
+
+  // 2. Square off open MIS short positions (cover all rows in mis_shorts)
+  const openShorts = db.prepare(`SELECT * FROM mis_shorts`).all() as any[];
+
+  for (const short of openShorts) {
+    const q = getCachedQuote(short.symbol, 'NSE');
+    const price = q?.price;
+    if (!price) continue;
+
+    try {
+      const result = db.prepare(`
+        INSERT INTO orders (user_id, symbol, type, transaction_type, quantity, price, product_type, status)
+        VALUES (?, ?, 'MARKET', 'BUY', ?, ?, 'MIS', 'PENDING')
+      `).run(short.user_id, short.symbol, short.quantity, price);
+      await fillMisCover(Number(result.lastInsertRowid), short.user_id, short.symbol, short.quantity, price, short);
+      console.log(`[OrderExecution] MIS square-off (short): ${short.symbol} user ${short.user_id} @ ₹${price}`);
+    } catch (err) {
+      console.error(`[OrderExecution] MIS short square-off failed for ${short.symbol} user ${(short as any).user_id}:`, err);
+    }
+  }
+}
+
+// Exported so the admin route can trigger a manual square-off for stuck positions.
+// Falls back to a live Yahoo Finance fetch when the in-memory cache is cold
+// (e.g. called outside market hours after a server restart).
+export async function manualMisSquareOff(userId?: number) {
+  const today = new Date().toISOString().slice(0, 10);
+  let longsSquaredOff = 0;
+  let shortsSquaredOff = 0;
+  const errors: string[] = [];
+
+  async function resolvePrice(symbol: string): Promise<number | null> {
+    const cached = getCachedQuote(symbol, 'NSE');
+    if (cached?.price) return cached.price;
+    try {
+      const live = await getQuote(symbol, 'NSE');
+      return live?.price ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Long positions (MIS BUY opened today, still held)
+  const misOrders = db.prepare(
+    userId
+      ? `SELECT DISTINCT user_id, symbol FROM orders WHERE product_type='MIS' AND status='FILLED' AND date(filled_at)=? AND transaction_type='BUY' AND user_id=?`
+      : `SELECT DISTINCT user_id, symbol FROM orders WHERE product_type='MIS' AND status='FILLED' AND date(filled_at)=? AND transaction_type='BUY'`
+  ).all(...(userId ? [today, userId] : [today])) as any[];
+
+  for (const { user_id, symbol } of misOrders) {
+    const holding = db.prepare('SELECT quantity FROM holdings WHERE user_id = ? AND symbol = ?').get(user_id, symbol) as any;
+    if (!holding || holding.quantity <= 0) continue;
+    const price = await resolvePrice(symbol);
+    if (!price) { errors.push(`No price for ${symbol} (long)`); continue; }
+    try {
+      const result = db.prepare(`INSERT INTO orders (user_id, symbol, type, transaction_type, quantity, price, product_type, status) VALUES (?, ?, 'MARKET', 'SELL', ?, ?, 'MIS', 'PENDING')`).run(user_id, symbol, holding.quantity, price);
+      await fillOrder(Number(result.lastInsertRowid), user_id, symbol, 'SELL', holding.quantity, price);
+      longsSquaredOff++;
+    } catch (err: any) {
+      errors.push(`Long squareoff failed ${symbol}: ${err?.message}`);
+    }
+  }
+
+  // Short positions (all rows in mis_shorts)
+  const openShorts = db.prepare(
+    userId ? `SELECT * FROM mis_shorts WHERE user_id = ?` : `SELECT * FROM mis_shorts`
+  ).all(...(userId ? [userId] : [])) as any[];
+
+  for (const short of openShorts) {
+    const price = await resolvePrice(short.symbol);
+    if (!price) { errors.push(`No price for ${short.symbol} (short)`); continue; }
+    try {
+      const result = db.prepare(`INSERT INTO orders (user_id, symbol, type, transaction_type, quantity, price, product_type, status) VALUES (?, ?, 'MARKET', 'BUY', ?, ?, 'MIS', 'PENDING')`).run(short.user_id, short.symbol, short.quantity, price);
+      await fillMisCover(Number(result.lastInsertRowid), short.user_id, short.symbol, short.quantity, price, short);
+      shortsSquaredOff++;
+    } catch (err: any) {
+      errors.push(`Short squareoff failed ${short.symbol}: ${err?.message}`);
+    }
+  }
+
+  return { longsSquaredOff, shortsSquaredOff, errors };
 }
 
 // Record end-of-day portfolio snapshots for all active users

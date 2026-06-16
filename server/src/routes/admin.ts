@@ -3,6 +3,7 @@ import { db } from '../db/index.js';
 import { authMiddleware, adminMiddleware, AuthRequest } from '../middleware/auth.js';
 import { getCachedQuotes } from '../services/marketData.js';
 import { logActivity, getClientIp } from '../services/activityLogger.js';
+import { manualMisSquareOff } from '../services/orderExecution.js';
 
 const router = Router();
 
@@ -156,6 +157,36 @@ router.post('/users/:id/topup', async (req: AuthRequest, res) => {
     res.json({ success: true, newBalance: Number(user?.balance ?? 0) });
   } catch (err) {
     res.status(500).json({ error: 'Failed to top up balance' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/admin/users/:id/mis-squareoff — Force-cover all open MIS short/long
+// positions for a specific user (or omit :id path for all users).
+// Used to resolve positions stuck from a missed auto-squareoff.
+// ---------------------------------------------------------------------------
+router.post('/users/:id/mis-squareoff', async (req: AuthRequest, res) => {
+  const userId = +req.params.id;
+  if (!userId) return res.status(400).json({ error: 'Invalid user id' });
+  try {
+    const result = await manualMisSquareOff(userId);
+    logActivity(req.user!.id, 'ADMIN_MIS_SQUAREOFF' as any, { targetUserId: userId, ...result }, getClientIp(req));
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    console.error('[admin/mis-squareoff] error:', err);
+    res.status(500).json({ error: 'Square-off failed', detail: err?.message });
+  }
+});
+
+// POST /api/admin/mis-squareoff — Force-cover all open MIS positions across all users
+router.post('/mis-squareoff', async (req: AuthRequest, res) => {
+  try {
+    const result = await manualMisSquareOff();
+    logActivity(req.user!.id, 'ADMIN_MIS_SQUAREOFF_ALL' as any, result, getClientIp(req));
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    console.error('[admin/mis-squareoff-all] error:', err);
+    res.status(500).json({ error: 'Square-off failed', detail: err?.message });
   }
 });
 
