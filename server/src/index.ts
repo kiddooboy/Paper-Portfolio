@@ -46,7 +46,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
 }
 import { ingestSymbols } from './services/symbolIngest.js';
-import { startOrderExecutionScheduler } from './services/orderExecution.js';
+import { startOrderExecutionScheduler, manualMisSquareOff } from './services/orderExecution.js';
 import { recordIndexHistory, backfillIndexHistory } from './services/indexHistory.js';
 import { refreshNseHolidays, isHolidayToday } from './services/nseHolidays.js';
 import { generateDailyRecommendations } from './services/dailyRecommendations.js';
@@ -595,6 +595,20 @@ async function main() {
     setTimeout(() => {
       pollTier2().then(() => scheduleTier2());
     }, 30_000);
+
+    // Close any MIS short positions that were left open from a previous trading
+    // day (should have been squared off at 3:20 PM but weren't due to the bug).
+    // Runs only when stale rows exist; safe no-op otherwise.
+    const todayIst = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
+    const staleCount = (db.prepare(
+      `SELECT COUNT(*) as c FROM mis_shorts WHERE date(opened_at, '+5 hours', '+30 minutes') < ?`
+    ).get(todayIst) as any)?.c ?? 0;
+    if (staleCount > 0) {
+      console.log(`[startup] ${staleCount} stale MIS short(s) found from previous day(s) — force-covering at current price`);
+      manualMisSquareOff()
+        .then((r) => console.log(`[startup] Stale MIS cleanup done:`, r))
+        .catch((err) => console.error('[startup] Stale MIS cleanup failed:', err?.message || err));
+    }
   });
 
   // Delay sector sparklines warmup by 15s to spread startup load
