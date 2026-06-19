@@ -84,6 +84,7 @@ import learnRoutes from './routes/learn.js';
 import recommendationsRoutes from './routes/recommendations.js';
 import globalRoutes from './routes/global.js';
 import fxRoutes from './routes/fx.js';
+import adminRecommendationsRoutes from './routes/adminRecommendations.js';
 
 const PORT = process.env.PORT || 5000;
 
@@ -180,6 +181,7 @@ async function main() {
   app.use('/api/fx', fxRoutes);
 
   app.use('/api/recommendations', recommendationsRoutes);
+  app.use('/api/admin/recommendations', adminRecommendationsRoutes);
 
   // Serve static client build and SPA fallback in production (registered AFTER api routes)
   if (process.env.NODE_ENV === 'production') {

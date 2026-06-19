@@ -39,6 +39,8 @@ const AchievementsPage   = lazy(() => import('./pages/AchievementsPage'));
 const CommunityPage      = lazy(() => import('./pages/CommunityPage'));
 const OptionsPage        = lazy(() => import('./pages/OptionsPage'));
 const DailyRecommendationsPage = lazy(() => import('./pages/DailyRecommendationsPage'));
+const AdminRecommendationsPage = lazy(() => import('./pages/AdminRecommendationsPage'));
+const RecommendationDetailPage = lazy(() => import('./pages/RecommendationDetailPage'));
 
 function PageLoader() {
   return (
@@ -90,8 +92,10 @@ function App() {
           <Route path="/leaderboard"     element={<LeaderboardPage />} />
           <Route path="/notifications"            element={<NotificationsPage />} />
           <Route path="/notifications/settings"   element={<NotificationSettingsPage />} />
-          <Route path="/admin"           element={<AdminPage />} />
-          <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
+          <Route path="/admin"                    element={<AdminPage />} />
+          <Route path="/admin/analytics"         element={<AdminAnalyticsPage />} />
+          <Route path="/admin/recommendations"   element={<AdminRecommendationsPage />} />
+          <Route path="/recommendation/:id"      element={<RecommendationDetailPage />} />
           <Route path="/ai-chat"         element={<AIChatPage />} />
           <Route path="/sectors"         element={<SectorsPage />} />
           <Route path="/news"            element={<NewsPage />} />

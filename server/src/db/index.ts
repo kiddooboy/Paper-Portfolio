@@ -971,6 +971,46 @@ export async function initSchema() {
     )
   `, 'table: nyse_holidays');
 
+  // ── Recommendation Engine ──
+  safeExec(`CREATE TABLE IF NOT EXISTS recommendation_campaigns (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    title            TEXT NOT NULL,
+    symbol           TEXT NOT NULL,
+    action           TEXT NOT NULL CHECK(action IN ('BUY','SELL','HOLD')),
+    current_price    REAL,
+    target_price     REAL,
+    stop_loss        REAL,
+    expected_return  REAL,
+    confidence_score REAL NOT NULL DEFAULT 0,
+    rationale        TEXT,
+    time_horizon     TEXT NOT NULL DEFAULT '1M',
+    risk_level       TEXT NOT NULL DEFAULT 'MEDIUM' CHECK(risk_level IN ('LOW','MEDIUM','HIGH')),
+    ai_generated     INTEGER NOT NULL DEFAULT 0,
+    segment          TEXT NOT NULL DEFAULT 'all',
+    status           TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','sent','cancelled')),
+    sent_at          TEXT,
+    sent_count       INTEGER NOT NULL DEFAULT 0,
+    created_by       INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+  )`, 'table: recommendation_campaigns');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_rec_campaigns_status   ON recommendation_campaigns(status)`, 'index: rec_campaigns_status');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_rec_campaigns_symbol   ON recommendation_campaigns(symbol)`, 'index: rec_campaigns_symbol');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_rec_campaigns_created  ON recommendation_campaigns(created_at)`, 'index: rec_campaigns_created');
+
+  safeExec(`CREATE TABLE IF NOT EXISTS recommendation_sends (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id      INTEGER NOT NULL REFERENCES recommendation_campaigns(id) ON DELETE CASCADE,
+    user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    sent_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    clicked_at       TEXT,
+    order_placed_at  TEXT,
+    order_id         INTEGER REFERENCES orders(id) ON DELETE SET NULL,
+    UNIQUE(campaign_id, user_id)
+  )`, 'table: recommendation_sends');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_rec_sends_campaign ON recommendation_sends(campaign_id)`, 'index: rec_sends_campaign');
+  safeExec(`CREATE INDEX IF NOT EXISTS idx_rec_sends_user     ON recommendation_sends(user_id)`, 'index: rec_sends_user');
+
   // ── Phase 3: updated_at triggers ──
   // Drop-and-recreate so any older incompatible trigger definition (e.g.
   // from a previous Postgres-flavoured deploy) is replaced cleanly.

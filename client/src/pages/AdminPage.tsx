@@ -6,7 +6,7 @@ import { formatCurrency, cn, formatDbDate } from '../lib/utils';
 import {
   Users, Activity, DollarSign, ShieldCheck, Trash2,
   RefreshCw, ChevronUp, Eye, List, Search, Lock,
-  BarChart3, ArrowUpRight
+  BarChart3, ArrowUpRight, Sparkles
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -139,6 +139,28 @@ export default function AdminPage() {
           <RefreshCw className="w-4 h-4" /> Refresh
         </button>
       </div>
+
+      {/* Recommendation Engine — entry point */}
+      <Link
+        to="/admin/recommendations"
+        className="block rounded-xl border border-blue-700/40 bg-gradient-to-r from-blue-500/10 via-blue-500/5 to-transparent hover:border-blue-500/60 hover:shadow-md transition p-5"
+      >
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-blue-500/15 text-blue-400 flex items-center justify-center shrink-0">
+            <Sparkles className="w-6 h-6" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-sm sm:text-base flex items-center gap-2">
+              Recommendation Engine
+              <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400">AI</span>
+            </p>
+            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+              AI-powered push campaigns — generate stock recommendations and send one-tap trade alerts to users.
+            </p>
+          </div>
+          <ArrowUpRight className="w-5 h-5 text-blue-400 shrink-0" />
+        </div>
+      </Link>
 
       {/* Platform Analytics — entry point to the dashboard */}
       <Link

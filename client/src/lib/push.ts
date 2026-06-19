@@ -36,8 +36,13 @@ export async function initPush(): Promise<void> {
     PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
       const data = action?.notification?.data || {};
       try {
-        if (data.symbol) window.location.href = `/terminal/${data.symbol}?fullscreen=1`;
-        else window.location.href = '/notifications';
+        if (data.type === 'recommendation' && data.campaignId) {
+          window.location.href = `/recommendation/${data.campaignId}`;
+        } else if (data.symbol) {
+          window.location.href = `/terminal/${data.symbol}?fullscreen=1`;
+        } else {
+          window.location.href = '/notifications';
+        }
       } catch { /* ignore */ }
     });
 
