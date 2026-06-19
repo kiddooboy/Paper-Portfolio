@@ -111,43 +111,38 @@ async function buildTechnicalContext(symbol: string): Promise<string> {
   } catch {}
 
   try {
-    const history = await getHistory(symbol, '3mo', '1d');
+    const history = await getHistory(symbol, 'NSE', new Date(Date.now() - 90 * 24 * 3600_000), '1d');
     if (history.length >= 14) {
       const bars: Bar[] = history.map((h: any) => ({
         open: h.open, high: h.high, low: h.low, close: h.close, volume: h.volume,
       }));
       const closes = bars.map((b) => b.close);
 
-      const rsi = calcRSI(closes, 14);
-      const macdData = calcMACD(closes);
-      const ema9 = calcEMA(closes, 9);
-      const ema21 = calcEMA(closes, 21);
-      const atr = calcATR(bars, 14);
-      const bb = calcBollinger(closes, 20, 2);
+      const rsi    = calcRSI(closes, 14);
+      const macdArr = calcMACD(closes);   // array of { macd, signal, histogram }
+      const ema9   = calcEMA(closes, 9);
+      const ema21  = calcEMA(closes, 21);
+      const atr    = calcATR(bars, 14);
+      const bbArr  = calcBollinger(closes, 20, 2);  // array of { mid, upper, lower }
 
-      const lastRsi = rsi[rsi.length - 1];
-      const lastMacd = macdData.macd[macdData.macd.length - 1];
-      const lastSignal = macdData.signal[macdData.signal.length - 1];
-      const lastEma9 = ema9[ema9.length - 1];
-      const lastEma21 = ema21[ema21.length - 1];
-      const lastAtr = atr[atr.length - 1];
-      const lastClose = closes[closes.length - 1];
-      const lastBbUpper = bb.upper[bb.upper.length - 1];
-      const lastBbLower = bb.lower[bb.lower.length - 1];
-      const lastBbMid = bb.middle[bb.middle.length - 1];
+      const lastRsi    = rsi[rsi.length - 1];
+      const lastMacdObj = macdArr[macdArr.length - 1];
+      const lastEma9   = ema9[ema9.length - 1];
+      const lastEma21  = ema21[ema21.length - 1];
+      const lastAtr    = atr[atr.length - 1];
+      const lastClose  = closes[closes.length - 1];
+      const lastBb     = bbArr[bbArr.length - 1];   // { mid, upper, lower }
 
       ctx += `\nTECHNICAL INDICATORS (14-day / 20-day):\n`;
       ctx += `- RSI(14): ${lastRsi?.toFixed(1) ?? 'N/A'}\n`;
-      ctx += `- MACD: ${lastMacd?.toFixed(2) ?? 'N/A'} | Signal: ${lastSignal?.toFixed(2) ?? 'N/A'} | Histogram: ${((lastMacd ?? 0) - (lastSignal ?? 0)).toFixed(2)}\n`;
+      ctx += `- MACD: ${lastMacdObj?.macd?.toFixed(2) ?? 'N/A'} | Signal: ${lastMacdObj?.signal?.toFixed(2) ?? 'N/A'} | Histogram: ${(((lastMacdObj?.macd ?? 0) - (lastMacdObj?.signal ?? 0)) as number).toFixed(2)}\n`;
       ctx += `- EMA9: ₹${lastEma9?.toFixed(2) ?? 'N/A'} | EMA21: ₹${lastEma21?.toFixed(2) ?? 'N/A'} | Trend: ${lastEma9 && lastEma21 ? (lastEma9 > lastEma21 ? 'Bullish crossover' : 'Bearish crossover') : 'N/A'}\n`;
       ctx += `- ATR(14): ₹${lastAtr?.toFixed(2) ?? 'N/A'} (volatility measure)\n`;
-      ctx += `- Bollinger Bands: Upper ₹${lastBbUpper?.toFixed(2) ?? 'N/A'} | Mid ₹${lastBbMid?.toFixed(2) ?? 'N/A'} | Lower ₹${lastBbLower?.toFixed(2) ?? 'N/A'}\n`;
-      ctx += `- Price vs BB: ${lastClose && lastBbUpper && lastBbLower ? (lastClose > lastBbUpper ? 'Above upper (overbought zone)' : lastClose < lastBbLower ? 'Below lower (oversold zone)' : 'Within bands') : 'N/A'}\n`;
+      ctx += `- Bollinger Bands: Upper ₹${lastBb?.upper?.toFixed(2) ?? 'N/A'} | Mid ₹${lastBb?.mid?.toFixed(2) ?? 'N/A'} | Lower ₹${lastBb?.lower?.toFixed(2) ?? 'N/A'}\n`;
+      ctx += `- Price vs BB: ${lastClose && lastBb?.upper && lastBb?.lower ? (lastClose > lastBb.upper ? 'Above upper (overbought zone)' : lastClose < lastBb.lower ? 'Below lower (oversold zone)' : 'Within bands') : 'N/A'}\n`;
 
-      // 52-week range context
-      const closes52 = closes.slice(-252);
       const high52 = Math.max(...history.map((h: any) => h.high));
-      const low52 = Math.min(...history.map((h: any) => h.low));
+      const low52  = Math.min(...history.map((h: any) => h.low));
       ctx += `- 52W High: ₹${high52.toFixed(2)} | 52W Low: ₹${low52.toFixed(2)}\n`;
     }
   } catch {}
