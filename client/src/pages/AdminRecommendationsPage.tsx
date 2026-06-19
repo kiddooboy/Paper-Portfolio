@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
@@ -172,7 +172,7 @@ function DailyRecCard({
   return (
     <button
       onClick={() => onSelect(rec)}
-      className="w-full text-left bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-sm transition-all group"
+      className="w-full cursor-pointer text-left bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md active:scale-[0.98] transition-all group"
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <div>
@@ -200,6 +200,7 @@ function DailyRecCard({
 export default function AdminRecommendationsPage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const previewRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (user && user.role !== 'admin') navigate('/dashboard');
@@ -280,7 +281,10 @@ export default function AdminRecommendationsPage() {
     axios.get(`/api/admin/recommendations/segments?symbol=${encodeURIComponent(rec.symbol)}`)
       .then(({ data: d }) => setSegmentCounts(d.segments))
       .finally(() => setSegCountLoading(false));
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Scroll to preview after React has re-rendered with the new aiPreview
+    setTimeout(() => {
+      previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
   };
 
   // ── AI Generate ────────────────────────────────────────────────────────
@@ -480,7 +484,7 @@ export default function AdminRecommendationsPage() {
 
             {/* AI Preview & Campaign Builder */}
             {aiPreview && (
-              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden">
+              <div ref={previewRef} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden">
                 {/* Preview header */}
                 <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
                   <Zap size={14} className="text-yellow-500" />
