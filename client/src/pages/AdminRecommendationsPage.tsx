@@ -112,7 +112,9 @@ const sentimentConfig: Record<string, { color: string; icon: typeof TrendingUp }
 };
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleString('en-IN', {
+  // SQLite datetime('now') is UTC but has no 'Z' suffix — add it so JS parses correctly
+  const normalized = iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z';
+  return new Date(normalized).toLocaleString('en-IN', {
     day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit', hour12: true,
   });

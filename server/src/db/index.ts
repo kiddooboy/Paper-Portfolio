@@ -1011,6 +1011,9 @@ export async function initSchema() {
   safeExec(`CREATE INDEX IF NOT EXISTS idx_rec_sends_campaign ON recommendation_sends(campaign_id)`, 'index: rec_sends_campaign');
   safeExec(`CREATE INDEX IF NOT EXISTS idx_rec_sends_user     ON recommendation_sends(user_id)`, 'index: rec_sends_user');
 
+  // Recommendation notifications: link in-app notification back to the campaign
+  safeExec(`ALTER TABLE notifications ADD COLUMN campaign_id INTEGER`, 'migration: notifications.campaign_id');
+
   // ── Phase 3: updated_at triggers ──
   // Drop-and-recreate so any older incompatible trigger definition (e.g.
   // from a previous Postgres-flavoured deploy) is replaced cleanly.

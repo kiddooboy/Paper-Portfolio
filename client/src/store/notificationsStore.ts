@@ -10,6 +10,7 @@ export interface Notification {
   type: 'order' | 'price_alert' | 'system';
   read: boolean;
   created_at: string;
+  campaign_id?: number | null;
 }
 
 interface NotificationsState {

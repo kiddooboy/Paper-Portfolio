@@ -442,11 +442,11 @@ async function dispatchCampaign(campaignId: number): Promise<number> {
       // Push notification
       await pushToUser(userId, title, body, pushData);
 
-      // In-app notification inbox entry
+      // In-app notification inbox entry — campaign_id lets the UI open the trade popup
       db.prepare(`
-        INSERT INTO notifications (user_id, title, message, type)
-        VALUES (?, ?, ?, 'system')
-      `).run(userId, title, body);
+        INSERT INTO notifications (user_id, title, message, type, campaign_id)
+        VALUES (?, ?, ?, 'system', ?)
+      `).run(userId, title, body, campaignId);
 
       sent++;
     } catch (err: any) {
