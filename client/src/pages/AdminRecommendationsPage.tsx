@@ -6,7 +6,7 @@ import {
   Sparkles, Send, BarChart3, Users, ArrowLeft, RefreshCw,
   TrendingUp, TrendingDown, Minus, Target, ShieldAlert,
   CheckCircle, Clock, XCircle, Zap, Eye, ChevronDown,
-  ChevronUp, AlertTriangle, Brain, Bell, Percent, DollarSign,
+  ChevronUp, Brain, Bell, Percent, DollarSign,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cn } from '../lib/utils';
@@ -81,11 +81,6 @@ const segmentLabels: Record<string, string> = {
   watchlist:  'Watchlist holders',
   holders:    'Current holders',
 };
-
-function fmt(n: number | null | undefined, dec = 2) {
-  if (n == null) return '—';
-  return n.toFixed(dec);
-}
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleString('en-IN', {

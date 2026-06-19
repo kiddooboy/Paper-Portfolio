@@ -7,7 +7,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import {
   TrendingUp, TrendingDown, Minus, Target, ShieldAlert, ArrowLeft,
-  Zap, Brain, CheckCircle, Clock, AlertTriangle, Percent, DollarSign,
+  Zap, Brain, CheckCircle, AlertTriangle, Percent, DollarSign,
   ChevronRight, RefreshCw,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
