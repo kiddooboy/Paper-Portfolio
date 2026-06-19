@@ -40,47 +40,45 @@ function requireAdmin(req: Request, res: Response, next: any) {
 type SegmentKey = 'all' | 'active_7d' | 'active_30d' | 'watchlist' | 'holders';
 
 function getUsersForSegment(symbol: string, segment: SegmentKey): number[] {
-  const deviceBase = `
-    SELECT DISTINCT u.id
-    FROM users u
-    INNER JOIN device_tokens dt ON dt.user_id = u.id
-  `;
+  // All segments include every registered user that matches the filter.
+  // pushToUser() silently no-ops for users without a device token, so web-only
+  // users still receive the in-app notification while app users get both.
   try {
     switch (segment) {
       case 'active_7d':
         return (db.prepare(`
-          ${deviceBase}
+          SELECT DISTINCT u.id FROM users u
           INNER JOIN transactions t ON t.user_id = u.id
           WHERE t.created_at > datetime('now', '-7 days')
         `).all() as any[]).map((r) => r.id);
 
       case 'active_30d':
         return (db.prepare(`
-          ${deviceBase}
+          SELECT DISTINCT u.id FROM users u
           INNER JOIN transactions t ON t.user_id = u.id
           WHERE t.created_at > datetime('now', '-30 days')
         `).all() as any[]).map((r) => r.id);
 
       case 'watchlist':
         return (db.prepare(`
-          ${deviceBase}
+          SELECT DISTINCT u.id FROM users u
           WHERE u.id IN (
-            SELECT DISTINCT wi.watchlist_id
+            SELECT DISTINCT w.user_id
             FROM watchlist_items wi
             INNER JOIN watchlists w ON w.id = wi.watchlist_id
-            WHERE wi.symbol = ? AND w.user_id = u.id
+            WHERE wi.symbol = ?
           )
         `).all(symbol) as any[]).map((r) => r.id);
 
       case 'holders':
         return (db.prepare(`
-          ${deviceBase}
+          SELECT DISTINCT u.id FROM users u
           INNER JOIN holdings h ON h.user_id = u.id
           WHERE h.symbol = ? AND h.quantity > 0
         `).all(symbol) as any[]).map((r) => r.id);
 
-      default: // 'all'
-        return (db.prepare(deviceBase).all() as any[]).map((r) => r.id);
+      default: // 'all' — every registered user
+        return (db.prepare(`SELECT id FROM users`).all() as any[]).map((r) => r.id);
     }
   } catch (err: any) {
     console.error('[rec-engine] segmentation error:', err?.message);
