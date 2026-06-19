@@ -353,6 +353,28 @@ router.delete('/:id', requireAdmin, (req: Request, res: Response) => {
 // USER-FACING ROUTES  (auth only, no admin required)
 // ──────────────────────────────────────────────────────────────────────────
 
+// GET /campaign/by-symbol/:symbol — most recent sent campaign for a symbol
+// Used as fallback when the notification row has no campaign_id stored
+router.get('/campaign/by-symbol/:symbol', (req: Request, res: Response) => {
+  const symbol = String(req.params.symbol || '').toUpperCase().trim();
+  if (!symbol) return res.status(400).json({ error: 'symbol required' });
+  try {
+    const campaign = db.prepare(`
+      SELECT id, title, symbol, action, current_price, target_price, stop_loss,
+             expected_return, confidence_score, rationale, time_horizon, risk_level,
+             ai_generated, sent_at, status
+      FROM recommendation_campaigns
+      WHERE symbol = ? AND status = 'sent'
+      ORDER BY sent_at DESC
+      LIMIT 1
+    `).get(symbol);
+    if (!campaign) return res.status(404).json({ error: 'No recommendation found for this symbol' });
+    res.json({ campaign });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
 // GET /campaign/:id — public detail card (shown when user taps a notification)
 router.get('/campaign/:id', (req: Request, res: Response) => {
   const id = Number(req.params.id);
@@ -442,11 +464,18 @@ async function dispatchCampaign(campaignId: number): Promise<number> {
       // Push notification
       await pushToUser(userId, title, body, pushData);
 
-      // In-app notification inbox entry — campaign_id lets the UI open the trade popup
-      db.prepare(`
-        INSERT INTO notifications (user_id, title, message, type, campaign_id)
-        VALUES (?, ?, ?, 'system', ?)
-      `).run(userId, title, body, campaignId);
+      // In-app notification inbox entry — try with campaign_id, fall back without
+      try {
+        db.prepare(`
+          INSERT INTO notifications (user_id, title, message, type, campaign_id)
+          VALUES (?, ?, ?, 'system', ?)
+        `).run(userId, title, body, campaignId);
+      } catch {
+        db.prepare(`
+          INSERT INTO notifications (user_id, title, message, type)
+          VALUES (?, ?, ?, 'system')
+        `).run(userId, title, body);
+      }
 
       sent++;
     } catch (err: any) {

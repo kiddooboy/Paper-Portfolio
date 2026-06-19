@@ -54,7 +54,6 @@ const actionCfg = {
 // Parse SQLite datetime('now') strings as UTC (they have no timezone suffix but are UTC)
 function parseUtc(iso: string): Date {
   if (!iso) return new Date(0);
-  // SQLite returns "2024-01-15 10:30:00" — treat as UTC by appending Z
   const normalized = iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z';
   return new Date(normalized);
 }
@@ -67,13 +66,26 @@ function relativeTime(iso: string): string {
   return `${Math.floor(secs / 86400)}d ago`;
 }
 
+// Detect recommendation notifications by title pattern:  "🟢 BUY ALERT: RELIANCE"
+function isRecNotification(n: Notification): boolean {
+  return !!n.campaign_id || /ALERT:/i.test(n.title);
+}
+
+// Extract NSE symbol from notification title e.g. "🔴 SELL ALERT: TCS" → "TCS"
+function extractSymbol(title: string): string | null {
+  const m = title.match(/ALERT:\s*([A-Z0-9&.-]+)/i);
+  return m ? m[1].toUpperCase() : null;
+}
+
 // ── Recommendation Trade Modal ─────────────────────────────────────────────
 
 function RecTradeModal({
   campaignId,
+  symbol: symbolHint,
   onClose,
 }: {
-  campaignId: number;
+  campaignId?: number | null;
+  symbol?: string | null;
   onClose: () => void;
 }) {
   const quotes = useMarketStore((s) => s.quotes);
@@ -87,14 +99,19 @@ function RecTradeModal({
 
   useEffect(() => {
     setLoading(true);
-    axios.get(`/api/admin/recommendations/campaign/${campaignId}`)
+    const url = campaignId
+      ? `/api/admin/recommendations/campaign/${campaignId}`
+      : `/api/admin/recommendations/campaign/by-symbol/${symbolHint}`;
+    axios.get(url)
       .then(({ data }) => {
         setRec(data.campaign);
-        axios.post(`/api/admin/recommendations/campaign/${campaignId}/click`).catch(() => {});
+        // Record click-through if we have an ID
+        const id = data.campaign?.id ?? campaignId;
+        if (id) axios.post(`/api/admin/recommendations/campaign/${id}/click`).catch(() => {});
       })
       .catch(() => notify.error('Could not load recommendation'))
       .finally(() => setLoading(false));
-  }, [campaignId]);
+  }, [campaignId, symbolHint]);
 
   const livePrice = rec ? (quotes[rec.symbol]?.price ?? rec.current_price ?? null) : null;
   const cfg = rec ? actionCfg[rec.action] : null;
@@ -333,7 +350,8 @@ export default function NotificationsPage() {
   const [symbol, setSymbol] = useState('');
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
-  const [activeRecCampaignId, setActiveRecCampaignId] = useState<number | null>(null);
+  // { campaignId, symbol } — either field is sufficient to open the modal
+  const [activeRec, setActiveRec] = useState<{ campaignId?: number | null; symbol?: string | null } | null>(null);
 
   async function load() {
     setLoading(true);
@@ -405,9 +423,12 @@ export default function NotificationsPage() {
   }
 
   function handleRowClick(n: Notification) {
-    if (!n.campaign_id) return;
+    if (!isRecNotification(n)) return;
     if (!n.read) markRead(n.id);
-    setActiveRecCampaignId(n.campaign_id);
+    setActiveRec({
+      campaignId: n.campaign_id ?? null,
+      symbol: n.campaign_id ? null : extractSymbol(n.title),
+    });
   }
 
   return (
@@ -511,7 +532,7 @@ export default function NotificationsPage() {
         ) : (
           <ul className="divide-y divide-gray-100 dark:divide-gray-800">
             {items.map((n) => {
-              const isRec = !!n.campaign_id;
+              const isRec = isRecNotification(n);
               return (
                 <li
                   key={n.id}
@@ -519,7 +540,7 @@ export default function NotificationsPage() {
                   className={cn(
                     'p-4 flex items-start gap-3 transition hover:bg-gray-50 dark:hover:bg-gray-800/40',
                     !n.read && 'bg-blue-50/40 dark:bg-blue-900/10',
-                    isRec && 'cursor-pointer',
+                    isRec && 'cursor-pointer active:bg-gray-100 dark:active:bg-gray-800',
                   )}
                 >
                   <input
@@ -583,10 +604,11 @@ export default function NotificationsPage() {
       </div>
 
       {/* Recommendation trade popup */}
-      {activeRecCampaignId !== null && (
+      {activeRec !== null && (
         <RecTradeModal
-          campaignId={activeRecCampaignId}
-          onClose={() => setActiveRecCampaignId(null)}
+          campaignId={activeRec.campaignId}
+          symbol={activeRec.symbol}
+          onClose={() => setActiveRec(null)}
         />
       )}
     </div>
