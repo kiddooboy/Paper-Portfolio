@@ -99,6 +99,9 @@ class WrappedDatabase {
   }
 
   pragma(sql: string) {
+    if (!/^[a-zA-Z0-9_]+$/.test(sql)) {
+      throw new Error('Invalid input');
+    }
     return getRawDb().prepare(`PRAGMA ${sql}`).all();
   }
 
