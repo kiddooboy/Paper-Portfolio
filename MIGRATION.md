@@ -10,8 +10,22 @@ Moving `paperportfolio.in` off the compromised instance onto a fresh one.
 | OS | Ubuntu | Ubuntu 24.04 or 26.04 LTS |
 | SSH user | `ubuntu` | `ubuntu` |
 
-DNS for `paperportfolio.in` is at an external registrar, so the domain itself is
-unaffected by the account change — only the A records need repointing.
+DNS for `paperportfolio.in` is at GoDaddy, so the domain itself is unaffected by
+the account change — only the A records needed repointing.
+
+### Status
+
+| Step | State |
+|---|---|
+| 1. Data rescued (prod + UAT) | ✅ `~/pp-rescue/` |
+| 2. New box provisioned | ✅ swap, docker, nginx, certbot, ufw, sqlite3 |
+| 3. Secrets + database restored | ✅ 83 users / 157 holdings / 737 orders |
+| 4. Secrets rotated | ⚠️ `JWT_SECRET` + admin done; **Firebase key still to rotate** |
+| 5. DNS repointed | ✅ `@` and `www` → `3.6.163.107` |
+| 6. TLS issued | ✅ expires 2026-11-18, auto-renewal verified |
+| 7. CI repointed | ✅ secrets updated, deploy run green |
+| 8. Verified | ⛔ **blocked: security group has no inbound 443** |
+| 9. Old box decommissioned | ⛔ not yet — do not delete until step 8 passes |
 
 > **Superseded:** a `t3.micro` was first launched in `us-east-1`
 > (`3.239.64.222`). It was replaced with a `t3.small` in `ap-south-1` — Virginia
@@ -134,6 +148,14 @@ Security group inbound rules:
 | 22 | your IP only | SSH. Never `0.0.0.0/0`. |
 | 80 | `0.0.0.0/0` | HTTP + certbot's challenge |
 | 443 | `0.0.0.0/0` | HTTPS |
+
+> **443 is the one people forget.** ufw and nginx can both be perfectly
+> configured and HTTPS will still fail from outside if the security group has no
+> inbound 443 rule. The symptom is specific: `http://` returns its `301` to
+> `https://` normally, and `curl https://…` then returns `000` — a connection
+> failure, not an HTTP error. From the box itself,
+> `curl -k --resolve paperportfolio.in:443:127.0.0.1 https://paperportfolio.in/`
+> returns `200`, which proves nginx is fine and the block is upstream.
 
 Port 5000 must **not** be open. `docker-compose.yml` now binds the app to
 `127.0.0.1:5000`, so nginx is the only path in.
