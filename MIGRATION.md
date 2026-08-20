@@ -20,12 +20,26 @@ the account change — only the A records needed repointing.
 | 1. Data rescued (prod + UAT) | ✅ `~/pp-rescue/` |
 | 2. New box provisioned | ✅ swap, docker, nginx, certbot, ufw, sqlite3 |
 | 3. Secrets + database restored | ✅ 83 users / 157 holdings / 737 orders |
-| 4. Secrets rotated | ⚠️ `JWT_SECRET` + admin done; **Firebase key still to rotate** |
+| 4. Secrets rotated | ✅ `JWT_SECRET` + admin. Service API keys reused by decision; Firebase key carried over |
 | 5. DNS repointed | ✅ `@` and `www` → `3.6.163.107` |
 | 6. TLS issued | ✅ expires 2026-11-18, auto-renewal verified |
 | 7. CI repointed | ✅ secrets updated, deploy run green |
-| 8. Verified | ⛔ **blocked: security group has no inbound 443** |
-| 9. Old box decommissioned | ⛔ not yet — do not delete until step 8 passes |
+| 8. Verified end-to-end | ✅ see below — including forged-token rejection |
+| 9. Old box decommissioned | ready — snapshot first |
+
+**Verification results.** Public: `/` 200, `/api/stocks` 200 (20 quotes),
+`/api/news` 200 (20 items, sentiment API reached), `/api/stocks/stream` streaming
+live NSE data. Authenticated: `/api/portfolio`, `/api/orders`, `/api/watchlists`,
+`/api/notifications`, `/api/leaderboard` all 200; `/api/monte-carlo` 200 with a
+real simulation. **A JWT signed with the old public secret
+`papertrade_secret_2026` is rejected with 401** — the bypass is closed in
+production.
+
+> **Port 80 must stay open.** When 443 was added to the security group, 80 was
+> removed. HTTPS works, but Let's Encrypt renews over an HTTP-01 challenge on
+> **port 80** — with it closed, `certbot renew` will fail and the certificate
+> expires 2026-11-18, taking the site down. Both 80 and 443 need to be open.
+> Port 80 serves only a 301 to HTTPS, so leaving it open costs nothing.
 
 > **Superseded:** a `t3.micro` was first launched in `us-east-1`
 > (`3.239.64.222`). It was replaced with a `t3.small` in `ap-south-1` — Virginia
