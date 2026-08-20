@@ -1062,13 +1062,19 @@ export async function initSchema() {
       } else {
         console.log(`[admin] ensured role for ${ADMIN_EMAIL}`);
       }
+    } else if (!process.env.ADMIN_PASSWORD && process.env.NODE_ENV === 'production') {
+      // DEFAULT_ADMIN_PASSWORD is in this repo's public git history — seeding a
+      // live admin account with it hands over the admin panel. Make it explicit.
+      console.warn(
+        `[admin] skipped bootstrap for ${ADMIN_EMAIL}: set ADMIN_PASSWORD to create the admin account`,
+      );
     } else {
       // Create new admin user with provided or default password
       const hashed = await bcrypt.hash(ADMIN_PASSWORD, 10);
       raw
         .prepare('INSERT INTO users (name, email, password, role, balance) VALUES (?, ?, ?, ?, ?)')
         .run(ADMIN_NAME, ADMIN_EMAIL, hashed, 'admin', 500000); // 5x starting balance for admin
-      
+
       console.log(`[admin] bootstrapped admin user ${ADMIN_EMAIL} (using ${process.env.ADMIN_PASSWORD ? 'provided' : 'default'} password)`);
     }
   } catch (err: any) {

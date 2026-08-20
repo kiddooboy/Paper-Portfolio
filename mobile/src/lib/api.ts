@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 export const api = axios.create({
-  baseURL: 'http://65.2.45.191:5000',
+  baseURL: 'https://paperportfolio.in',
   timeout: 10000,
 });
 

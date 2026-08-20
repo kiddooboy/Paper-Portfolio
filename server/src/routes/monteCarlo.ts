@@ -6,8 +6,11 @@ import axios from 'axios';
 
 const router = Router();
 
-const MC_URL = 'https://35w41kobie.execute-api.ap-south-1.amazonaws.com/default/v2';
-const MC_KEY = 'wwNacOkQ0o6jTocgeCDtAayvSFANpn9M5ZTU8qDy';
+// Endpoint + key come from the environment. The literals below are the historical
+// values, kept as a fallback so the feature keeps working through the migration.
+// They sit in this repo's PUBLIC git history — rotate them and set MC_API_KEY.
+const MC_URL = process.env.MONTE_CARLO_API_URL || 'https://35w41kobie.execute-api.ap-south-1.amazonaws.com/default/v2';
+const MC_KEY = process.env.MONTE_CARLO_API_KEY || 'wwNacOkQ0o6jTocgeCDtAayvSFANpn9M5ZTU8qDy';
 
 const mcAxios = axios.create({
   baseURL: MC_URL,

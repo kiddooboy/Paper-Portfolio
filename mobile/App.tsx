@@ -5,7 +5,8 @@ import {
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import WebView, { WebViewNavigation } from 'react-native-webview';
 
-const APP_URL = 'http://65.2.45.191:5000';
+// Point at the domain, not a server IP — survives any instance/IP change.
+const APP_URL = 'https://paperportfolio.in';
 
 // JS injected into every page: force all target="_blank" links to open in-app
 const INJECTED_JS = `
@@ -50,7 +51,7 @@ function MainApp() {
     const url = request.url;
 
     // Always allow the app server
-    if (url.startsWith('http://65.2.45.191') || url.startsWith('about:blank')) {
+    if (url.startsWith(APP_URL) || url.startsWith('about:blank')) {
       return true;
     }
 

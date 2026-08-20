@@ -45,8 +45,10 @@ const FEEDS = [
   { url: 'https://www.livemint.com/rss/markets',                           source: 'LiveMint',       category: 'markets' },
 ];
 
-const SENTIMENT_API_URL = 'https://16tkpne8y2.execute-api.ap-south-1.amazonaws.com/prod/analyze-single';
-const SENTIMENT_API_KEY = 'lIpv9Cqnei8apVYwnU5tV5dPu6w50LLhPBvsbDJe';
+// Env-driven with a literal fallback, same as the Monte Carlo endpoint.
+// This key is in the repo's PUBLIC git history — rotate it and set SENTIMENT_API_KEY.
+const SENTIMENT_API_URL = process.env.SENTIMENT_API_URL || 'https://16tkpne8y2.execute-api.ap-south-1.amazonaws.com/prod/analyze-single';
+const SENTIMENT_API_KEY = process.env.SENTIMENT_API_KEY || 'lIpv9Cqnei8apVYwnU5tV5dPu6w50LLhPBvsbDJe';
 
 function stripHtml(html: string): string {
   return (html || '')

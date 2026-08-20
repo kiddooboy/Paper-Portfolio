@@ -52,6 +52,12 @@ temp/
 # Generated documents
 docs/
 
+# SSH / private keys (this repo is PUBLIC — never commit these)
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+
 # Android release signing (never commit)
 *.jks
 *.keystore
