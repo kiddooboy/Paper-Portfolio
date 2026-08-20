@@ -2,7 +2,20 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { db } from '../db/index.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'papertrade_secret_2026';
+// JWT_SECRET must be set in production. The historical fallback lives in this
+// repo's PUBLIC git history, and anyone holding it can mint a valid token for
+// any user id — including role:'admin'. It is acceptable for local dev only.
+const JWT_SECRET = (() => {
+  const fromEnv = process.env.JWT_SECRET?.trim();
+  if (fromEnv) return fromEnv;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'JWT_SECRET is not set. Refusing to start in production with the public ' +
+      'default secret. Generate one with: openssl rand -base64 32',
+    );
+  }
+  return 'papertrade_dev_only_secret';
+})();
 
 export interface AuthRequest extends Request {
   user?: { id: number; email: string; role: string };

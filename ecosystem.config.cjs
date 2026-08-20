@@ -10,7 +10,7 @@ module.exports = {
       name: 'paper-portfolio',
       script: 'dist/index.js',
       // ── adjust this to your actual clone path on the server ──
-      cwd: '/home/ubuntu/paper-portfolio/server',
+      cwd: '/home/ubuntu/Paper-Portfolio/server',
       instances: 1,
       autorestart: true,
       watch: false,

@@ -1,15 +1,22 @@
-version: '3.8'
-
 services:
   paper-portfolio:
     build: .
     ports:
-      - "5000:5000"
+      # Bind to loopback only — nginx is the sole way in from the internet.
+      # A bare "5000:5000" publishes the app on the instance's public IP and
+      # bypasses TLS and the security group's port rules.
+      - "127.0.0.1:5000:5000"
+    # server/.env is excluded by .dockerignore and the runtime stage never copies
+    # it, so dotenv finds nothing inside the container — every secret has to be
+    # handed in here. Without this the app silently falls back to its built-in
+    # defaults, which is how production ended up signing JWTs with a public key.
+    env_file:
+      - ./server/.env
     environment:
+      # These are fixed for the image and intentionally override server/.env.
       - NODE_ENV=production
       - PORT=5000
       - GOOGLE_APPLICATION_CREDENTIALS=/app/firebase-service-account.json
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     volumes:
       # This line is the magic that makes sure data is NEVER erased!
       # It maps the container's database directory to your local hard drive.
